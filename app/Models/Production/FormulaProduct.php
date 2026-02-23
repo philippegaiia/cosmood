@@ -9,10 +9,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class FormulaProduct extends Model
 {
     use HasFactory;
-
     use SoftDeletes;
 
+    protected $table = 'formula_product';
+
     protected $guarded = [];
-
-
 }

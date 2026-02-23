@@ -2,41 +2,35 @@
 
 namespace App\Filament\Resources\Supply;
 
-use Filament\Schemas\Schema;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\Textarea;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use App\Filament\Resources\Supply\IngredientResource\Pages\ListIngredients;
 use App\Filament\Resources\Supply\IngredientResource\Pages\CreateIngredient;
 use App\Filament\Resources\Supply\IngredientResource\Pages\EditIngredient;
-use Filament\Forms;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
+use App\Filament\Resources\Supply\IngredientResource\Pages\ListIngredients;
 use App\Models\Supply\Ingredient;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\Supply\IngredientResource\Pages;
-use App\Filament\Resources\Supply\IngredientResource\RelationManagers;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class IngredientResource extends Resource
 {
     protected static ?string $model = Ingredient::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Achats';
+    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
 
     protected static ?string $navigationLabel = 'Ingrédients';
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-m-square-3-stack-3d';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-m-square-3-stack-3d';
 
     protected static ?int $navigationSort = 3;
 
@@ -54,6 +48,10 @@ class IngredientResource extends Resource
                 TextInput::make('code')
                     ->required()
                     ->maxLength(255),
+                TextInput::make('price')
+                    ->label('Dernier prix (EUR/kg)')
+                    ->numeric()
+                    ->step(0.01),
                 TextInput::make('slug')
                     ->maxLength(255),
                 TextInput::make('name_en')
@@ -88,6 +86,10 @@ class IngredientResource extends Resource
                     ->searchable(),
                 TextColumn::make('code')
                     ->searchable(),
+                TextColumn::make('price')
+                    ->label('Dernier prix')
+                    ->money('EUR')
+                    ->sortable(),
                 TextColumn::make('slug')
                     ->searchable(),
                 TextColumn::make('name_en')
@@ -123,29 +125,30 @@ class IngredientResource extends Resource
                 //
             ])
             ->recordActions([
-            ActionGroup::make([
+                ActionGroup::make([
                     EditAction::make(),
                     DeleteAction::make()->action(function ($data, $record) {
-                    if ($record->supplier_listings()->count() > 0) {
+                        if ($record->supplier_listings()->count() > 0) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Opération Impossible')
+                                ->body('Supprimez les ingrédients référencés liés à l\'ingrédient'.$record->name.' pour le supprimer.')
+                                ->send();
+
+                            return;
+                        }
+
                         Notification::make()
-                            ->danger()
-                            ->title('Opération Impossible')
-                            ->body('Supprimez les ingrédients référencés liés à l\'ingrédient' . $record->name . ' pour le supprimer.')
+                            ->success()
+                            ->title('Ingrédient Supprimé')
+                            ->body('L\'ingrédient'.$record->name.' a été supprimé avec succès.')
                             ->send();
-                        return;
-                    }
 
-                    Notification::make()
-                        ->success()
-                        ->title('Ingrédient Supprimé')
-                        ->body('L\'ingrédient'  . $record->name . ' a été supprimé avec succès.')
-                        ->send();
+                        $record->delete();
+                    }),
 
-                    $record->delete();
-                }),
+                ]),
 
-            ]),
-                
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

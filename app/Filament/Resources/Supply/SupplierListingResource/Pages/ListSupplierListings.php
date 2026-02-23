@@ -2,9 +2,8 @@
 
 namespace App\Filament\Resources\Supply\SupplierListingResource\Pages;
 
-use Filament\Actions\CreateAction;
 use App\Filament\Resources\Supply\SupplierListingResource;
-use Filament\Actions;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListSupplierListings extends ListRecords

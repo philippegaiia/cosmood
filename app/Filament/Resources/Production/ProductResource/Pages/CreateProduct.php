@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Production\ProductResource\Pages;
 
 use App\Filament\Resources\Production\ProductResource;
-use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateProduct extends CreateRecord

@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\DB;
 
 class FormulaProductTableSeeder extends Seeder
 {
-
     /**
      * Auto generated seed file
      *
@@ -15,49 +14,43 @@ class FormulaProductTableSeeder extends Seeder
      */
     public function run()
     {
-        
 
         DB::table('formula_product')->delete();
-        
-        DB::table('formula_product')->insert(array (
-            0 => 
-            array (
+
+        DB::table('formula_product')->insert([
+            0 => [
                 'id' => 1,
                 'formula_id' => 1,
                 'product_id' => 1,
-                'deleted_at' => NULL,
-                'created_at' => NULL,
-                'updated_at' => NULL,
-            ),
-            1 => 
-            array (
+                'deleted_at' => null,
+                'created_at' => null,
+                'updated_at' => null,
+            ],
+            1 => [
                 'id' => 2,
                 'formula_id' => 1,
                 'product_id' => 14,
-                'deleted_at' => NULL,
-                'created_at' => NULL,
-                'updated_at' => NULL,
-            ),
-            2 => 
-            array (
+                'deleted_at' => null,
+                'created_at' => null,
+                'updated_at' => null,
+            ],
+            2 => [
                 'id' => 3,
                 'formula_id' => 2,
                 'product_id' => 11,
-                'deleted_at' => NULL,
-                'created_at' => NULL,
-                'updated_at' => NULL,
-            ),
-            3 => 
-            array (
+                'deleted_at' => null,
+                'created_at' => null,
+                'updated_at' => null,
+            ],
+            3 => [
                 'id' => 4,
                 'formula_id' => 2,
                 'product_id' => 19,
-                'deleted_at' => NULL,
-                'created_at' => NULL,
-                'updated_at' => NULL,
-            ),
-        ));
-        
-        
+                'deleted_at' => null,
+                'created_at' => null,
+                'updated_at' => null,
+            ],
+        ]);
+
     }
 }

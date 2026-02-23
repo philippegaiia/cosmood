@@ -1,0 +1,27 @@
+<?php
+
+namespace Database\Factories\Production;
+
+use App\Models\Production\ProductionTaskType;
+use Illuminate\Database\Eloquent\Factories\Factory;
+
+class ProductionTaskTypeFactory extends Factory
+{
+    protected $model = ProductionTaskType::class;
+
+    public function definition(): array
+    {
+        return [
+            'name' => $this->faker->words(2, true),
+            'description' => $this->faker->sentence(),
+            'is_active' => true,
+        ];
+    }
+
+    public function inactive(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_active' => false,
+        ]);
+    }
+}

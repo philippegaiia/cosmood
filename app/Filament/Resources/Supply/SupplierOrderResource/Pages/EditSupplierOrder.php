@@ -2,13 +2,12 @@
 
 namespace App\Filament\Resources\Supply\SupplierOrderResource\Pages;
 
+use App\Filament\Resources\Supply\SupplierOrderResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
-use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use App\Filament\Resources\Supply\SupplierOrderResource;
 
 class EditSupplierOrder extends EditRecord
 {
@@ -31,7 +30,7 @@ class EditSupplierOrder extends EditRecord
                 Notification::make()
                     ->success()
                     ->title('Commande Supprimée')
-                    ->body('La Commande ' . $record->order_ref . 'a été supprimée avec succès.')
+                    ->body('La Commande '.$record->order_ref.'a été supprimée avec succès.')
                     ->send();
 
                 $record->delete();

@@ -2,29 +2,25 @@
 
 namespace App\Filament\Resources\Production;
 
-use Filament\Schemas\Schema;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\Toggle;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Filters\TrashedFilter;
-use Filament\Actions\ViewAction;
-use Filament\Actions\EditAction;
+use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\CreateProductionTaskType;
+use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\EditProductionTaskType;
+use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\ListProductionTaskTypes;
+use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\ViewProductionTaskType;
+use App\Models\Production\ProductionTaskType;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
-use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\ListProductionTaskTypes;
-use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\CreateProductionTaskType;
-use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\ViewProductionTaskType;
-use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\EditProductionTaskType;
-use App\Filament\Resources\Production\ProductionTaskTypeResource\Pages;
-use App\Filament\Resources\Production\ProductionTaskTypeResource\RelationManagers;
-use App\Models\Production\ProductionTaskType;
-use Filament\Forms;
+use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
-use Filament\Tables;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
@@ -33,11 +29,11 @@ class ProductionTaskTypeResource extends Resource
 {
     protected static ?string $model = ProductionTaskType::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Production';
+    protected static string|\UnitEnum|null $navigationGroup = 'Production';
 
     protected static ?string $navigationLabel = 'Types de tâches';
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-adjustments-vertical';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-adjustments-vertical';
 
     public static function form(Schema $schema): Schema
     {

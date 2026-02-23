@@ -2,11 +2,10 @@
 
 namespace App\Filament\Resources\UserResource\Pages;
 
-use Filament\Actions\DeleteAction;
-use Filament\Actions;
-use Illuminate\Support\Facades\Hash;
 use App\Filament\Resources\UserResource;
+use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Support\Facades\Hash;
 
 class EditUser extends EditRecord
 {
@@ -28,4 +27,3 @@ class EditUser extends EditRecord
         return $data;
     }
 }
-

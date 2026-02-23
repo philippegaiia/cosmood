@@ -4,9 +4,9 @@ namespace App\Models\Production;
 
 use App\Enums\Phases;
 use App\Models\Supply\Ingredient;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class FormulaItem extends Model
 {
@@ -21,7 +21,7 @@ class FormulaItem extends Model
     public function formula(): BelongsTo
     {
         return $this->belongsTo(Formula::class);
-    }   
+    }
 
     public function ingredient(): BelongsTo
     {

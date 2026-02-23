@@ -1,0 +1,101 @@
+<?php
+
+use App\Enums\OrderStatus;
+use App\Models\Production\ProductionWave;
+use App\Models\Supply\Ingredient;
+use App\Models\Supply\Supplier;
+use App\Models\Supply\SupplierListing;
+use App\Models\Supply\SupplierOrder;
+use App\Models\Supply\SupplierOrderItem;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
+
+describe('SupplierOrder Model', function () {
+    it('can be created with factory', function () {
+        $order = SupplierOrder::factory()->create();
+
+        expect($order)
+            ->toBeInstanceOf(SupplierOrder::class)
+            ->and($order->order_ref)->not->toBeEmpty();
+    });
+
+    it('belongs to a supplier', function () {
+        $supplier = Supplier::factory()->create();
+        $order = SupplierOrder::factory()->create(['supplier_id' => $supplier->id]);
+
+        expect($order->supplier->id)->toBe($supplier->id);
+    });
+
+    it('can reference a production wave', function () {
+        $wave = ProductionWave::factory()->create();
+        $order = SupplierOrder::factory()->create([
+            'production_wave_id' => $wave->id,
+        ]);
+
+        expect($order->wave?->id)->toBe($wave->id);
+    });
+
+    it('has many supplier order items', function () {
+        $order = SupplierOrder::factory()->create();
+        SupplierOrderItem::factory()->count(3)->create(['supplier_order_id' => $order->id]);
+
+        expect($order->supplier_order_items)->toHaveCount(3);
+    });
+
+    it('casts order_status as enum', function () {
+        $order = SupplierOrder::factory()->create(['order_status' => OrderStatus::Draft]);
+
+        expect($order->order_status)->toBeInstanceOf(OrderStatus::class)
+            ->and($order->order_status)->toBe(OrderStatus::Draft);
+    });
+
+    it('can be marked as draft', function () {
+        $order = SupplierOrder::factory()->draft()->create();
+
+        expect($order->order_status)->toBe(OrderStatus::Draft);
+    });
+
+    it('can be marked as passed', function () {
+        $order = SupplierOrder::factory()->passed()->create();
+
+        expect($order->order_status)->toBe(OrderStatus::Passed);
+    });
+
+    it('can be marked as confirmed', function () {
+        $order = SupplierOrder::factory()->confirmed()->create();
+
+        expect($order->order_status)->toBe(OrderStatus::Confirmed);
+    });
+
+    it('can be marked as delivered', function () {
+        $order = SupplierOrder::factory()->delivered()->create();
+
+        expect($order->order_status)->toBe(OrderStatus::Delivered);
+    });
+
+    it('updates ingredient last price when order is confirmed', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['price' => 5.50]);
+        $listing = SupplierListing::factory()->create([
+            'supplier_id' => $supplier->id,
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $order = SupplierOrder::factory()->draft()->create([
+            'supplier_id' => $supplier->id,
+        ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'unit_price' => 12.40,
+        ]);
+
+        $order->update([
+            'order_status' => OrderStatus::Confirmed,
+        ]);
+
+        expect((float) $ingredient->fresh()->price)->toBe(12.4);
+    });
+});

@@ -6,7 +6,6 @@ use Illuminate\Database\Seeder;
 
 class FormulaItemsTableSeeder extends Seeder
 {
-
     /**
      * Auto generated seed file
      *
@@ -14,13 +13,11 @@ class FormulaItemsTableSeeder extends Seeder
      */
     public function run()
     {
-        
 
         \DB::table('formula_items')->delete();
-        
-        \DB::table('formula_items')->insert(array (
-            0 => 
-            array (
+
+        \DB::table('formula_items')->insert([
+            0 => [
                 'id' => 1,
                 'formula_id' => 1,
                 'ingredient_id' => 6,
@@ -28,12 +25,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 1,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:36:08',
                 'updated_at' => '2024-02-18 17:36:25',
-            ),
-            1 => 
-            array (
+            ],
+            1 => [
                 'id' => 2,
                 'formula_id' => 1,
                 'ingredient_id' => 4,
@@ -41,12 +37,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 2,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:36:09',
                 'updated_at' => '2024-02-18 17:36:25',
-            ),
-            2 => 
-            array (
+            ],
+            2 => [
                 'id' => 3,
                 'formula_id' => 1,
                 'ingredient_id' => 8,
@@ -54,12 +49,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 3,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:36:09',
                 'updated_at' => '2024-02-18 17:36:25',
-            ),
-            3 => 
-            array (
+            ],
+            3 => [
                 'id' => 4,
                 'formula_id' => 1,
                 'ingredient_id' => 9,
@@ -67,12 +61,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 4,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:36:09',
                 'updated_at' => '2024-02-18 17:36:25',
-            ),
-            4 => 
-            array (
+            ],
+            4 => [
                 'id' => 5,
                 'formula_id' => 1,
                 'ingredient_id' => 50,
@@ -80,12 +73,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '20',
                 'organic' => 0,
                 'sort' => 5,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:36:09',
                 'updated_at' => '2024-02-18 17:36:25',
-            ),
-            5 => 
-            array (
+            ],
+            5 => [
                 'id' => 6,
                 'formula_id' => 1,
                 'ingredient_id' => 38,
@@ -93,12 +85,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '20',
                 'organic' => 0,
                 'sort' => 6,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:36:09',
                 'updated_at' => '2024-02-18 17:36:25',
-            ),
-            6 => 
-            array (
+            ],
+            6 => [
                 'id' => 7,
                 'formula_id' => 2,
                 'ingredient_id' => 6,
@@ -106,12 +97,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 1,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            7 => 
-            array (
+            ],
+            7 => [
                 'id' => 8,
                 'formula_id' => 2,
                 'ingredient_id' => 9,
@@ -119,12 +109,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 2,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            8 => 
-            array (
+            ],
+            8 => [
                 'id' => 9,
                 'formula_id' => 2,
                 'ingredient_id' => 4,
@@ -132,12 +121,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 3,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            9 => 
-            array (
+            ],
+            9 => [
                 'id' => 10,
                 'formula_id' => 2,
                 'ingredient_id' => 8,
@@ -145,12 +133,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '10',
                 'organic' => 1,
                 'sort' => 4,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            10 => 
-            array (
+            ],
+            10 => [
                 'id' => 11,
                 'formula_id' => 2,
                 'ingredient_id' => 50,
@@ -158,12 +145,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '20',
                 'organic' => 0,
                 'sort' => 5,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            11 => 
-            array (
+            ],
+            11 => [
                 'id' => 12,
                 'formula_id' => 2,
                 'ingredient_id' => 38,
@@ -171,12 +157,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '20',
                 'organic' => 0,
                 'sort' => 6,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            12 => 
-            array (
+            ],
+            12 => [
                 'id' => 13,
                 'formula_id' => 2,
                 'ingredient_id' => 21,
@@ -184,12 +169,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '30',
                 'organic' => 1,
                 'sort' => 7,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            13 => 
-            array (
+            ],
+            13 => [
                 'id' => 14,
                 'formula_id' => 2,
                 'ingredient_id' => 52,
@@ -197,12 +181,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '30',
                 'organic' => 1,
                 'sort' => 8,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            14 => 
-            array (
+            ],
+            14 => [
                 'id' => 15,
                 'formula_id' => 2,
                 'ingredient_id' => 19,
@@ -210,12 +193,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '30',
                 'organic' => 1,
                 'sort' => 9,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            15 => 
-            array (
+            ],
+            15 => [
                 'id' => 16,
                 'formula_id' => 2,
                 'ingredient_id' => 45,
@@ -223,12 +205,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '30',
                 'organic' => 0,
                 'sort' => 10,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-            16 => 
-            array (
+            ],
+            16 => [
                 'id' => 17,
                 'formula_id' => 2,
                 'ingredient_id' => 53,
@@ -236,12 +217,11 @@ class FormulaItemsTableSeeder extends Seeder
                 'phase' => '30',
                 'organic' => 0,
                 'sort' => 11,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
-            ),
-        ));
-        
-        
+            ],
+        ]);
+
     }
 }

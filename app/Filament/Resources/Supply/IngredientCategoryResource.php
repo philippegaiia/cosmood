@@ -2,73 +2,65 @@
 
 namespace App\Filament\Resources\Supply;
 
-use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Utilities\Get;
-use Filament\Schemas\Components\Utilities\Set;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use App\Filament\Resources\Supply\IngredientCategoryResource\Pages\ListIngredientCategories;
 use App\Filament\Resources\Supply\IngredientCategoryResource\Pages\CreateIngredientCategory;
 use App\Filament\Resources\Supply\IngredientCategoryResource\Pages\EditIngredientCategory;
-use Filament\Forms;
-use Filament\Tables;
-use Filament\Tables\Table;
-use Illuminate\Support\Str;
-use Filament\Resources\Resource;
-use App\Models\Supply\Ingredient;
+use App\Filament\Resources\Supply\IngredientCategoryResource\Pages\ListIngredientCategories;
+use App\Models\Supply\IngredientCategory;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
-use App\Models\Supply\IngredientCategory;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Forms\Components\MarkdownEditor;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\Supply\IngredientCategoryResource\Pages;
-use App\Filament\Resources\Supply\IngredientCategoryResource\RelationManagers;
 
 class IngredientCategoryResource extends Resource
 {
     protected static ?string $model = IngredientCategory::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Achats';
+    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
 
     protected static ?string $navigationLabel = 'Catégories Ingrédients';
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-tag';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-tag';
 
     protected static ?int $navigationSort = 4;
-
 
     public static function form(Schema $schema): Schema
     {
         return $schema
             ->components([
                 Select::make('parent_id')
-                ->relationship('parent', 'name', fn (Builder $query) => $query->where('parent_id', null))
+                    ->relationship('parent', 'name', fn (Builder $query) => $query->where('parent_id', null))
                     ->native(false)
                     ->disabledOn('edit')
                     ->live()
-                    ->afterStateUpdated(function (Get $get, Set $set, ?string $state, $record){
+                    ->afterStateUpdated(function (Get $get, Set $set, ?string $state, $record) {
                         if ($get('code') !== null) {
                             return;
                         }
 
                         $series = (IngredientCategory::all()->max('id') ?? 0) + 1;
-                        $set('code', IngredientCategory::findOrFail($state)->code . '-' . $series);
-                    }),              
-                    
+                        $set('code', IngredientCategory::findOrFail($state)->code.'-'.$series);
+                    }),
+
                 TextInput::make('name')
                     ->label('Nom')
                     ->required()
                     ->maxLength(50)
                     ->live(onBlur: true)
-                    ->afterStateUpdated(fn (Set $set, ?string $state) => $set('slug', str()->slug($state))), 
+                    ->afterStateUpdated(fn (Set $set, ?string $state) => $set('slug', str()->slug($state))),
 
                 TextInput::make('code')
                     ->required()
@@ -77,7 +69,7 @@ class IngredientCategoryResource extends Resource
                     ->maxLength(15),
 
                 TextInput::make('slug')
-                    ->disabledOn('edit')                   
+                    ->disabledOn('edit')
                     ->dehydrated()
                     ->required()
                     ->unique(ignoreRecord: true)
@@ -95,7 +87,7 @@ class IngredientCategoryResource extends Resource
     {
         return $table
             ->columns([
-                
+
                 TextColumn::make('name')
                     ->searchable()
                     ->label('Nom'),
@@ -129,24 +121,25 @@ class IngredientCategoryResource extends Resource
                 ActionGroup::make([
                     EditAction::make(),
                     DeleteAction::make()->action(function ($data, $record) {
-                    if ($record->ingredients()->count() > 0 ) {
-                        Notification::make()
-                            ->danger()
-                            ->title('Opération Impossible')
-                            ->body('Supprimez les ingrédients liés à la catégorie' . $record->name . ' pour la supprimer.')
-                            ->send();
-                        return;
-                    }
+                        if ($record->ingredients()->count() > 0) {
+                            Notification::make()
+                                ->danger()
+                                ->title('Opération Impossible')
+                                ->body('Supprimez les ingrédients liés à la catégorie'.$record->name.' pour la supprimer.')
+                                ->send();
 
-                    Notification::make()
-                        ->success()
-                        ->title('Catégorie Supprimée')
-                        ->body('La catégorie ' . $record->name . ' a été supprimé avec succès.')
-                        ->send();
+                            return;
+                        }
+
+                        Notification::make()
+                            ->success()
+                            ->title('Catégorie Supprimée')
+                            ->body('La catégorie '.$record->name.' a été supprimé avec succès.')
+                            ->send();
 
                         $record->delete();
                     }),
-                ]),              
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

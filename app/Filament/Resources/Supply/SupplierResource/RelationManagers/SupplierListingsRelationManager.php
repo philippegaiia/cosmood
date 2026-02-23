@@ -2,31 +2,27 @@
 
 namespace App\Filament\Resources\Supply\SupplierResource\RelationManagers;
 
-use Filament\Schemas\Schema;
+use App\Enums\Packaging;
+use App\Models\Supply\Ingredient;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\CreateAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\Textarea;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Actions\CreateAction;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\ViewAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteAction;
-use Filament\Forms;
-use Filament\Tables;
-use App\Enums\Packaging;
-use Filament\Tables\Table;
-use App\Models\Supply\Ingredient;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Schema;
+use Filament\Tables;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class SupplierListingsRelationManager extends RelationManager
 {
     protected static string $relationship = 'supplier_listings';
-
 
     public function form(Schema $schema): Schema
     {
@@ -37,32 +33,32 @@ class SupplierListingsRelationManager extends RelationManager
                 ->preload()
                 ->searchable()
                 ->required(),
-            TextInput::make('name')
-                ->required()
-                ->maxLength(255),
-            TextInput::make('code')
-                ->maxLength(255),
-            TextInput::make('supplier_code')
-                ->maxLength(255),
-            Select::make('pkg')
-                ->options(Packaging::class),
-            TextInput::make('unit_weight')
-                ->numeric(),
-            TextInput::make('price')
-                ->numeric()
-                ->prefix('€'),
-            Toggle::make('organic')
-                ->required(),
-            Toggle::make('fairtrade')
-                ->required(),
-            Toggle::make('cosmos')
-                ->required(),
-            Toggle::make('ecocert')
-                ->required(),
-            Textarea::make('description')
-                ->columnSpanFull(),
-            Toggle::make('is_active')
-                ->required(),
+                TextInput::make('name')
+                    ->required()
+                    ->maxLength(255),
+                TextInput::make('code')
+                    ->maxLength(255),
+                TextInput::make('supplier_code')
+                    ->maxLength(255),
+                Select::make('pkg')
+                    ->options(Packaging::class),
+                TextInput::make('unit_weight')
+                    ->numeric(),
+                TextInput::make('price')
+                    ->numeric()
+                    ->prefix('€'),
+                Toggle::make('organic')
+                    ->required(),
+                Toggle::make('fairtrade')
+                    ->required(),
+                Toggle::make('cosmos')
+                    ->required(),
+                Toggle::make('ecocert')
+                    ->required(),
+                Textarea::make('description')
+                    ->columnSpanFull(),
+                Toggle::make('is_active')
+                    ->required(),
             ]);
     }
 
@@ -93,14 +89,14 @@ class SupplierListingsRelationManager extends RelationManager
                 ActionGroup::make([
                     ViewAction::make(),
                     EditAction::make(),
-                    DeleteAction::make(),   
-                ])            
+                    DeleteAction::make(),
+                ]),
             ])
 
             ->toolbarActions([
-               // Tables\Actions\BulkActionGroup::make([
-               //     Tables\Actions\DeleteBulkAction::make(),
-               // ]),
+                // Tables\Actions\BulkActionGroup::make([
+                //     Tables\Actions\DeleteBulkAction::make(),
+                // ]),
             ]);
     }
 }

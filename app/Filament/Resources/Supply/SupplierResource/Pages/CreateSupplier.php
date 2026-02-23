@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Supply\SupplierResource\Pages;
 
 use App\Filament\Resources\Supply\SupplierResource;
-use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateSupplier extends CreateRecord
@@ -12,4 +11,3 @@ class CreateSupplier extends CreateRecord
 
     protected ?string $heading = 'Nouveau Fournisseur';
 }
-

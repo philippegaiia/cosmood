@@ -3,7 +3,6 @@
 namespace App\Filament\Resources\Supply\IngredientResource\Pages;
 
 use App\Filament\Resources\Supply\IngredientResource;
-use Filament\Actions;
 use Filament\Resources\Pages\CreateRecord;
 
 class CreateIngredient extends CreateRecord

@@ -7,7 +7,6 @@ use Illuminate\Support\Facades\DB;
 
 class ProductsTableSeeder extends Seeder
 {
-
     /**
      * Auto generated seed file
      *
@@ -15,13 +14,11 @@ class ProductsTableSeeder extends Seeder
      */
     public function run()
     {
-        
 
         DB::table('products')->delete();
-        
-        DB::table('products')->insert(array (
-            0 => 
-            array (
+
+        DB::table('products')->insert([
+            0 => [
                 'id' => 1,
                 'product_category_id' => 1,
                 'code' => '001',
@@ -30,14 +27,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2011-03-21',
                 'net_weight' => 100.0,
                 'ean_code' => '1234567891234',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 1,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:25:10',
                 'updated_at' => '2024-02-18 17:36:51',
-            ),
-            1 => 
-            array (
+            ],
+            1 => [
                 'id' => 2,
                 'product_category_id' => 1,
                 'code' => '002',
@@ -46,14 +42,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 100.0,
                 'ean_code' => '1234567894561236',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:25:55',
                 'updated_at' => '2021-01-29 04:25:55',
-            ),
-            2 => 
-            array (
+            ],
+            2 => [
                 'id' => 3,
                 'product_category_id' => 1,
                 'code' => '003',
@@ -62,14 +57,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2015-01-01',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:26:52',
                 'updated_at' => '2021-01-29 04:27:01',
-            ),
-            3 => 
-            array (
+            ],
+            3 => [
                 'id' => 4,
                 'product_category_id' => 1,
                 'code' => '004',
@@ -78,14 +72,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-12',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:28:08',
                 'updated_at' => '2021-01-29 04:29:18',
-            ),
-            4 => 
-            array (
+            ],
+            4 => [
                 'id' => 5,
                 'product_category_id' => 1,
                 'code' => '005',
@@ -94,14 +87,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2014-01-01',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:29:13',
                 'updated_at' => '2021-01-29 04:29:13',
-            ),
-            5 => 
-            array (
+            ],
+            5 => [
                 'id' => 6,
                 'product_category_id' => 1,
                 'code' => '006',
@@ -110,14 +102,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2011-03-21',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:30:17',
                 'updated_at' => '2021-01-29 04:30:17',
-            ),
-            6 => 
-            array (
+            ],
+            6 => [
                 'id' => 7,
                 'product_category_id' => 1,
                 'code' => '007',
@@ -126,14 +117,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:30:48',
                 'updated_at' => '2021-01-29 04:30:48',
-            ),
-            7 => 
-            array (
+            ],
+            7 => [
                 'id' => 8,
                 'product_category_id' => 1,
                 'code' => '008',
@@ -142,14 +132,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2011-03-21',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:31:27',
                 'updated_at' => '2021-01-29 04:31:27',
-            ),
-            8 => 
-            array (
+            ],
+            8 => [
                 'id' => 9,
                 'product_category_id' => 1,
                 'code' => '009',
@@ -158,14 +147,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:32:30',
                 'updated_at' => '2021-01-29 04:32:30',
-            ),
-            9 => 
-            array (
+            ],
+            9 => [
                 'id' => 10,
                 'product_category_id' => 1,
                 'code' => '010',
@@ -174,14 +162,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2011-03-21',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:33:39',
                 'updated_at' => '2021-01-29 04:33:39',
-            ),
-            10 => 
-            array (
+            ],
+            10 => [
                 'id' => 11,
                 'product_category_id' => 1,
                 'code' => '011',
@@ -190,14 +177,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2011-03-21',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 1,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:34:37',
                 'updated_at' => '2024-02-18 17:42:00',
-            ),
-            11 => 
-            array (
+            ],
+            11 => [
                 'id' => 12,
                 'product_category_id' => 1,
                 'code' => '012',
@@ -206,14 +192,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:35:37',
                 'updated_at' => '2021-01-29 04:35:37',
-            ),
-            12 => 
-            array (
+            ],
+            12 => [
                 'id' => 13,
                 'product_category_id' => 1,
                 'code' => '013',
@@ -222,14 +207,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2011-03-21',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:36:09',
                 'updated_at' => '2021-01-29 04:36:09',
-            ),
-            13 => 
-            array (
+            ],
+            13 => [
                 'id' => 14,
                 'product_category_id' => 1,
                 'code' => '014',
@@ -238,14 +222,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2016-01-01',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 1,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:37:25',
                 'updated_at' => '2024-02-18 17:37:08',
-            ),
-            14 => 
-            array (
+            ],
+            14 => [
                 'id' => 15,
                 'product_category_id' => 1,
                 'code' => '015',
@@ -254,14 +237,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:39:27',
                 'updated_at' => '2021-01-29 04:39:27',
-            ),
-            15 => 
-            array (
+            ],
+            15 => [
                 'id' => 16,
                 'product_category_id' => 1,
                 'code' => '016',
@@ -270,14 +252,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:40:03',
                 'updated_at' => '2021-01-29 04:40:20',
-            ),
-            16 => 
-            array (
+            ],
+            16 => [
                 'id' => 17,
                 'product_category_id' => 1,
                 'code' => '017',
@@ -286,14 +267,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2016-01-01',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:41:15',
                 'updated_at' => '2021-01-29 04:47:39',
-            ),
-            17 => 
-            array (
+            ],
+            17 => [
                 'id' => 18,
                 'product_category_id' => 1,
                 'code' => '018',
@@ -302,14 +282,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2016-01-01',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:47:23',
                 'updated_at' => '2021-01-29 04:47:23',
-            ),
-            18 => 
-            array (
+            ],
+            18 => [
                 'id' => 19,
                 'product_category_id' => 1,
                 'code' => '019',
@@ -318,14 +297,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2020-07-01',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 1,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:48:32',
                 'updated_at' => '2024-02-18 17:42:17',
-            ),
-            19 => 
-            array (
+            ],
+            19 => [
                 'id' => 20,
                 'product_category_id' => 1,
                 'code' => '020',
@@ -334,14 +312,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-16',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:49:47',
                 'updated_at' => '2021-01-29 04:49:47',
-            ),
-            20 => 
-            array (
+            ],
+            20 => [
                 'id' => 21,
                 'product_category_id' => 1,
                 'code' => '021',
@@ -350,14 +327,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-07-01',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:50:30',
                 'updated_at' => '2021-01-29 04:50:30',
-            ),
-            21 => 
-            array (
+            ],
+            21 => [
                 'id' => 22,
                 'product_category_id' => 1,
                 'code' => '022',
@@ -366,14 +342,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2020-07-01',
                 'net_weight' => 170.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:51:30',
                 'updated_at' => '2021-01-29 04:51:30',
-            ),
-            22 => 
-            array (
+            ],
+            22 => [
                 'id' => 23,
                 'product_category_id' => 1,
                 'code' => '030',
@@ -382,14 +357,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2018-07-01',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:52:45',
                 'updated_at' => '2021-01-29 04:53:23',
-            ),
-            23 => 
-            array (
+            ],
+            23 => [
                 'id' => 24,
                 'product_category_id' => 1,
                 'code' => '031',
@@ -398,14 +372,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2020-07-01',
                 'net_weight' => 250.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:53:13',
                 'updated_at' => '2021-01-29 04:55:46',
-            ),
-            24 => 
-            array (
+            ],
+            24 => [
                 'id' => 25,
                 'product_category_id' => 1,
                 'code' => '032',
@@ -414,14 +387,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2018-07-01',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:55:38',
                 'updated_at' => '2021-01-29 05:00:11',
-            ),
-            25 => 
-            array (
+            ],
+            25 => [
                 'id' => 26,
                 'product_category_id' => 1,
                 'code' => '033',
@@ -430,14 +402,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 250.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:56:28',
                 'updated_at' => '2021-01-29 04:56:28',
-            ),
-            26 => 
-            array (
+            ],
+            26 => [
                 'id' => 27,
                 'product_category_id' => 1,
                 'code' => '034',
@@ -446,14 +417,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 100.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:59:19',
                 'updated_at' => '2021-01-29 05:00:03',
-            ),
-            27 => 
-            array (
+            ],
+            27 => [
                 'id' => 28,
                 'product_category_id' => 1,
                 'code' => '035',
@@ -462,14 +432,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 250.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 04:59:55',
                 'updated_at' => '2021-01-29 04:59:55',
-            ),
-            28 => 
-            array (
+            ],
+            28 => [
                 'id' => 29,
                 'product_category_id' => 1,
                 'code' => '040',
@@ -478,14 +447,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2020-09-01',
                 'net_weight' => 150.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 05:02:36',
                 'updated_at' => '2021-01-29 05:02:36',
-            ),
-            29 => 
-            array (
+            ],
+            29 => [
                 'id' => 30,
                 'product_category_id' => 1,
                 'code' => '041',
@@ -494,14 +462,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-01-29',
                 'net_weight' => 150.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 05:03:07',
                 'updated_at' => '2021-01-29 05:03:07',
-            ),
-            30 => 
-            array (
+            ],
+            30 => [
                 'id' => 31,
                 'product_category_id' => 1,
                 'code' => '042',
@@ -510,14 +477,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2017-01-01',
                 'net_weight' => 150.0,
                 'ean_code' => '12',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-01-29 05:04:48',
                 'updated_at' => '2021-01-29 05:05:01',
-            ),
-            31 => 
-            array (
+            ],
+            31 => [
                 'id' => 32,
                 'product_category_id' => 1,
                 'code' => '043',
@@ -526,14 +492,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 150.0,
                 'ean_code' => '1234543223',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 15:56:22',
                 'updated_at' => '2021-06-21 16:24:18',
-            ),
-            32 => 
-            array (
+            ],
+            32 => [
                 'id' => 33,
                 'product_category_id' => 1,
                 'code' => '044',
@@ -542,14 +507,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 150.0,
                 'ean_code' => '1234',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:07:47',
                 'updated_at' => '2021-06-21 16:07:47',
-            ),
-            33 => 
-            array (
+            ],
+            33 => [
                 'id' => 34,
                 'product_category_id' => 1,
                 'code' => '028',
@@ -558,14 +522,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-03-01',
                 'net_weight' => 120.0,
                 'ean_code' => '1234567891',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:19:34',
                 'updated_at' => '2021-06-21 16:19:34',
-            ),
-            34 => 
-            array (
+            ],
+            34 => [
                 'id' => 35,
                 'product_category_id' => 1,
                 'code' => '029',
@@ -574,14 +537,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2020-06-01',
                 'net_weight' => 120.0,
                 'ean_code' => '123456789',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:24:03',
                 'updated_at' => '2021-06-21 16:24:03',
-            ),
-            35 => 
-            array (
+            ],
+            35 => [
                 'id' => 36,
                 'product_category_id' => 7,
                 'code' => '080',
@@ -590,14 +552,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2019-09-01',
                 'net_weight' => 120.0,
                 'ean_code' => '123456789',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:30:47',
                 'updated_at' => '2021-06-21 16:31:02',
-            ),
-            36 => 
-            array (
+            ],
+            36 => [
                 'id' => 37,
                 'product_category_id' => 11,
                 'code' => '090',
@@ -606,14 +567,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 30.0,
                 'ean_code' => '1234',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:37:41',
                 'updated_at' => '2021-06-21 16:37:41',
-            ),
-            37 => 
-            array (
+            ],
+            37 => [
                 'id' => 38,
                 'product_category_id' => 2,
                 'code' => '100',
@@ -622,14 +582,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 50.0,
                 'ean_code' => '3770002301203',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:39:22',
                 'updated_at' => '2021-06-21 16:39:22',
-            ),
-            38 => 
-            array (
+            ],
+            38 => [
                 'id' => 39,
                 'product_category_id' => 2,
                 'code' => '101',
@@ -638,14 +597,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2018-06-01',
                 'net_weight' => 50.0,
                 'ean_code' => '3770002301401',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:40:59',
                 'updated_at' => '2021-06-21 16:40:59',
-            ),
-            39 => 
-            array (
+            ],
+            39 => [
                 'id' => 40,
                 'product_category_id' => 3,
                 'code' => '102',
@@ -654,14 +612,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2018-03-01',
                 'net_weight' => 50.0,
                 'ean_code' => '1234456667',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:42:57',
                 'updated_at' => '2021-06-21 16:42:57',
-            ),
-            40 => 
-            array (
+            ],
+            40 => [
                 'id' => 41,
                 'product_category_id' => 3,
                 'code' => '103',
@@ -670,14 +627,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2018-06-01',
                 'net_weight' => 50.0,
                 'ean_code' => '3770002301395',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:46:05',
                 'updated_at' => '2021-06-21 16:52:00',
-            ),
-            41 => 
-            array (
+            ],
+            41 => [
                 'id' => 42,
                 'product_category_id' => 3,
                 'code' => '104',
@@ -686,14 +642,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 50.0,
                 'ean_code' => '3770002301371',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:47:23',
                 'updated_at' => '2021-06-21 16:52:38',
-            ),
-            42 => 
-            array (
+            ],
+            42 => [
                 'id' => 43,
                 'product_category_id' => 1,
                 'code' => '060',
@@ -702,14 +657,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-07-01',
                 'net_weight' => 150.0,
                 'ean_code' => 'x',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:58:35',
                 'updated_at' => '2021-06-21 16:59:46',
-            ),
-            43 => 
-            array (
+            ],
+            43 => [
                 'id' => 44,
                 'product_category_id' => 1,
                 'code' => '061',
@@ -718,14 +672,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-07-01',
                 'net_weight' => 100.0,
                 'ean_code' => 'x',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 16:59:31',
                 'updated_at' => '2021-06-21 16:59:31',
-            ),
-            44 => 
-            array (
+            ],
+            44 => [
                 'id' => 45,
                 'product_category_id' => 7,
                 'code' => '062',
@@ -734,14 +687,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 120.0,
                 'ean_code' => 'x',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 17:00:52',
                 'updated_at' => '2021-06-21 17:00:52',
-            ),
-            45 => 
-            array (
+            ],
+            45 => [
                 'id' => 46,
                 'product_category_id' => 2,
                 'code' => '065',
@@ -750,14 +702,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-07-01',
                 'net_weight' => 50.0,
                 'ean_code' => 'x',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 17:02:43',
                 'updated_at' => '2021-06-21 17:04:10',
-            ),
-            46 => 
-            array (
+            ],
+            46 => [
                 'id' => 47,
                 'product_category_id' => 3,
                 'code' => '064',
@@ -766,14 +717,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 50.0,
                 'ean_code' => 'c',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 17:03:39',
                 'updated_at' => '2021-06-21 17:03:39',
-            ),
-            47 => 
-            array (
+            ],
+            47 => [
                 'id' => 48,
                 'product_category_id' => 1,
                 'code' => '063',
@@ -782,14 +732,13 @@ class ProductsTableSeeder extends Seeder
                 'launch_date' => '2021-06-21',
                 'net_weight' => 500.0,
                 'ean_code' => 'x',
-                'description' => NULL,
+                'description' => null,
                 'is_active' => 0,
-                'deleted_at' => NULL,
+                'deleted_at' => null,
                 'created_at' => '2021-06-21 17:04:59',
                 'updated_at' => '2021-06-21 17:04:59',
-            ),
-        ));
-        
-        
+            ],
+        ]);
+
     }
 }

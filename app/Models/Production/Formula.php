@@ -2,22 +2,28 @@
 
 namespace App\Models\Production;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Formula extends Model
 {
     use HasFactory;
-
     use SoftDeletes;
 
     protected $guarded = [];
 
-    public function formula_items(): HasMany
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+            'date_of_creation' => 'date',
+        ];
+    }
+
+    public function formulaItems(): HasMany
     {
         return $this->hasMany(FormulaItem::class);
     }
@@ -27,32 +33,13 @@ class Formula extends Model
         return $this->belongsTo(Product::class)->withDefault();
     }
 
-   /*  protected function total()
+    public function productions(): HasMany
     {
-
-                $total = 0;
-
-                foreach ($this->quoteProducts as $product) {
-                    $total += $product->price;
-                }
-
-                return $total;
-
-
+        return $this->hasMany(Production::class);
     }
 
-   protected function subtotal(): Attribute
+    public function isMasterbatchFormula(): bool
     {
-        return Attribute::make(
-            get: function () {
-                $subtotal = 0;
-
-                foreach ($this->quoteProducts as $product) {
-                    $subtotal += $product->price * $product->quantity;
-                }
-
-                return $subtotal;
-            }
-        );
-    } */
+        return $this->replaces_phase !== null;
+    }
 }

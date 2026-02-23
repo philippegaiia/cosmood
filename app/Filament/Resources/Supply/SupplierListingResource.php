@@ -2,49 +2,45 @@
 
 namespace App\Filament\Resources\Supply;
 
-use Filament\Schemas\Schema;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\Textarea;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Filters\TrashedFilter;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\EditAction;
-use Filament\Actions\ViewAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
-use App\Filament\Resources\Supply\SupplierListingResource\Pages\ListSupplierListings;
+use App\Enums\Packaging;
 use App\Filament\Resources\Supply\SupplierListingResource\Pages\CreateSupplierListing;
 use App\Filament\Resources\Supply\SupplierListingResource\Pages\EditSupplierListing;
-use Filament\Forms;
-use Filament\Tables;
-use App\Enums\Packaging;
-use Filament\Tables\Table;
-use App\Models\Supply\Supplier;
-use Filament\Resources\Resource;
+use App\Filament\Resources\Supply\SupplierListingResource\Pages\ListSupplierListings;
 use App\Models\Supply\Ingredient;
+use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
-use Filament\Support\Enums\FontWeight;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreBulkAction;
+use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Support\Enums\FontWeight;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\Supply\SupplierListingResource\Pages;
-use App\Filament\Resources\Supply\SupplierListingResource\RelationManagers;
 
 class SupplierListingResource extends Resource
 {
     protected static ?string $model = SupplierListing::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Achats';
+    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
 
     protected static ?string $navigationLabel = 'Ingrédients référencés';
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-document-check';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-check';
 
     protected static ?int $navigationSort = 6;
 
@@ -106,20 +102,20 @@ class SupplierListingResource extends Resource
     {
         return $table
             ->striped()
-            //->deferLoading()
+            // ->deferLoading()
             ->columns([
 
                 TextColumn::make('name')
                     ->label('designation')
-                    ->formatStateUsing(fn ($record) => $record->name . ' ' .  $record->unit_weight . ' ' . $record->unit_of_measure)
+                    ->formatStateUsing(fn ($record) => $record->name.' '.$record->unit_weight.' '.$record->unit_of_measure)
                     ->weight(FontWeight::Bold)
                     ->searchable(['name', 'unit_of_measure']),
 
                 TextColumn::make('code')
                     ->searchable(),
-                
+
                 TextColumn::make('ingredient.name')
-                    //->numeric()
+                    // ->numeric()
                     ->searchable()
                     ->sortable(),
 
@@ -130,7 +126,7 @@ class SupplierListingResource extends Resource
 
                 TextColumn::make('pkg')
                     ->label('Packaging')
-                    ->toggleable(isToggledHiddenByDefault: true),             
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('unit_weight')
                     ->label('Poids Unit.')
@@ -174,30 +170,30 @@ class SupplierListingResource extends Resource
                 TrashedFilter::make(),
             ])
             ->recordActions([
-            ActionGroup::make([
-                EditAction::make(),
-                ViewAction::make(),
-                DeleteAction::make()
-                ->action(function ($data, $record) {
-                    if ($record->supplies()->count() > 0 || $record->supplier_order_items()->count() > 0) {
-                        Notification::make()
-                            ->danger()
-                            ->title('Opération Impossible')
-                            ->body('Cet ingrédient est référencé dans des commandes fournisseur et dans les stocks ingrédients.')
-                            ->send();
+                ActionGroup::make([
+                    EditAction::make(),
+                    ViewAction::make(),
+                    DeleteAction::make()
+                        ->action(function ($data, $record) {
+                            if ($record->supplies()->count() > 0 || $record->supplier_order_items()->count() > 0) {
+                                Notification::make()
+                                    ->danger()
+                                    ->title('Opération Impossible')
+                                    ->body('Cet ingrédient est référencé dans des commandes fournisseur et dans les stocks ingrédients.')
+                                    ->send();
 
-                        return;
-                    }
+                                return;
+                            }
 
-                    Notification::make()
-                        ->success()
-                        ->title('Fournisseur Supprimé')
-                        ->body('Ingrédient ' . $record->name. ' supprimé avec succès.')
-                        ->send();
+                            Notification::make()
+                                ->success()
+                                ->title('Fournisseur Supprimé')
+                                ->body('Ingrédient '.$record->name.' supprimé avec succès.')
+                                ->send();
 
-                    $record->delete();
-                }),
-            ])
+                            $record->delete();
+                        }),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

@@ -6,16 +6,14 @@ use Filament\Support\Colors\Color;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
-enum ProductionStatus: string implements HasLabel, HasColor
+enum ProductionStatus: string implements HasColor, HasLabel
 {
-
-    case Simulated = "simulation";
-    case Planned = "planned";
-    case Confirmed = "confirmed";
-    case Ongoing = "ongoing";
-    case Finished = "finished";
-    case Cancelled = "cancelled";
-
+    case Simulated = 'simulation';
+    case Planned = 'planned';
+    case Confirmed = 'confirmed';
+    case Ongoing = 'ongoing';
+    case Finished = 'finished';
+    case Cancelled = 'cancelled';
 
     public function getLabel(): string
     // This is the method that will be called to get the label of the enum
@@ -31,9 +29,8 @@ enum ProductionStatus: string implements HasLabel, HasColor
         };
     }
 
-
     // This is ithe method that will be called to get the color of the enum
-    public function getColor(): string | array | null
+    public function getColor(): string|array|null
     {
         return match ($this) {
             self::Simulated => Color::Stone,

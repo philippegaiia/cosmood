@@ -1,13 +1,12 @@
 {
     "agents": [
-        "cursor",
-        "gemini",
-        "codex",
-        "claude_code"
+        "opencode",
+        "codex"
     ],
     "guidelines": true,
-    "herd_mcp": true,
+    "herd_mcp": false,
     "mcp": true,
+    "nightwatch_mcp": false,
     "packages": [
         "filament/filament"
     ],

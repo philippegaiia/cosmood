@@ -2,11 +2,10 @@
 
 namespace App\Filament\Resources\Supply\SupplierResource\Pages;
 
+use App\Filament\Resources\Supply\SupplierResource;
 use Filament\Actions\DeleteAction;
-use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use App\Filament\Resources\Supply\SupplierResource;
 
 class EditSupplier extends EditRecord
 {
@@ -19,15 +18,15 @@ class EditSupplier extends EditRecord
         return [
             DeleteAction::make()
                 ->action(function ($data, $record) {
-                if ($record->contacts()->count() > 0 || $record->supplier_listings()->count() > 0) {
-                    Notification::make()
-                        ->danger()
-                        ->title('Opération Impossible')
-                        ->body('Supprimez les fichiers liés à ce fournisseur pour le supprimer.')
-                        ->send();
+                    if ($record->contacts()->count() > 0 || $record->supplier_listings()->count() > 0) {
+                        Notification::make()
+                            ->danger()
+                            ->title('Opération Impossible')
+                            ->body('Supprimez les fichiers liés à ce fournisseur pour le supprimer.')
+                            ->send();
 
-                    return;
-                }
+                        return;
+                    }
                     Notification::make()
                         ->success()
                         ->title('Fournisseur Supprimé')

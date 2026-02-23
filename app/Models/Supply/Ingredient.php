@@ -2,12 +2,11 @@
 
 namespace App\Models\Supply;
 
-use App\Models\Production\FormulaItem;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Ingredient extends Model
 {
@@ -29,10 +28,18 @@ class Ingredient extends Model
         'einecs',
         'is_active',
         'description',
+        'price',
         'deleted_at',
         'created_at',
-        'updated_at'
+        'updated_at',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'price' => 'decimal:2',
+        ];
+    }
 
     public function ingredient_category(): BelongsTo
     {
@@ -42,7 +49,7 @@ class Ingredient extends Model
     public function supplier_listings(): HasMany
     {
         return $this->hasMany(SupplierListing::class);
-    }   
+    }
 
     /*public function formula_items(): HasMany
     {

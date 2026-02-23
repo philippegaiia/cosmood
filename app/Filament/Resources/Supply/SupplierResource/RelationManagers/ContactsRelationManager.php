@@ -2,26 +2,21 @@
 
 namespace App\Filament\Resources\Supply\SupplierResource\RelationManagers;
 
-use Filament\Schemas\Schema;
+use App\Enums\Departments;
+use App\Filament\Resources\Supply\SupplierContactResource\Pages\CreateSupplierContact;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\CreateAction;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\MarkDownEditor;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\MarkDownEditor;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Actions\CreateAction;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Forms;
-use Filament\Tables;
-use App\Enums\Departments;
-use Filament\Tables\Table;
-use Filament\Forms\FormsComponent;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Filament\Resources\RelationManagers\RelationManager;
-use App\Filament\Resources\Supply\SupplierContactResource\Pages\CreateSupplierContact;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class ContactsRelationManager extends RelationManager
 {
@@ -32,8 +27,8 @@ class ContactsRelationManager extends RelationManager
         return $schema
             ->components([
                 Select::make('supplier_id')
-                ->relationship('supplier', 'name')
-            ->visible(fn ($livewire) => $livewire instanceof CreateSupplierContact)
+                    ->relationship('supplier', 'name')
+                    ->visible(fn ($livewire) => $livewire instanceof CreateSupplierContact)
                     ->required()
                     ->label('Fournisseur'),
                 TextInput::make('first_name')
@@ -59,10 +54,10 @@ class ContactsRelationManager extends RelationManager
                 Select::make('department')
                     ->options(Departments::class),
                 MarkDownEditor::make('description')
-                    ->columnSpanFull()
-                
+                    ->columnSpanFull(),
+
             ]);
-            
+
     }
 
     public function table(Table $table): Table
@@ -70,35 +65,35 @@ class ContactsRelationManager extends RelationManager
         return $table
             ->recordTitleAttribute('first_name')
             ->columns([
-            TextColumn::make('first_name')
-                ->searchable(),
-            TextColumn::make('last_name')
-                ->searchable(),
-            TextColumn::make('phone')
-                ->searchable(),
-            TextColumn::make('mobile')
-                ->searchable(),
-            TextColumn::make('email')
-                ->searchable(),
-            TextColumn::make('department')
-                ->searchable(),
+                TextColumn::make('first_name')
+                    ->searchable(),
+                TextColumn::make('last_name')
+                    ->searchable(),
+                TextColumn::make('phone')
+                    ->searchable(),
+                TextColumn::make('mobile')
+                    ->searchable(),
+                TextColumn::make('email')
+                    ->searchable(),
+                TextColumn::make('department')
+                    ->searchable(),
             ])
             ->filters([
-                // 
+                //
             ])
             ->headerActions([
                 CreateAction::make(),
             ])
             ->recordActions([
-                ActionGroup::make ([
+                ActionGroup::make([
                     EditAction::make(),
-                    DeleteAction::make(), 
-                ])
-                
+                    DeleteAction::make(),
+                ]),
+
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                DeleteBulkAction::make(),
+                    DeleteBulkAction::make(),
                 ]),
             ]);
     }

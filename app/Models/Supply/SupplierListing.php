@@ -3,22 +3,22 @@
 namespace App\Models\Supply;
 
 use App\Enums\Packaging;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SupplierListing extends Model
 {
-    use HasFactory; 
+    use HasFactory;
     use SoftDeletes;
 
-        protected $fillable = [
+    protected $fillable = [
         'id',
         'name',
         'code',
-       'supplier_code',
+        'supplier_code',
         'pkg',
         'unit_weight',
         'price',
@@ -26,7 +26,7 @@ class SupplierListing extends Model
         'fairtrade',
         'cosmos',
         'ecocert',
-        'description',  
+        'description',
         'is_active',
         'supplier_id',
         'ingredient_id',
@@ -57,5 +57,4 @@ class SupplierListing extends Model
     {
         return $this->hasMany(SupplierOrderItem::class);
     }
-
 }

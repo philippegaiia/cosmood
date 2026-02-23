@@ -2,9 +2,8 @@
 
 namespace App\Filament\Resources\Supply\SupplyResource\Pages;
 
-use Filament\Actions\EditAction;
 use App\Filament\Resources\Supply\SupplyResource;
-use Filament\Actions;
+use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 
 class ViewSupply extends ViewRecord

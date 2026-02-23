@@ -1,9 +1,9 @@
 <?php
 
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use App\Models\Production\ProductCategory;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('name');
             $table->date('launch_date');
             $table->float('net_weight', 7, 3);
-            $table->string('ean_code')->nullable();   
+            $table->string('ean_code')->nullable();
             $table->text('description')->nullable();
             $table->smallInteger('is_active');
             $table->softDeletes();

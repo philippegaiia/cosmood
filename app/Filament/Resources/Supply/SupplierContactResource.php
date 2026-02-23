@@ -2,40 +2,34 @@
 
 namespace App\Filament\Resources\Supply;
 
-use Filament\Schemas\Schema;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\MarkDownEditor;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\EditAction;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use App\Filament\Resources\Supply\SupplierContactResource\Pages\ListSupplierContacts;
+use App\Enums\Departments;
 use App\Filament\Resources\Supply\SupplierContactResource\Pages\CreateSupplierContact;
 use App\Filament\Resources\Supply\SupplierContactResource\Pages\EditSupplierContact;
-use Filament\Forms;
-use Filament\Tables;
-use App\Enums\Departments;
-//use Filament\Actions\ActionGroup;
-use Filament\Tables\Table;
-use Filament\Resources\Resource;
+use App\Filament\Resources\Supply\SupplierContactResource\Pages\ListSupplierContacts;
 use App\Models\Supply\SupplierContact;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\Supply\SupplierContactResource\Pages;
-use App\Filament\Resources\Supply\SupplierContactResource\RelationManagers;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteAction;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Forms\Components\MarkDownEditor;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Resources\Resource;
+// use Filament\Actions\ActionGroup;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
 
 class SupplierContactResource extends Resource
 {
     protected static ?string $model = SupplierContact::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Achats';
+    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
 
     protected static ?string $navigationLabel = 'Contacts Fournisseurs';
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-user-group';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-user-group';
 
     protected static ?int $navigationSort = 2;
 
@@ -64,7 +58,7 @@ class SupplierContactResource extends Resource
                     ->maxLength(255),
                 Select::make('department')
                     ->options(Departments::class),
-                MarkDownEditor::make('description')
+                MarkDownEditor::make('description'),
             ]);
     }
 
@@ -101,13 +95,13 @@ class SupplierContactResource extends Resource
             ])
             ->recordActions([
                 ActionGroup::make([
-                     EditAction::make(),
-                     DeleteAction::make(),
-                ])
-               
+                    EditAction::make(),
+                    DeleteAction::make(),
+                ]),
+
             ])
             ->toolbarActions([
-                    BulkActionGroup::make([
+                BulkActionGroup::make([
                     DeleteBulkAction::make(),
                 ]),
             ]);

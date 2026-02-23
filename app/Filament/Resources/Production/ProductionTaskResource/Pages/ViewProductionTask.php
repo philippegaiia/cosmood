@@ -2,9 +2,8 @@
 
 namespace App\Filament\Resources\Production\ProductionTaskResource\Pages;
 
-use Filament\Actions\EditAction;
 use App\Filament\Resources\Production\ProductionTaskResource;
-use Filament\Actions;
+use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 
 class ViewProductionTask extends ViewRecord

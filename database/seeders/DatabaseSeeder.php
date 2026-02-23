@@ -3,15 +3,9 @@
 namespace Database\Seeders;
 
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
-use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use App\Models\Production\Producttag;
-use phpDocumentor\Reflection\DocBlock\Tag;
-use Database\Seeders\ProductCategorySeeder;
-use Database\Seeders\SupplierListingSeeder;
+use App\Models\User;
 use Database\Seeders\Supply\SupplierSeeder;
-use Database\Seeders\Supply\IngredientSeeder;
-use Database\Seeders\Supply\IngredientCategorySeeder;
+use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -22,77 +16,57 @@ class DatabaseSeeder extends Seeder
     {
         // \App\Models\User::factory(10)->create();
         // Seed users
-        \App\Models\User::factory()->create([
-            'name' => 'Test Admin',
-            'email' => 'admin@admin.com',
-        ]);
+        User::query()->updateOrCreate(
+            ['email' => 'admin@admin.com'],
+            [
+                'name' => 'Test Admin',
+                'password' => bcrypt('password'),
+            ]
+        );
 
-        \App\Models\User::factory()->create([
-            'name' => 'Test Utilisateur',
-            'email' => 'user@user.com',
-        ]);
+        User::query()->updateOrCreate(
+            ['email' => 'user@user.com'],
+            [
+                'name' => 'Test Utilisateur',
+                'password' => bcrypt('password'),
+            ]
+        );
 
         // seed suppliers
         $this->call(SupplierSeeder::class);
 
-        // seed contacts
+        $this->call(SupplierContactSeeder::class);
 
-        DB::table('supplier_contacts')->insert([
-            [
-                'first_name' => 'Marie',
-                'last_name' => 'Duarte',
-                'supplier_id' => 1,
-                'email' => 'marie@cauvin.com',
-            ],
-            [
-                'first_name' => 'Cécile',
-                'last_name' => 'Manzanere',
-                'supplier_id' => 1,
-                'email' => 'cecilie@cauvin.com',
-            ],
-            [
-                'first_name' => 'Olivier',
-                'last_name' => 'Himbert',
-                'supplier_id' => 4,
-                'email' => 'cecilie@cauvin.com',
-            ],
-        ]);
-
-        DB::table('producttags')->insert([
-            [
-                'name' => 'neutre',
-                'color' => '#000000',
-                
-            ],
-            [
-                'name' => 'neutre',
-                'color' => '#fafafa',
-            ],
-            [
-                'name' => 'neutre',
-                'color' => '#e8e8e8',
-            ],
-        ]);
-
-       // $this->call(IngredientCategorySeeder::class);
-       // $this->call(IngredientSeeder::class);
+        // $this->call(IngredientCategorySeeder::class);
+        // $this->call(IngredientSeeder::class);
         $this->call(IngredientCategoriesTableSeeder::class);
         $this->call(IngredientsTableSeeder::class);
         $this->call(SupplierListingSeeder::class);
         $this->call(ProductCategorySeeder::class);
-        //$this->call(ProductSeeder::class);
+        $this->call(ProductTypeSeeder::class);
+        $this->call(QcTemplateSeeder::class);
+        $this->call(BatchSizePresetSeeder::class);
+        $this->call(TaskTemplateSeeder::class);
+        // $this->call(ProductSeeder::class);
         $this->call(ProductsTableSeeder::class);
 
-        
+        $this->call(FormulasTableSeeder::class);
+        $this->call(FormulaItemsTableSeeder::class);
+        $this->call(FormulaProductSeeder::class);
+
+        $this->call(ProductionWaveSeeder::class);
+        $this->call(ProductionSeeder::class);
+        $this->call(ProductionTaskTypeSeeder::class);
+        $this->call(ProductionTaskSeeder::class);
+        $this->call(ProductionIngredientRequirementSeeder::class);
+        $this->call(ProductionPackagingRequirementSeeder::class);
+        $this->call(ProductionItemSeeder::class);
+
         $this->call(SupplierOrdersTableSeeder::class);
         $this->call(SupplierOrderItemsTableSeeder::class);
         $this->call(SuppliesTableSeeder::class);
-        
-        
-        $this->call(FormulasTableSeeder::class);
-        $this->call(FormulaItemsTableSeeder::class);
-        $this->call(ProductProducttagTableSeeder::class);
-        //$this->call(FormulaProductTableSeeder::class);
+        $this->call(SuppliesMovementSeeder::class);
+
+        // $this->call(FormulaProductTableSeeder::class);
     }
 }
- 

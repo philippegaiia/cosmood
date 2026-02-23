@@ -2,9 +2,8 @@
 
 namespace App\Filament\Resources\Supply\IngredientCategoryResource\Pages;
 
-use Filament\Actions\CreateAction;
 use App\Filament\Resources\Supply\IngredientCategoryResource;
-use Filament\Actions;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListIngredientCategories extends ListRecords

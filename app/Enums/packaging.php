@@ -11,9 +11,9 @@ enum Packaging: string implements HasLabel
     case Carton = '3';
     case Fût = '4';
     case Flacon = '5';
-    case Unitaire  = '6';
+    case Unitaire = '6';
     case Vrac = '7';
-    case Sac  = '8';
+    case Sac = '8';
 
     public function getLabel(): string
     // This is the method that will be called to get the label of the enum

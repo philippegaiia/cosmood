@@ -2,58 +2,55 @@
 
 namespace App\Filament\Resources\Production;
 
-use Filament\Schemas\Schema;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Fieldset;
+use App\Enums\Phases;
+use App\Filament\Resources\Production\FormulaResource\Pages\CreateFormula;
+use App\Filament\Resources\Production\FormulaResource\Pages\EditFormula;
+use App\Filament\Resources\Production\FormulaResource\Pages\ListFormulas;
+use App\Filament\Resources\Production\FormulaResource\Pages\ViewFormula;
+use App\Models\Production\Formula;
+use App\Models\Production\Product;
+use App\Models\Supply\Ingredient;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreBulkAction;
+use Filament\Actions\ViewAction;
+use Filament\Forms;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Repeater;
-use Filament\Schemas\Components\Utilities\Set;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Fieldset;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TrashedFilter;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\ViewAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
-use App\Filament\Resources\Production\FormulaResource\Pages\ListFormulas;
-use App\Filament\Resources\Production\FormulaResource\Pages\CreateFormula;
-use App\Filament\Resources\Production\FormulaResource\Pages\ViewFormula;
-use App\Filament\Resources\Production\FormulaResource\Pages\EditFormula;
-use Filament\Forms;
-use Filament\Tables;
-use App\Enums\Phases;
 use Filament\Tables\Table;
-use Filament\Resources\Resource;
-use App\Models\Supply\Ingredient;
-use App\Models\Production\Formula;
-use App\Models\Production\Product;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Toggle;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\DatePicker;
 use Illuminate\Database\Eloquent\Builder;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\MarkdownEditor;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\Production\FormulaResource\Pages;
 
 class FormulaResource extends Resource
 {
     protected static ?string $model = Formula::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Produits';
+    protected static string|\UnitEnum|null $navigationGroup = 'Produits';
 
     protected static ?string $navigationLabel = 'Formules';
 
-
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-beaker';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-beaker';
 
     public static function form(Schema $schema): Schema
     {
-        
+
         return $schema
             ->components([
                 Section::make('Détails Formule')
@@ -61,7 +58,7 @@ class FormulaResource extends Resource
                         TextInput::make('name')
                             ->unique(Formula::class, ignoreRecord: true)
                             ->maxLength(255),
-                            
+
                         TextInput::make('code')
                             ->maxLength(20)
                             ->disabledOn('edit')
@@ -84,177 +81,176 @@ class FormulaResource extends Resource
                         Fieldset::make('Dates')
                             ->schema([
                                 DatePicker::make('date_of_creation')
-                                ->required()
+                                    ->required()
                                     ->default(now())
                                     ->native(false)
                                     ->weekStartsOnMonday(),
-                            
+
                             ])->columnSpanFull(),
 
                         Section::make('Informations sur la Formule')
                             ->schema([
-                                MarkdownEditor::make('description')
+                                MarkdownEditor::make('description'),
                             ])
                             ->collapsed()
-                            ->columnSpanFull()
+                            ->columnSpanFull(),
 
-                ])->columns(4),
+                    ])
+                    ->columns(4)
+                    ->columnSpanFull(),
                 //  ]);
-Section::make()
-                ->hiddenOn('create')
-                ->columns(1)
-                ->maxWidth('1/2')
-                ->schema([
-                    Fieldset::make('Totaux')
+                Section::make()
+                    ->hiddenOn('create')
+                    ->columns(1)
+                    ->columnSpanFull()
                     ->schema([
-                            Placeholder::make('total_saponified')
-                                ->content(function ($get)
-                                {
-                                    $total = 0;
-                                    
-                                    foreach ($get('formula_items') as $item) {
-                                        if ($item['phase'] === Phases::Saponification->value){
-                                            $total += (int)$item['percentage_of_oils'];
-                                        }
-                                        
-                                    }
-                                    return $total;
-                                }),
-
-                            Placeholder::make('total_formula')
-                                ->content(function ($get) {
-                                    $total = 0;
-                                    foreach ($get('formula_items') as $item) {
-                                        //dd($total);
-                                        $total += (int)$item['percentage_of_oils'];
-                                         
-                                    }
-                                    if ($total !== 0) {
-                                    $totalformula = 100 / $total;
-                                    return $totalformula;
-                                    }
-                                })
-                            ]),
-                Section::make('Items Formule')
-                    ->schema([
-                        Repeater::make('formula_items')
-                        ->relationship()
-                            ->hiddenOn('create')
+                        Fieldset::make('Totaux')
                             ->schema([
-                                Select::make('ingredient_id')
+                                TextEntry::make('total_saponified')
+                                    ->state(function ($get) {
+                                        $total = 0;
+
+                                        foreach ($get('formulaItems') as $item) {
+                                            if ($item['phase'] === Phases::Saponification->value) {
+                                                $total += (int) $item['percentage_of_oils'];
+                                            }
+
+                                        }
+
+                                        return $total;
+                                    }),
+
+                                TextEntry::make('total_formula')
+                                    ->state(function ($get) {
+                                        $total = 0;
+                                        foreach ($get('formulaItems') as $item) {
+                                            $total += (int) $item['percentage_of_oils'];
+
+                                        }
+                                        if ($total !== 0) {
+                                            $totalformula = 100 / $total;
+
+                                            return $totalformula;
+                                        }
+                                    }),
+                            ]),
+                        Section::make('Items Formule')
+                            ->schema([
+                                Repeater::make('formulaItems')
+                                    ->relationship()
+                                    ->hiddenOn('create')
+                                    ->schema([
+                                        Select::make('ingredient_id')
                             /* ->relationship(
                                     name: 'ingredient',
                                     titleAttribute: 'name',
                                     modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query->where('supplier_id', $get('../../supplier_id')),
                                     )*/
-                                    ->label('Ingrédient')
-                                    ->options(Ingredient::where('is_active', true)->pluck('name', 'id'))
-                                    ->searchable()
-                                    ->preload()
-                                    ->required()
-                                    ->disableOptionsWhenSelectedInSiblingRepeaterItems()
-                                    ->native(false)
-                                    ->columnSpan(6),
+                                            ->label('Ingrédient')
+                                            ->options(Ingredient::where('is_active', true)->pluck('name', 'id'))
+                                            ->searchable()
+                                            ->preload()
+                                            ->required()
+                                            ->disableOptionsWhenSelectedInSiblingRepeaterItems()
+                                            ->native(false)
+                                            ->columnSpan(6),
 
-                                TextInput::make('percentage_of_oils')
-                                    ->label('% d\'huiles')
-                                    ->postfix('%')
-                                    ->numeric()
-                                    ->live()
-                                    ->dehydrated()
-                                    ->afterStateUpdated(function (Set $set, $state) {
-                                        $set('percentage_of_total', 'percentage_of_oils');
-                                    })                                 
-                                    ->default(1)
-                                    ->columnSpan(3),
+                                        TextInput::make('percentage_of_oils')
+                                            ->label('% d\'huiles')
+                                            ->postfix('%')
+                                            ->numeric()
+                                            ->live()
+                                            ->dehydrated()
+                                            ->afterStateUpdated(function (Set $set, $state) {
+                                                $set('percentage_of_total', 'percentage_of_oils');
+                                            })
+                                            ->default(1)
+                                            ->columnSpan(3),
 
-                                Select::make('phase')
-                                    ->label('Phase')
-                                    ->options(Phases::class)
-                                    ->default(Phases::Saponification)
-                                    ->native(false)
-                                    ->columnSpan(4),
+                                        Select::make('phase')
+                                            ->label('Phase')
+                                            ->options(Phases::class)
+                                            ->default(Phases::Saponification)
+                                            ->native(false)
+                                            ->columnSpan(4),
 
-                                Toggle::make('organic')
-                                    ->label('Bio')
-                                    //->default(true)
-                                    ->inline(false)
-                                    ->columnSpan(3),
+                                        Toggle::make('organic')
+                                            ->label('Bio')
+                                            // ->default(true)
+                                            ->inline(false)
+                                            ->columnSpan(3),
 
-                                Placeholder::make('percentage_of_total')
-                                    ->label('Total')
-                        //->dehydrated()
-                                    ->content(function (Get $get): string {
-                                        return number_format($get('percentage_of_oils') , 2);
-                                        })
+                                        TextEntry::make('percentage_of_total')
+                                            ->label('Total')
+                        // ->dehydrated()
+                                            ->state(function (Get $get): string {
+                                                return number_format($get('percentage_of_oils'), 2);
+                                            })
+                                            ->live(),
+
+                                    ])->columns(18)
+                                    ->defaultItems(1)
+                                    ->reorderableWithButtons()
+                                    ->orderColumn('sort')
                                     ->live(),
+                            ]),
 
-                        ])->columns(18)
-                        ->defaultItems(1)
-                        ->reorderableWithButtons()
-                        ->orderColumn('sort')
-                        ->live()                  
-                                ]),
-            
-                    
-                        
                         // Read-only, because it's calculated
-                        //->readOnly()
-                        //->suffix('%')
+                        // ->readOnly()
+                        // ->suffix('%')
                         // This enables us to display the subtotal on the edit page load
-                       // ->afterStateHydrated(function (Get $get, Set $set) {
+                        // ->afterStateHydrated(function (Get $get, Set $set) {
                         //    self::updateTotals($get, $set);
-                        //})
+                        // })
 
-
-                  /*  Forms\Components\TextInput::make('Total Formule')
+                        /*  Forms\Components\TextInput::make('Total Formule')
                         ->numeric()
                         // Read-only, because it's calculated
                         ->readOnly()
                         // This enables us to display the subtotal on the edit page load
                         ->afterStateHydrated(function (Get $get, Set $set) {
                             self::updateTotals($get, $set);
-                        }), */                   
+                        }), */
                     ]),
             ]);
     }
 
- /*   public static function updateTotals(Get $get, $livewire): void
-    {
-        // Retrieve the state path of the form. Most likely, it's `data` but could be something else.
-        $statePath = $livewire->getFormStatePath();
+    /*   public static function updateTotals(Get $get, $livewire): void
+       {
+           // Retrieve the state path of the form. Most likely, it's `data` but could be something else.
+           $statePath = $livewire->getFormStatePath();
 
-        $ingredients = data_get($livewire, $statePath . '.forumula_items');
-        if (collect($ingredients)->isEmpty()) {
-            return;
-        }
-        $selectedIngredients = collect($ingredients)->filter(fn ($item) => !empty($item['product_id']) && !empty($item['quantity']));
+           $ingredients = data_get($livewire, $statePath . '.forumula_items');
+           if (collect($ingredients)->isEmpty()) {
+               return;
+           }
+           $selectedIngredients = collect($ingredients)->filter(fn ($item) => !empty($item['product_id']) && !empty($item['quantity']));
 
-        $prices = collect($ingredients)->pluck('price', 'product_id');
+           $prices = collect($ingredients)->pluck('price', 'product_id');
 
-        $subtotal = $selectedIngredients->reduce(function ($subtotal, $ingredient) use ($prices) {
-            return $subtotal + ($prices[$ingredient['product_id']] * $ingredient['quantity']);
-        }, 0);
+           $subtotal = $selectedIngredients->reduce(function ($subtotal, $ingredient) use ($prices) {
+               return $subtotal + ($prices[$ingredient['product_id']] * $ingredient['quantity']);
+           }, 0);
 
-        data_set($livewire, $statePath . '.subtotal', number_format($subtotal, 2, '.', ''));
-        data_set($livewire, $statePath . '.total', number_format($subtotal + ($subtotal * (data_get($livewire, $statePath . '.taxes') / 100)), 2, '.', ''));
-    }*/
+           data_set($livewire, $statePath . '.subtotal', number_format($subtotal, 2, '.', ''));
+           data_set($livewire, $statePath . '.total', number_format($subtotal + ($subtotal * (data_get($livewire, $statePath . '.taxes') / 100)), 2, '.', ''));
+       }*/
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-            TextColumn::make('name')
-                ->label('Nom')
-                ->sortable()
-                ->searchable(),
+                TextColumn::make('name')
+                    ->label('Nom')
+                    ->sortable()
+                    ->searchable(),
 
-            TextColumn::make('code')
-                ->searchable(),
+                TextColumn::make('code')
+                    ->searchable(),
 
-            ToggleColumn::make('is_active')
-                ->label('Active')
-                ->searchable(),
+                ToggleColumn::make('is_active')
+                    ->label('Active')
+                    ->searchable(),
             ])
             ->filters([
                 TrashedFilter::make(),
@@ -263,8 +259,8 @@ Section::make()
                 ActionGroup::make([
                     ViewAction::make(),
                     EditAction::make(),
-                ])
-                
+                ]),
+
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

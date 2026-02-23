@@ -1,10 +1,10 @@
 <?php
 
-use App\Models\Supply\Supplier;
 use App\Models\Supply\Ingredient;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
+use App\Models\Supply\Supplier;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -22,15 +22,15 @@ return new class extends Migration
             $table->string('supplier_code')->nullable();
             $table->string('pkg')->nullable();
             $table->string('unit_of_measure')->nullable()->default('kg');
-            $table->decimal('unit_weight', 7,2)->nullable();
+            $table->decimal('unit_weight', 7, 2)->nullable();
             $table->decimal('price', 10, 2)->nullable();
             $table->boolean('organic')->default(true);
             $table->boolean('fairtrade')->default(false);
             $table->boolean('cosmos')->default(false);
             $table->boolean('ecocert')->default(false);
-            $table->longText('description')->nullable();   
+            $table->longText('description')->nullable();
             $table->boolean('is_active')->default(true);
-            $table->string('file_path')->nullable();     
+            $table->string('file_path')->nullable();
             $table->softDeletes();
             $table->timestamps();
         });

@@ -2,9 +2,8 @@
 
 namespace App\Filament\Resources\Production\ProductionTaskTypeResource\Pages;
 
-use Filament\Actions\CreateAction;
 use App\Filament\Resources\Production\ProductionTaskTypeResource;
-use Filament\Actions;
+use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 
 class ListProductionTaskTypes extends ListRecords

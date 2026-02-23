@@ -2,45 +2,41 @@
 
 namespace App\Filament\Resources\Supply;
 
-use Filament\Schemas\Schema;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\ToggleButtons;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Filters\TrashedFilter;
+use App\Filament\Resources\Supply\SupplyResource\Pages\CreateSupply;
+use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
+use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
+use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
+use App\Models\Supply\Supply;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\ViewAction;
-use Filament\Actions\EditAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
-use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
-use App\Filament\Resources\Supply\SupplyResource\Pages\CreateSupply;
-use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
-use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
-use Filament\Forms;
-use Filament\Tables;
-use Filament\Tables\Table;
-use App\Models\Supply\Supply;
+use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ToggleButtons;
 use Filament\Resources\Resource;
-use Illuminate\Database\Eloquent\Model;
+use Filament\Schemas\Schema;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\Supply\SupplyResource\Pages;
-use App\Filament\Resources\Supply\SupplyResource\RelationManagers;
 
 class SupplyResource extends Resource
 {
     protected static ?string $model = Supply::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Achats';
+    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
 
     protected static ?string $navigationLabel = 'Inventaire';
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-c-book-open';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-c-book-open';
 
     public static function form(Schema $schema): Schema
     {
@@ -48,8 +44,8 @@ class SupplyResource extends Resource
             ->components([
                 Select::make('supplier_listing_id')
                     ->label('Ingrédient')
-                    ->relationship('supplier_listing', 'name')
-                    ->getOptionLabelFromRecordUsing(fn (Model $record) => "{$record->name} {$record->unit_weight}kg {$record->unit_of_mesure} - {$record->supplier->name}")
+                    ->relationship('supplierListing', 'name')
+                    ->getOptionLabelFromRecordUsing(fn (Model $record) => "{$record->name} {$record->unit_weight}kg {$record->unit_of_measure} - {$record->supplier->name}")
                     ->native(false)
                     ->searchable()
                     ->preload()
@@ -88,15 +84,16 @@ class SupplyResource extends Resource
         return $table
             ->columns([
 
-                TextColumn::make('supplier_listing.name')
+                TextColumn::make('supplierListing.name')
                     ->searchable()
-                    ->sortable(),
-                    
-                TextColumn::make('supplier_listing.ingredient.name')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: false),
+
+                TextColumn::make('supplierListing.ingredient.name')
                     ->label('Ingrédient')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-                
+
                 TextColumn::make('order_ref')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -156,9 +153,9 @@ class SupplyResource extends Resource
             ])
             ->recordActions([
                 ActionGroup::make([
-                ViewAction::make(),
-                EditAction::make(),
-                ])
+                    ViewAction::make(),
+                    EditAction::make(),
+                ]),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([

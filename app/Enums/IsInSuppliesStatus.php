@@ -6,12 +6,10 @@ use Filament\Support\Colors\Color;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
-enum IsInSuppliesStatus: string implements HasLabel, HasColor
+enum IsInSuppliesStatus: string implements HasColor, HasLabel
 {
-
-    case Pending = "1";
-    case Stock = "2";
-
+    case Pending = '1';
+    case Stock = '2';
 
     public function getLabel(): string
     // This is the method that will be called to get the label of the enum
@@ -23,9 +21,8 @@ enum IsInSuppliesStatus: string implements HasLabel, HasColor
         };
     }
 
-
     // This is ithe method that will be called to get the color of the enum
-    public function getColor(): string | array | null
+    public function getColor(): string|array|null
     {
         return match ($this) {
             self::Pending => Color::Slate,

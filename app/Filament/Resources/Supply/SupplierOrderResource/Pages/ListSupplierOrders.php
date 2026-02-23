@@ -2,14 +2,13 @@
 
 namespace App\Filament\Resources\Supply\SupplierOrderResource\Pages;
 
-use Filament\Actions\CreateAction;
-use Filament\Schemas\Components\Tabs\Tab;
-use Filament\Actions;
 use App\Enums\OrderStatus;
-use App\Models\Supply\SupplierOrder;
-use Filament\Resources\Pages\ListRecords;
-use Illuminate\Database\Eloquent\Builder;
 use App\Filament\Resources\Supply\SupplierOrderResource;
+use App\Models\Supply\SupplierOrder;
+use Filament\Actions\CreateAction;
+use Filament\Resources\Pages\ListRecords;
+use Filament\Schemas\Components\Tabs\Tab;
+use Illuminate\Database\Eloquent\Builder;
 
 class ListSupplierOrders extends ListRecords
 {
@@ -26,29 +25,29 @@ class ListSupplierOrders extends ListRecords
     {
         return [
             'all' => Tab::make()
-            ->badge(SupplierOrder::all()->count()),
+                ->badge(SupplierOrder::all()->count()),
 
             'draft' => Tab::make()
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', 'draft'))
-                ->badge(SupplierOrder::query()->where('order_status', 'draft')->count()),
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Draft->value))
+                ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Draft->value)->count()),
 
-            'Passées' => Tab::make()
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', 'passée'))
-                ->badge(SupplierOrder::query()->where('order_status', 'passée')->count()),
+            'passed' => Tab::make('Passées')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Passed->value))
+                ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Passed->value)->count()),
 
-            'Confirmée' => Tab::make()
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', 'confirmée'))
-                ->badge(SupplierOrder::query()->where('order_status', 'confirmée')->count()),
+            'confirmed' => Tab::make('Confirmée')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Confirmed->value))
+                ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Confirmed->value)->count()),
 
-            'Livrées' => Tab::make()
-                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', 'livrée'))
-                ->badge(SupplierOrder::query()->where('order_status', 'livrée')->count()),
+            'delivered' => Tab::make('Livrées')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Delivered->value))
+                ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Delivered->value)->count()),
 
         ];
     }
 
-    public function getDefaultActiveTab(): string | int | null
+    public function getDefaultActiveTab(): string|int|null
     {
-        return 'Confirmée';
+        return 'confirmed';
     }
 }

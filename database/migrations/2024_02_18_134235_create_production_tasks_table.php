@@ -1,11 +1,10 @@
 <?php
 
-use App\Models\Production\TaskType;
 use App\Models\Production\Production;
-use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\Schema\Blueprint;
 use App\Models\Production\ProductionTaskType;
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -19,8 +18,8 @@ return new class extends Migration
             $table->foreignIdFor(Production::class)->constrained()->cascadeOnDelete();
             $table->foreignIdFor(ProductionTaskType::class)->constrained()->cascadeOnDelete();
             $table->string('slug')->nullable();
-            $table->date('date')->default(now());  
-            $table->mediumText('notes')->nullable(); 
+            $table->date('date')->default(now());
+            $table->mediumText('notes')->nullable();
             $table->boolean('is_finished')->default(false);
             $table->softDeletes();
             $table->timestamps();

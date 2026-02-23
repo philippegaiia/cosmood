@@ -1,0 +1,50 @@
+<?php
+
+namespace App\Models\Production;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Database\Eloquent\SoftDeletes;
+
+class TaskTemplate extends Model
+{
+    use HasFactory;
+    use SoftDeletes;
+
+    protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return [
+            'is_default' => 'boolean',
+        ];
+    }
+
+    public function productCategory(): BelongsTo
+    {
+        return $this->belongsTo(ProductCategory::class);
+    }
+
+    public function productType(): BelongsTo
+    {
+        return $this->belongsTo(ProductType::class);
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(TaskTemplateItem::class)->orderBy('sort_order');
+    }
+
+    public function productionTasks(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            ProductionTask::class,
+            TaskTemplateItem::class,
+            'task_template_id',
+            'task_template_item_id'
+        );
+    }
+}

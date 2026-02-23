@@ -2,70 +2,70 @@
 
 namespace App\Filament\Resources\Supply;
 
-use Filament\Schemas\Schema;
+use App\Enums\OrderStatus;
+use App\Filament\Resources\Supply\SupplierOrderResource\Pages\CreateSupplierOrder;
+use App\Filament\Resources\Supply\SupplierOrderResource\Pages\EditSupplierOrder;
+use App\Filament\Resources\Supply\SupplierOrderResource\Pages\ListSupplierOrders;
+use App\Models\Production\ProductionWave;
+use App\Models\Supply\Supplier;
+use App\Models\Supply\SupplierListing;
+use App\Models\Supply\SupplierOrder;
+use App\Models\Supply\SupplierOrderItem;
+use App\Services\InventoryMovementService;
+use Filament\Actions\Action;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreBulkAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\MarkdownEditor;
+use Filament\Forms\Components\Repeater;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\ToggleButtons;
+use Filament\Infolists\Components\TextEntry;
+use Filament\Notifications\Notification;
+use Filament\Resources\Resource;
+use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
-use Filament\Schemas\Components\Fieldset;
-use Filament\Actions\Action;
+use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Actions\EditAction;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
-use App\Filament\Resources\Supply\SupplierOrderResource\Pages\ListSupplierOrders;
-use App\Filament\Resources\Supply\SupplierOrderResource\Pages\CreateSupplierOrder;
-use App\Filament\Resources\Supply\SupplierOrderResource\Pages\EditSupplierOrder;
-use Filament\Forms;
-use Filament\Tables;
-use App\Enums\OrderStatus;
-use Filament\Tables\Table;
-use App\Models\Supply\Supply;
-use App\Models\Supply\Supplier;
-use Filament\Resources\Resource;
-use App\Models\Supply\SupplierOrder;
-use Filament\Forms\Components\Select;
-use App\Models\Supply\SupplierListing;
-use Filament\Forms\Components\Repeater;
-use Illuminate\Database\Eloquent\Model;
-use App\Models\Supply\SupplierOrderItem;
-use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
-use Filament\Forms\Components\DatePicker;
-use Illuminate\Database\Eloquent\Builder;
-use Filament\Forms\Components\Placeholder;
-use Filament\Forms\Components\Wizard\Step;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
-use Filament\Forms\Components\ToggleButtons;
-use Filament\Forms\Components\MarkdownEditor;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
-use App\Filament\Resources\Supply\SupplierOrderResource\Pages;
+use Illuminate\Support\Facades\Auth;
 
 class SupplierOrderResource extends Resource
 {
     protected static ?string $model = SupplierOrder::class;
 
-    protected static string | \UnitEnum | null $navigationGroup = 'Achats';
+    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
 
     protected static ?string $navigationLabel = 'Commandes fournisseurs';
 
-    protected static string | \BackedEnum | null $navigationIcon = 'heroicon-o-shopping-cart';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-shopping-cart';
 
     protected static ?int $navigationSort = 1;
 
     public static function form(Schema $schema): Schema
     {
-        return $schema           
+        return $schema
             ->components([
                 Section::make('Détails Commande')
                     ->schema([
-                        Select::make('supplier_id')                         
+                        Select::make('supplier_id')
                             ->relationship('supplier', 'name')
-                            ->disabledOn('edit')    
-                            ->afterStateUpdated(function (Get $get, Set $set, ?string $state, $record)
-                            {
-                                $prefix = now()->year;  
+                            ->disabledOn('edit')
+                            ->searchable()
+                            ->preload()
+                            ->afterStateUpdated(function (Get $get, Set $set, ?string $state, $record) {
+                                $prefix = now()->year;
                                 $supplierCode = Supplier::findOrFail($state)->code;
                                 $serie = $get('serial_number');
 
@@ -75,20 +75,30 @@ class SupplierOrderResource extends Resource
                             ->required()
                             ->columnSpan(2),
 
+                        Select::make('production_wave_id')
+                            ->label('Référence vague')
+                            ->relationship('wave', 'name')
+                            ->searchable()
+                            ->preload()
+                            ->getOptionLabelFromRecordUsing(fn (ProductionWave $record): string => $record->name.' ('.$record->slug.')')
+                            ->helperText('Lie cette commande à une vague pour la mise à jour automatique des statuts d\'approvisionnement.')
+                            ->columnSpan(2)
+                            ->nullable(),
+
                         TextInput::make('serial_number')
-                            //->hidden()
+                            // ->hidden()
                             ->disabledOn('edit')
                             ->numeric()
                             ->default(function () {
-                                $serie = (SupplierOrder::withTrashed()->max('serial_number') ?? 0 )+ 1;
-                                //dd($serie);
+                                $serie = (SupplierOrder::withTrashed()->max('serial_number') ?? 0) + 1;
+                                // dd($serie);
                                 $serie = str_pad($serie, 4, '0', STR_PAD_LEFT);
+
                                 return $serie;
-                                })
+                            })
                             ->dehydrated()
                             ->unique(SupplierOrder::class, ignoreRecord: true)
-                            ->required(fn (string $operation): bool => $operation === 'create')
-                            ,
+                            ->required(fn (string $operation): bool => $operation === 'create'),
                         TextInput::make('order_ref')
                             ->maxLength(255)
                             ->disabled()
@@ -99,7 +109,7 @@ class SupplierOrderResource extends Resource
                             ->inline()
                             ->live()
                             ->default(OrderStatus::Draft)
-                            ->columnSpan(4),
+                            ->columns(3),
 
                         Fieldset::make('Dates')
                             ->schema([
@@ -111,8 +121,8 @@ class SupplierOrderResource extends Resource
                                 DatePicker::make('delivery_date')
                                     ->afterOrEqual('order_date')
                                     ->native(false)
-                                    ->weekStartsOnMonday()
-                            ])->columnSpanFull(),                       
+                                    ->weekStartsOnMonday(),
+                            ])->columns(2),
 
                         Fieldset::make('Documents')
                             ->schema([
@@ -131,113 +141,114 @@ class SupplierOrderResource extends Resource
                             ->numeric(),
 
                         Section::make('Informations sur la Commande')
-                        ->description('The items you have selected for purchase')
+                            ->description('The items you have selected for purchase')
                             ->schema([
-                                MarkdownEditor::make('description')                               
+                                MarkdownEditor::make('description'),
                             ])
                             ->collapsed()
-                            ->columnSpanFull()
+                            ->columns(1),
 
-                ])->columns(4),
-                            //  ]);
+                    ])->columnSpanFull(),
+                //  ]);
 
                 Section::make('Items Commande')
-                    ->schema([           
-                    Repeater::make('supplier_order_items')
-                        ->relationship()
-                        ->hiddenOn('create')
-                        ->schema([
-                            Select::make('supplier_listing_id')
-                                ->relationship(
-                                    name: 'supplier_listing', 
-                                    titleAttribute: 'name',
-                                    modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query->where('supplier_id', $get('../../supplier_id')),
-                                )
-                                ->getOptionLabelFromRecordUsing(fn (Model $record) => "{$record->name} {$record->unit_weight} {$record->unit_of_mesure}")
-                                ->live()
-                                ->afterStateUpdated(function ($state, Set $set, ) {
-                                    $supplier_listing = SupplierListing::find($state);
-                                    $set('unit_weight', $supplier_listing->unit_weight);
-                                }) 
-                                ->preload() 
-                                ->required()
-                                ->disableOptionsWhenSelectedInSiblingRepeaterItems()
-                                ->native(false)
-                                ->columnSpan(5)
-                                ->searchable(),
+                    ->schema([
+                        Repeater::make('supplier_order_items')
+                            ->relationship()
+                            ->hiddenOn('create')
+                            ->schema([
+                                Select::make('supplier_listing_id')
+                                    ->relationship(
+                                        name: 'supplierListing',
+                                        titleAttribute: 'name',
+                                        modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query->where('supplier_id', $get('../../supplier_id')),
+                                    )
+                                    ->getOptionLabelFromRecordUsing(fn (Model $record) => "{$record->name} {$record->unit_weight} {$record->unit_of_measure}")
+                                    ->live()
+                                    ->afterStateUpdated(function ($state, Set $set) {
+                                        $supplier_listing = SupplierListing::find($state);
+                                        $set('unit_weight', $supplier_listing->unit_weight);
+                                    })
+                                    ->preload()
+                                    ->required()
+                                    ->disableOptionsWhenSelectedInSiblingRepeaterItems()
+                                    ->native(false)
+                                    ->columnSpan(5)
+                                    ->searchable(),
 
-                            TextInput::make('quantity')
-                                ->numeric()
-                                ->live()
-                                ->dehydrated()
-                                ->default(1)
-                                ->columnSpan(2),
+                                TextInput::make('quantity')
+                                    ->numeric()
+                                    ->live()
+                                    ->dehydrated()
+                                    ->default(1)
+                                    ->columnSpan(2),
 
-                            TextInput::make('unit_weight')
-                                ->label('Poids')
-                                ->disabled()
-                                ->dehydrated()
-                                ->default(1)
-                                ->columnSpan(2),
+                                TextInput::make('unit_weight')
+                                    ->label('Poids')
+                                    ->disabled()
+                                    ->dehydrated()
+                                    ->default(1)
+                                    ->columnSpan(2),
 
-                            TextInput::make('unit_price')
-                                ->label('Prix')
-                                // ->dehydrated()
-                                ->numeric()
-                                ->columnSpan(2),
+                                TextInput::make('unit_price')
+                                    ->label('Prix')
+                                    // ->dehydrated()
+                                    ->numeric()
+                                    ->columnSpan(2),
 
-                            TextInput::make('batch_number')
-                                ->label('No. Lot')
-                                //->live()
-                                ->unique(SupplierOrderItem::class, ignoreRecord: true)
-                                ->columnSpan(2),
+                                TextInput::make('batch_number')
+                                    ->label('No. Lot')
+                                    // ->live()
+                                    ->unique(SupplierOrderItem::class, ignoreRecord: true)
+                                    ->columnSpan(2),
 
-                            DatePicker::make('expiry_date')
-                                ->label('DLUO')
-                                ->displayFormat('M Y')
-                                ->native(false)
-                                ->closeOnDateSelection()
-                                ->columnSpan(2),
+                                DatePicker::make('expiry_date')
+                                    ->label('DLUO')
+                                    ->displayFormat('M Y')
+                                    ->native(false)
+                                    ->closeOnDateSelection()
+                                    ->columnSpan(2),
 
-                            Placeholder::make('total_quantity')
-                                ->label('Total')
-                                ->content(function ($get) {
-                                    return $get('quantity') * $get('unit_weight');
-                                })->columnSpan(1),
+                                TextEntry::make('total_quantity')
+                                    ->label('Total')
+                                    ->state(function ($get) {
+                                        return $get('quantity') * $get('unit_weight');
+                                    })->columnSpan(1),
 
-                            TextInput::make('is_in_supplies')
-                                ->label('Etat')
-                                ->readonly()
-                                ->dehydrated()
-                                ->live()
-                                ->default('Attente')
-                                ->columnSpan(2),
+                                TextInput::make('is_in_supplies')
+                                    ->label('Etat')
+                                    ->readonly()
+                                    ->dehydrated()
+                                    ->live()
+                                    ->default('Attente')
+                                    ->columnSpan(2),
 
-                        ])->columns(18)
+                            ])->columns(18)
                             ->defaultItems(0)
                             ->deleteAction(
                                 function (Action $action) {
                                     $action->label('Supprimer')
                                         ->icon('heroicon-m-trash')
                                         ->requiresConfirmation()
-                                        ->hidden(fn(array $arguments, Repeater $component ) =>
-                                            //!isset($component->getRawItemState($arguments['item'])['id']) 
-                                           // || 
+                                        ->hidden(fn (array $arguments, Repeater $component) =>
+                                            // !isset($component->getRawItemState($arguments['item'])['id'])
+                                           // ||
                                             $component->getRawItemState($arguments['item'])['is_in_supplies'] === 'Stock'
-                                            )
+                                        )
                                         ->color('danger');
                                 }
                             )
-                            ->addAction(fn(Action $action) => $action->label('Ajouter')->icon('heroicon-m-plus')->color('success'))
+                            ->addAction(fn (Action $action) => $action->label('Ajouter')->icon('heroicon-m-plus')->color('success'))
                             ->extraItemActions([
-                                Action::make('createNewInventory')                                       
+                                Action::make('createNewInventory')
                                     ->label('Créer Stock')
                                     ->hidden(
-                                        fn (array $arguments, Repeater $component, $record) =>
-                                        !isset($component->getRawItemState($arguments['item'])['id'])
-                                        || $component->getRawItemState($arguments['item'])['is_in_supplies'] === 'Stock' 
-                                        || !isset($record->id) 
+                                        fn (array $arguments, Repeater $component, $record) => ! isset($component->getRawItemState($arguments['item'])['id'])
+                                        || ! isset($record->id)
                                         || ($record->order_status !== OrderStatus::Checked)
+                                        || ! isset($record->delivery_date)
+                                        || (($item = SupplierOrderItem::query()->find((int) $component->getRawItemState($arguments['item'])['id']))
+                                            && ($item->isInSupplies() || $item->supply()->exists()))
                                     )
                                     ->icon('heroicon-m-arrow-trending-up')
                                     ->requiresConfirmation()
@@ -245,75 +256,135 @@ class SupplierOrderResource extends Resource
                                 // ->after(function ($livewire) {
                                 //      $livewire->dispatch('refreshIsInSupplies');
                                 //  })
-                                    ->action(function (array $arguments, Repeater $component, $record, Set $set): void {
+                                    ->action(function (array $arguments, Repeater $component, $record): void {
+                                        $rawItemState = $component->getRawItemState($arguments['item']);
                                         $itemData = $component->getItemState($arguments['item']);
-                                        //dd($state);
-                                        if (!isset($record->id) || !isset($component->getRawItemState($arguments['item'])['id'])){                   
-                                            return;
-                                        } 
 
-                                        if ($itemData['quantity'] > 0 
-                                        && isset($itemData['unit_price']) 
-                                        && isset($itemData['batch_number'])
-                                        && isset($record['delivery_date'])
-                                        && isset($itemData['expiry_date']) 
-                                        && ($record->order_status === OrderStatus::Checked) 
-                                        && ($itemData['is_in_supplies'] === 'Attente'))
-                                        {
-                                            Supply::create([
-                                                    'supplier_listing_id' => $itemData['supplier_listing_id'],
-                                                    'order_ref' => $record->order_ref,
-                                                    'batch_number' => $itemData['batch_number'],
-                                                    'unit_price' => $itemData['unit_price'],
-                                                    'initial_quantity' => $itemData['quantity'] * $itemData['unit_weight'] ,
-                                                    'expiry_date' => $itemData['expiry_date'],
-                                                    'delivery_date' => $record['delivery_date'],
-                                                ]);
+                                        $supplierOrderItemId = (int) ($rawItemState['id'] ?? 0);
+
+                                        if (! isset($record->id) || $supplierOrderItemId <= 0) {
+                                            Notification::make()
+                                                ->title('Item de commande introuvable')
+                                                ->warning()
+                                                ->send();
+
+                                            return;
+                                        }
+
+                                        $supplierOrderItem = SupplierOrderItem::query()->find($supplierOrderItemId);
+
+                                        if (! $supplierOrderItem) {
+                                            Notification::make()
+                                                ->title('Item de commande introuvable')
+                                                ->warning()
+                                                ->send();
+
+                                            return;
+                                        }
+
+                                        if ($supplierOrderItem->isInSupplies() || $supplierOrderItem->supply()->exists()) {
+                                            Notification::make()
+                                                ->title('Cet item est déjà en stock')
+                                                ->warning()
+                                                ->send();
+
+                                            return;
+                                        }
+
+                                        if ($record->order_status !== OrderStatus::Checked) {
+                                            Notification::make()
+                                                ->title('Commande non contrôlée')
+                                                ->body('Le statut doit être Contrôlée pour créer le stock.')
+                                                ->warning()
+                                                ->send();
+
+                                            return;
+                                        }
+
+                                        $quantity = (float) ($itemData['quantity'] ?? $supplierOrderItem->quantity ?? 0);
+                                        $unitPrice = $itemData['unit_price'] ?? $supplierOrderItem->unit_price;
+                                        $batchNumber = $itemData['batch_number'] ?? $supplierOrderItem->batch_number;
+                                        $expiryDate = $itemData['expiry_date'] ?? $supplierOrderItem->expiry_date;
+                                        $deliveryDate = $record->delivery_date;
+
+                                        $missingFields = [];
+
+                                        if ($quantity <= 0) {
+                                            $missingFields[] = 'quantité';
+                                        }
+
+                                        if (blank($unitPrice)) {
+                                            $missingFields[] = 'prix';
+                                        }
+
+                                        if (blank($batchNumber)) {
+                                            $missingFields[] = 'lot';
+                                        }
+
+                                        if (blank($expiryDate)) {
+                                            $missingFields[] = 'DLUO';
+                                        }
+
+                                        if (blank($deliveryDate)) {
+                                            $missingFields[] = 'date de livraison';
+                                        }
+
+                                        if ($missingFields !== []) {
+                                            Notification::make()
+                                                ->title('Données incomplètes')
+                                                ->body('Compléter: '.implode(', ', $missingFields))
+                                                ->warning()
+                                                ->send();
+
+                                            return;
+                                        }
+
+                                        $supplierOrderItem->update([
+                                            'quantity' => $quantity,
+                                            'unit_price' => (float) $unitPrice,
+                                            'batch_number' => (string) $batchNumber,
+                                            'expiry_date' => $expiryDate,
+                                        ]);
+
+                                        try {
+                                            app(InventoryMovementService::class)->receiveOrderItemIntoStock(
+                                                $supplierOrderItem,
+                                                (string) $record->order_ref,
+                                                (string) $deliveryDate,
+                                                Auth::user(),
+                                            );
 
                                             Notification::make()
                                                 ->title('Nouvelle création d\'inventaire')
                                                 ->success()
                                                 ->send();
-                                            /**
-                                            * Updates the is_in_supplies flag to true for the SupplierOrderItem with the given ID,
-                                            * which indicates the item is now in stock. 
-                                            * Saves the updated SupplierOrderItem record.
-                                            * Sends a notification that the stock status was updated.
-                                            */
-                                            //$SupplyId = Str::after($arguments['item'], '-');
-                                            $SupplyId = $component->getRawItemState($arguments['item'])['id'];
-                                            $isInSupplies = SupplierOrderItem::findOrFail($SupplyId);
-                                            $isInSupplies->is_in_supplies = 'Stock';
-                                            $isInSupplies->save();
-
-
+                                        } catch (\RuntimeException $exception) {
                                             Notification::make()
-                                                ->title('Entrée en Stock mise à jour de' . $isInSupplies->supplier_listing->name)
-                                                ->success()
-
+                                                ->title('Cet item est déjà en stock')
+                                                ->warning()
                                                 ->send();
-                                            //dd($component->getRawItemState($arguments['item'])['is_in_supplies']); 
-                                            //dd($state['record-16']['is_in_supplies']);
-                                            $unit_price = $itemData['unit_price'];
-                                            $supplyId = $component->getRawItemState($arguments['item'])['supplier_listing_id'];
-                                            $supplierListing = SupplierListing::findOrFail($supplyId);
-                                            $supplierListing->price = $unit_price;
-                                            $supplierListing->save();
-
+                                        } catch (\InvalidArgumentException $exception) {
                                             Notification::make()
-                                            ->title('Prix mis à jour de' . $supplierListing->name)
-                                            ->success()
-                                            ->send();
+                                                ->title('Impossible de créer le stock')
+                                                ->body($exception->getMessage())
+                                                ->warning()
+                                                ->send();
+                                        } catch (\Throwable $exception) {
+                                            Notification::make()
+                                                ->title('Erreur de création de stock')
+                                                ->danger()
+                                                ->send();
                                         }
-                                    })
-                                    //successRedirectUrl(SupplierOrderResource::getUrl())
-                                        //])                         
+                                    }),
+                                // successRedirectUrl(SupplierOrderResource::getUrl())
+                                // ])
 
-                                ])->columnSpanFull()
-                            ])
+                            ]),
+                    ])->columnSpanFull(),
             ]);
 
-        }
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -331,6 +402,12 @@ class SupplierOrderResource extends Resource
                 TextColumn::make('order_ref')
                     ->label('Référence')
                     ->searchable(),
+
+                TextColumn::make('wave.name')
+                    ->label('Vague')
+                    ->badge()
+                    ->placeholder('-')
+                    ->sortable(),
 
                 TextColumn::make('order_date')
                     ->label('Date Commande')
@@ -351,7 +428,7 @@ class SupplierOrderResource extends Resource
 
                 TextColumn::make('bl_number')
                     ->searchable()
-                     ->toggleable(isToggledHiddenByDefault: true),
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('freight_cost')
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -372,7 +449,10 @@ class SupplierOrderResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-               TrashedFilter::make(),
+                TrashedFilter::make(),
+                SelectFilter::make('production_wave_id')
+                    ->label('Vague')
+                    ->relationship('wave', 'name'),
             ])
 
             ->recordActions([
@@ -380,7 +460,7 @@ class SupplierOrderResource extends Resource
             ])
 
             ->toolbarActions([
-               BulkActionGroup::make([
+                BulkActionGroup::make([
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),
@@ -421,5 +501,5 @@ class SupplierOrderResource extends Resource
         return $this->getResource()::getUrl('edit');
     }
 
-    //protected $listeners = ['refreshIsInSupplies' => '$refresh'];
+    // protected $listeners = ['refreshIsInSupplies' => '$refresh'];
 }
