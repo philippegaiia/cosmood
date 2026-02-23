@@ -456,6 +456,21 @@ class SupplierOrderResource extends Resource
             ])
 
             ->recordActions([
+                Action::make('exportPdf')
+                    ->label('PO PDF')
+                    ->icon('heroicon-o-document-arrow-down')
+                    ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-pdf', $record))
+                    ->openUrlInNewTab(),
+                Action::make('printPo')
+                    ->label('Imprimer PO')
+                    ->icon('heroicon-o-printer')
+                    ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-print', $record))
+                    ->openUrlInNewTab(),
+                Action::make('copyEmail')
+                    ->label('Copier email')
+                    ->icon('heroicon-o-clipboard-document')
+                    ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-email-copy', $record))
+                    ->openUrlInNewTab(),
                 EditAction::make(),
             ])
 

@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Supply\SupplierOrderResource\Pages;
 
 use App\Filament\Resources\Supply\SupplierOrderResource;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
@@ -16,6 +17,21 @@ class EditSupplierOrder extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('exportPdf')
+                ->label('Exporter PO PDF')
+                ->icon('heroicon-o-document-arrow-down')
+                ->url(fn (): string => route('supplier-orders.po-pdf', $this->record))
+                ->openUrlInNewTab(),
+            Action::make('printPo')
+                ->label('Imprimer PO')
+                ->icon('heroicon-o-printer')
+                ->url(fn (): string => route('supplier-orders.po-print', $this->record))
+                ->openUrlInNewTab(),
+            Action::make('copyEmail')
+                ->label('Copier email')
+                ->icon('heroicon-o-clipboard-document')
+                ->url(fn (): string => route('supplier-orders.po-email-copy', $this->record))
+                ->openUrlInNewTab(),
             DeleteAction::make()->action(function ($data, $record) {
                 if ($record->supplier_order_items()->count() > 0) {
                     Notification::make()
