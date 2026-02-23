@@ -10,12 +10,14 @@ use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Saade\FilamentFullCalendar\FilamentFullCalendarPlugin;
 
@@ -38,6 +40,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
+            ->viteTheme('resources/css/filament/admin/theme.css')
             ->pages([
                 Dashboard::class,
             ])
@@ -52,6 +55,10 @@ class AdminPanelProvider extends PanelProvider
                 'Produits Finis',
                 'Gestion Utilisateurs',
             ])
+            ->renderHook(
+                PanelsRenderHook::BODY_END,
+                fn (): string => Blade::render('@fluxScripts'),
+            )
             ->sidebarCollapsibleOnDesktop()
             ->middleware([
                 EncryptCookies::class,
