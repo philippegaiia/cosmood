@@ -45,6 +45,13 @@ class FormulaItemFactory extends Factory
         ]);
     }
 
+    public function packaging(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'phase' => Phases::Packaging->value,
+        ]);
+    }
+
     public function forFormula(Formula $formula): static
     {
         return $this->state(fn (array $attributes) => [

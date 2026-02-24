@@ -45,6 +45,8 @@ class ProductionConsumptionService
                 return;
             }
 
+            $this->rollbackPreviousConsumption($lockedProduction);
+
             $consumptionsBySupply = [];
 
             $masterbatch = $lockedProduction->masterbatchLot;
@@ -98,17 +100,6 @@ class ProductionConsumptionService
      */
     private function consumeSupply(Production $production, int $supplyId, float $quantityKg): void
     {
-        $alreadyConsumed = SuppliesMovement::query()
-            ->where('production_id', $production->id)
-            ->where('supply_id', $supplyId)
-            ->where('movement_type', 'out')
-            ->where('reason', 'Consumed in finished production')
-            ->exists();
-
-        if ($alreadyConsumed) {
-            return;
-        }
-
         /** @var Supply $supply */
         $supply = Supply::query()
             ->lockForUpdate()
@@ -116,12 +107,10 @@ class ProductionConsumptionService
 
         $stockIn = (float) ($supply->quantity_in ?? $supply->initial_quantity ?? 0);
         $newQuantityOut = round((float) ($supply->quantity_out ?? 0) + $quantityKg, 3);
-        $newAllocated = max(0, round((float) ($supply->allocated_quantity ?? 0) - $quantityKg, 3));
         $remaining = round($stockIn - $newQuantityOut, 3);
 
         $supply->update([
             'quantity_out' => $newQuantityOut,
-            'allocated_quantity' => $newAllocated,
             'is_in_stock' => $remaining > 0,
         ]);
 
@@ -131,6 +120,42 @@ class ProductionConsumptionService
             quantityKg: $quantityKg,
             reason: 'Consumed in finished production',
         );
+    }
+
+    /**
+     * Reverts previous computed consumption movements before recalculating from current items.
+     */
+    private function rollbackPreviousConsumption(Production $production): void
+    {
+        $movements = SuppliesMovement::query()
+            ->where('production_id', $production->id)
+            ->where('movement_type', 'out')
+            ->where('reason', 'Consumed in finished production')
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($movements as $movement) {
+            if (! $movement->supply_id) {
+                continue;
+            }
+
+            $supply = Supply::query()
+                ->lockForUpdate()
+                ->find($movement->supply_id);
+
+            if ($supply) {
+                $stockIn = (float) ($supply->quantity_in ?? $supply->initial_quantity ?? 0);
+                $newQuantityOut = max(0, round((float) ($supply->quantity_out ?? 0) - (float) $movement->quantity, 3));
+                $remaining = round($stockIn - $newQuantityOut, 3);
+
+                $supply->update([
+                    'quantity_out' => $newQuantityOut,
+                    'is_in_stock' => $remaining > 0,
+                ]);
+            }
+
+            $movement->delete();
+        }
     }
 
     /**

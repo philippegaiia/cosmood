@@ -112,6 +112,33 @@ describe('ProductionRequirementsService', function () {
                 ->and((float) $additiveReq->required_quantity)->toBe(1.3);
         });
 
+        it('calculates packaging requirements from expected units using line coefficient', function () {
+            $formula = Formula::factory()->create();
+            $packagingIngredient = Ingredient::factory()->create();
+
+            FormulaItem::factory()->forFormula($formula)
+                ->withIngredient($packagingIngredient)
+                ->state([
+                    'phase' => Phases::Packaging->value,
+                    'percentage_of_oils' => 1,
+                ])
+                ->create();
+
+            $production = Production::factory()->create([
+                'formula_id' => $formula->id,
+                'planned_quantity' => 26.0,
+                'expected_units' => 288,
+            ]);
+
+            $this->service->generateRequirements($production);
+
+            $requirement = $production->fresh()->ingredientRequirements->first();
+
+            expect($requirement)->not->toBeNull()
+                ->and($requirement->phase)->toBe(Phases::Packaging->value)
+                ->and((float) $requirement->required_quantity)->toBe(288.0);
+        });
+
         it('links requirements to wave if production has wave', function () {
             $wave = ProductionWave::factory()->create();
             $formula = Formula::factory()->create();

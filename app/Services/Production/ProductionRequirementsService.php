@@ -61,7 +61,8 @@ class ProductionRequirementsService
         $requiredQuantity = $this->calculateQuantity(
             $formulaItem->percentage_of_oils,
             $batchSize,
-            $formulaItem->phase
+            $formulaItem->phase,
+            $production->expected_units,
         );
 
         return ProductionIngredientRequirement::create([
@@ -83,9 +84,13 @@ class ProductionRequirementsService
     /**
      * Converts formula percentages into required quantities for the production batch.
      */
-    public function calculateQuantity(float $percentage, float $batchSize, Phases|string $phase): float
+    public function calculateQuantity(float $percentage, float $batchSize, Phases|string $phase, ?int $expectedUnits = null): float
     {
         $phaseValue = $phase instanceof Phases ? $phase->value : $phase;
+
+        if ($phaseValue === Phases::Packaging->value) {
+            return round(((float) ($expectedUnits ?? 0)) * $percentage, 3);
+        }
 
         if ($phaseValue === Phases::Saponification->value) {
             return round(($percentage / 100) * $batchSize, 3);

@@ -133,7 +133,7 @@ class InventoryMovementService
             'user_id' => $user?->id,
             'movement_type' => 'out',
             'quantity' => $quantityKg,
-            'unit' => 'kg',
+            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
             'reason' => $reason ?? 'Allocated to production',
             'meta' => [
                 'production_batch' => $production->getLotIdentifier(),

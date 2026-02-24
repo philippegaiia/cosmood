@@ -70,6 +70,23 @@ describe('Production Model', function () {
             ->and($finished->status)->toBe(ProductionStatus::Finished);
     });
 
+    it('rejects invalid status transitions', function () {
+        $production = Production::factory()->inProgress()->create();
+
+        expect(fn () => $production->update(['status' => ProductionStatus::Planned]))
+            ->toThrow(InvalidArgumentException::class, 'Invalid production status transition from ongoing to planned.');
+    });
+
+    it('allows valid status transitions', function () {
+        $production = Production::factory()->planned()->create();
+
+        $production->update(['status' => ProductionStatus::Confirmed]);
+        $production->update(['status' => ProductionStatus::Ongoing]);
+        $production->update(['status' => ProductionStatus::Finished]);
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Finished);
+    });
+
     it('can have product type defaults applied', function () {
         $productType = ProductType::factory()->soap()->create();
         $production = Production::factory()->withProductType($productType)->create();
@@ -131,12 +148,6 @@ describe('Production Relationships', function () {
         $production = Production::factory()->create();
 
         expect($production->ingredientRequirements())->not->toBeNull();
-    });
-
-    it('can have packaging requirements', function () {
-        $production = Production::factory()->create();
-
-        expect($production->packagingRequirements())->not->toBeNull();
     });
 
     it('can have production tasks', function () {

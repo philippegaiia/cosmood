@@ -198,18 +198,6 @@ describe('Production lifecycle orchestration', function () {
         expect($production->fresh()->productionTasks)->toHaveCount(0);
     });
 
-    it('deletes tasks when production is moved to simulation', function () {
-        $production = Production::factory()->create(['status' => ProductionStatus::Confirmed]);
-
-        ProductionTask::factory()->count(2)->create([
-            'production_id' => $production->id,
-        ]);
-
-        $production->update(['status' => ProductionStatus::Simulated]);
-
-        expect($production->fresh()->productionTasks)->toHaveCount(0);
-    });
-
     it('keeps planned productions taskless when production date changes', function () {
         $production = Production::factory()->create(['status' => ProductionStatus::Planned]);
 

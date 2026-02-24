@@ -124,6 +124,10 @@ class FormulaResource extends Resource
                                     ->state(function ($get) {
                                         $total = 0;
                                         foreach ($get('formulaItems') as $item) {
+                                            if (($item['phase'] ?? null) === Phases::Packaging->value) {
+                                                continue;
+                                            }
+
                                             $total += (int) $item['percentage_of_oils'];
 
                                         }
@@ -156,8 +160,18 @@ class FormulaResource extends Resource
                                             ->columnSpan(6),
 
                                         TextInput::make('percentage_of_oils')
-                                            ->label('% d\'huiles')
-                                            ->postfix('%')
+                                            ->label(function (Get $get): string {
+                                                $phaseState = $get('phase');
+                                                $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
+
+                                                return $phase === Phases::Packaging->value ? 'Qté / unité' : '% d\'huiles';
+                                            })
+                                            ->postfix(function (Get $get): string {
+                                                $phaseState = $get('phase');
+                                                $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
+
+                                                return $phase === Phases::Packaging->value ? 'u' : '%';
+                                            })
                                             ->numeric()
                                             ->live()
                                             ->dehydrated()

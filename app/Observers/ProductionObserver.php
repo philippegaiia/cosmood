@@ -20,7 +20,6 @@ class ProductionObserver
      * @var array<int, ProductionStatus>
      */
     private const TASKLESS_STATUSES = [
-        ProductionStatus::Simulated,
         ProductionStatus::Planned,
         ProductionStatus::Cancelled,
     ];

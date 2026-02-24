@@ -413,6 +413,36 @@ describe('Production list table actions', function () {
 });
 
 describe('Production create form validations', function () {
+    it('auto-generates a short planning batch reference when empty', function () {
+        $this->actingAs($this->user);
+
+        $productType = ProductType::factory()->soap()->create();
+        $product = Product::factory()->create([
+            'product_type_id' => $productType->id,
+        ]);
+        $formula = Formula::factory()->create([
+            'product_id' => $product->id,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction::class)
+            ->fillForm([
+                'product_id' => $product->id,
+                'formula_id' => $formula->id,
+                'product_type_id' => $productType->id,
+                'sizing_mode' => SizingMode::OilWeight->value,
+                'planned_quantity' => 26,
+                'expected_units' => 288,
+                'production_date' => now()->toDateString(),
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $created = Production::query()->latest('id')->first();
+
+        expect($created)->not->toBeNull()
+            ->and($created->batch_number)->toMatch('/^T\d{5}$/');
+    });
+
     it('does not allow production date before wave start date', function () {
         $this->actingAs($this->user);
 

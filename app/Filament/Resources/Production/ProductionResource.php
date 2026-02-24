@@ -82,9 +82,10 @@ class ProductionResource extends Resource
                             ->nullable(),
                         TextInput::make('batch_number')
                             ->label('Réf. planification')
-                            ->required()
+                            ->helperText('Si vide, une référence courte est attribuée automatiquement (ex: T00001).')
+                            ->placeholder('Auto (T00001)')
+                            ->required(fn (string $operation): bool => $operation === 'edit')
                             ->maxLength(255)
-                            ->default('B'.now()->format('YmdHis'))
                             ->unique(ignoreRecord: true),
                         TextInput::make('permanent_batch_number')
                             ->label('Lot permanent')
@@ -184,7 +185,7 @@ class ProductionResource extends Resource
                             ->visible(fn (Get $get) => $get('product_type_id') !== null)
                             ->nullable(),
                     ])
-                    ->columns(3),
+                    ->columns(4),
 
                 Section::make('Taille de batch')
                     ->schema([
@@ -203,7 +204,8 @@ class ProductionResource extends Resource
                             })
                             ->numeric()
                             ->required()
-                            ->suffix('kg'),
+                            ->suffix('kg')
+                            ->columnSpan(2),
                         TextInput::make('expected_units')
                             ->label('Unités attendues')
                             ->numeric()
@@ -217,7 +219,7 @@ class ProductionResource extends Resource
                             ->numeric()
                             ->visibleOn('edit'),
                     ])
-                    ->columns(3),
+                    ->columns(4),
 
                 Section::make('Masterbatch')
                     ->schema([
@@ -307,6 +309,7 @@ class ProductionResource extends Resource
                             ->nullable(),
                     ])
                     ->visible(fn (string $operation) => $operation !== 'view')
+                    ->columns(2)
                     ->collapsible(),
 
                 Section::make('Détails')
@@ -314,12 +317,26 @@ class ProductionResource extends Resource
                         TextInput::make('slug')
                             ->maxLength(255)
                             ->visibleOn('edit'),
+                        Hidden::make('status')
+                            ->default(ProductionStatus::Planned->value)
+                            ->dehydrated(fn (string $operation): bool => $operation === 'create'),
                         ToggleButtons::make('status')
                             ->label('Statut')
-                            ->options(ProductionStatus::class)
+                            ->options(function (?Production $record): array {
+                                if (! $record?->status instanceof ProductionStatus) {
+                                    return [
+                                        ProductionStatus::Planned->value => ProductionStatus::Planned->getLabel(),
+                                    ];
+                                }
+
+                                return collect(Production::allowedTransitionsFor($record->status))
+                                    ->mapWithKeys(fn (ProductionStatus $status): array => [$status->value => $status->getLabel()])
+                                    ->all();
+                            })
+                            ->helperText('Transitions contrôlées pour éviter les incohérences de stock et de planification.')
                             ->inline()
                             ->required()
-                            ->default(ProductionStatus::Planned),
+                            ->visibleOn('edit'),
                         Toggle::make('organic')
                             ->label('Bio')
                             ->default(true),
@@ -386,6 +403,7 @@ class ProductionResource extends Resource
                                     ->searchable()
                                     ->preload()
                                     ->required()
+                                    ->columnSpan(2)
                                     ->live()
                                     ->afterStateUpdated(function (Set $set, $state, $old): void {
                                         if ((string) ($old ?? '') === '' || (string) $old === (string) ($state ?? '')) {
@@ -420,6 +438,7 @@ class ProductionResource extends Resource
                                     })
                                     ->searchable()
                                     ->nullable()
+                                    ->columnSpan(2)
                                     ->live()
                                     ->afterStateUpdated(function (Set $set, ?string $state): void {
                                         if (! $state) {
@@ -442,37 +461,56 @@ class ProductionResource extends Resource
                                 TextInput::make('supply_batch_number')
                                     ->label('Lot supply')
                                     ->disabled()
+                                    ->columnSpan(1)
                                     ->dehydrated(),
                                 TextEntry::make('calculated_quantity')
-                                    ->label('Quantité calculée (kg)')
+                                    ->label('Quantité calculée')
+                                    ->columnSpan(1)
                                     ->state(function (Get $get): string {
                                         $plannedQuantity = (float) ($get('../../planned_quantity') ?? 0);
+                                        $expectedUnits = (float) ($get('../../expected_units') ?? 0);
                                         $percentage = (float) ($get('percentage_of_oils') ?? 0);
-                                        $calculatedQuantity = round(($plannedQuantity * $percentage) / 100, 3);
+                                        $phaseState = $get('phase');
+                                        $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
 
-                                        return number_format($calculatedQuantity, 3, '.', ' ').' kg';
+                                        $calculatedQuantity = $phase === Phases::Packaging->value
+                                            ? round($expectedUnits * $percentage, 3)
+                                            : round(($plannedQuantity * $percentage) / 100, 3);
+
+                                        $suffix = $phase === Phases::Packaging->value ? ' u' : ' kg';
+
+                                        return number_format($calculatedQuantity, 3, '.', ' ').$suffix;
                                     }),
                                 Select::make('phase')
                                     ->label('Phase')
                                     ->options(Phases::class)
+                                    ->columnSpan(1)
                                     ->required(),
                                 TextInput::make('percentage_of_oils')
-                                    ->label('% d\'huiles')
+                                    ->label(function (Get $get): string {
+                                        $phaseState = $get('phase');
+                                        $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
+
+                                        return $phase === Phases::Packaging->value ? 'Qté / unité' : '% d\'huiles';
+                                    })
                                     ->numeric()
+                                    ->columnSpan(1)
                                     ->live()
                                     ->required(),
                                 Toggle::make('organic')
                                     ->label('Bio')
+                                    ->columnSpan(1)
                                     ->default(true),
                                 Toggle::make('is_supplied')
                                     ->label('Approvisionné')
+                                    ->columnSpan(1)
                                     ->default(false),
                                 TextInput::make('sort')
                                     ->numeric()
                                     ->default(0)
                                     ->hidden(),
                             ])
-                            ->columns(3)
+                            ->columns(6)
                             ->reorderableWithButtons()
                             ->orderColumn('sort'),
                     ])

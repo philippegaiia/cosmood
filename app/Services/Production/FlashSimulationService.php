@@ -2,6 +2,7 @@
 
 namespace App\Services\Production;
 
+use App\Enums\Phases;
 use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
@@ -94,6 +95,14 @@ class FlashSimulationService
                 $ingredient = $formulaItem->ingredient;
 
                 if (! $ingredient) {
+                    continue;
+                }
+
+                $phaseValue = $formulaItem->phase instanceof Phases
+                    ? $formulaItem->phase->value
+                    : (string) $formulaItem->phase;
+
+                if ($phaseValue === Phases::Packaging->value) {
                     continue;
                 }
 

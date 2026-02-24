@@ -8,7 +8,6 @@ use Filament\Support\Contracts\HasLabel;
 
 enum ProductionStatus: string implements HasColor, HasLabel
 {
-    case Simulated = 'simulation';
     case Planned = 'planned';
     case Confirmed = 'confirmed';
     case Ongoing = 'ongoing';
@@ -19,8 +18,6 @@ enum ProductionStatus: string implements HasColor, HasLabel
     // This is the method that will be called to get the label of the enum
     {
         return match ($this) {
-
-            self::Simulated => 'Simulation',
             self::Planned => 'Planifiée',
             self::Confirmed => 'Confirmée',
             self::Ongoing => 'En Cours',
@@ -33,7 +30,6 @@ enum ProductionStatus: string implements HasColor, HasLabel
     public function getColor(): string|array|null
     {
         return match ($this) {
-            self::Simulated => Color::Stone,
             self::Planned => 'info',
             self::Confirmed => 'primary',
             self::Ongoing => 'warning',

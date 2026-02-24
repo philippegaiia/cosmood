@@ -22,7 +22,7 @@ it('assigns sequential permanent batch numbers with locking-safe service', funct
 });
 
 it('auto assigns permanent batch number when production becomes ongoing', function () {
-    $production = Production::factory()->planned()->create([
+    $production = Production::factory()->confirmed()->create([
         'permanent_batch_number' => null,
     ]);
 

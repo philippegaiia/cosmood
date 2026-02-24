@@ -122,3 +122,69 @@ it('consumes masterbatch lot and avoids double counting replaced phase ingredien
                 ->exists()
         )->toBeFalse();
 });
+
+it('reconciles inventory when a finished production item changes supply lot', function () {
+    $supplyA = Supply::factory()->inStock(50)->create();
+    $supplyB = Supply::factory()->inStock(50)->create([
+        'supplier_listing_id' => $supplyA->supplier_listing_id,
+    ]);
+
+    $production = Production::factory()->confirmed()->create([
+        'planned_quantity' => 20,
+    ]);
+
+    $item = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'supply_id' => $supplyA->id,
+        'supplier_listing_id' => $supplyA->supplier_listing_id,
+        'ingredient_id' => $supplyA->supplierListing->ingredient_id,
+        'phase' => Phases::Saponification->value,
+        'percentage_of_oils' => 10,
+    ]);
+
+    $production->update([
+        'status' => ProductionStatus::Finished,
+    ]);
+
+    expect((float) $supplyA->fresh()->quantity_out)->toBe(2.0)
+        ->and((float) $supplyB->fresh()->quantity_out)->toBe(0.0);
+
+    $item->update([
+        'supply_id' => $supplyB->id,
+        'supplier_listing_id' => $supplyB->supplier_listing_id,
+    ]);
+
+    expect((float) $supplyA->fresh()->quantity_out)->toBe(0.0)
+        ->and((float) $supplyB->fresh()->quantity_out)->toBe(2.0)
+        ->and(
+            SuppliesMovement::query()
+                ->where('production_id', $production->id)
+                ->where('movement_type', 'out')
+                ->where('reason', 'Consumed in finished production')
+                ->count()
+        )->toBe(1);
+});
+
+it('consumes packaging lot using expected units coefficient', function () {
+    $packagingSupply = Supply::factory()->inStock(500)->create();
+
+    $production = Production::factory()->confirmed()->create([
+        'planned_quantity' => 26,
+        'expected_units' => 300,
+    ]);
+
+    ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'supply_id' => $packagingSupply->id,
+        'supplier_listing_id' => $packagingSupply->supplier_listing_id,
+        'ingredient_id' => $packagingSupply->supplierListing->ingredient_id,
+        'phase' => Phases::Packaging->value,
+        'percentage_of_oils' => 1,
+    ]);
+
+    $production->update([
+        'status' => ProductionStatus::Finished,
+    ]);
+
+    expect((float) $packagingSupply->fresh()->quantity_out)->toBe(300.0);
+});

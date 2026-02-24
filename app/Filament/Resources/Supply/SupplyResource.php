@@ -21,8 +21,12 @@ use Filament\Forms\Components\ToggleButtons;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Grouping\Group as TableGroup;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -82,55 +86,94 @@ class SupplyResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
+                'supplierListing.ingredient',
+                'supplierListing.supplier',
+                'sourceProduction.product',
+            ]))
             ->columns([
-
-                TextColumn::make('supplierListing.name')
+                TextColumn::make('supplierListing.ingredient.name')
+                    ->label('Ingrédient')
                     ->searchable()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: false),
 
-                TextColumn::make('supplierListing.ingredient.name')
-                    ->label('Ingrédient')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('order_ref')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
                 TextColumn::make('batch_number')
-                    ->searchable(),
+                    ->label('Lot')
+                    ->searchable()
+                    ->sortable()
+                    ->placeholder('-'),
 
-                TextColumn::make('initial_quantity')
-                    ->label('Stock initial')
-                    ->numeric()
-                    ->sortable(),
+                TextColumn::make('source')
+                    ->label('Source')
+                    ->state(fn (Supply $record): string => $record->source_production_id !== null ? 'Interne' : 'Achat')
+                    ->badge()
+                    ->color(fn (Supply $record): string => $record->source_production_id !== null ? 'info' : 'gray')
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('CASE WHEN source_production_id IS NULL THEN 0 ELSE 1 END '.$direction)),
+
+                TextColumn::make('source_reference')
+                    ->label('Réf source')
+                    ->state(fn (Supply $record): string => $record->source_production_id !== null
+                        ? ($record->sourceProduction?->getLotDisplayLabel() ?? '-')
+                        : ($record->order_ref ?? '-'))
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('quantity_in')
-                    ->label('Stock IN')
-                    ->numeric()
-                    ->sortable(),
+                    ->label('Qté reçue (kg)')
+                    ->numeric(decimalPlaces: 3)
+                    ->sortable()
+                    ->summarize(Sum::make()->label('Total')),
 
                 TextColumn::make('quantity_out')
-                    ->label('Stock OUT')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('unit_price')
-                    ->label('Prix Unitaire')
-                    ->numeric()
+                    ->label('Qté sortie (kg)')
+                    ->numeric(decimalPlaces: 3)
                     ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->summarize(Sum::make()),
 
-                TextColumn::make('expiry_date')
-                    ->date()
+                TextColumn::make('allocated_quantity')
+                    ->label('Réservée (kg)')
+                    ->numeric(decimalPlaces: 3)
+                    ->sortable()
+                    ->summarize(Sum::make()),
+
+                TextColumn::make('available_quantity')
+                    ->label('Disponible (kg)')
+                    ->state(fn (Supply $record): float => round($record->getAvailableQuantity(), 3))
+                    ->numeric(decimalPlaces: 3)
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) '.$direction))
+                    ->color(fn (float $state): string => $state <= 0 ? 'danger' : ($state < 5 ? 'warning' : 'success')),
+
+                TextColumn::make('unit_price')
+                    ->label('Prix (EUR/kg)')
+                    ->numeric(decimalPlaces: 2)
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('delivery_date')
-                    ->date()
+                    ->label('Entrée')
+                    ->date('d/m/Y')
                     ->sortable(),
 
+                TextColumn::make('expiry_date')
+                    ->label('DLUO')
+                    ->date()
+                    ->sortable()
+                    ->color(fn (Supply $record): ?string => $record->expiry_date === null
+                        ? null
+                        : ($record->expiry_date->isPast() ? 'danger' : ($record->expiry_date->lte(now()->addDays(45)) ? 'warning' : 'success'))),
+
+                TextColumn::make('supplierListing.supplier.name')
+                    ->label('Fournisseur')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('supplierListing.name')
+                    ->label('Réf fournisseur')
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
                 IconColumn::make('is_in_stock')
+                    ->label('En stock')
                     ->boolean(),
 
                 TextColumn::make('deleted_at')
@@ -148,7 +191,32 @@ class SupplyResource extends Resource
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
+            ->groups([
+                TableGroup::make('supplierListing.ingredient.name')
+                    ->label('Par ingrédient')
+                    ->collapsible(),
+            ])
             ->filters([
+                SelectFilter::make('ingredient')
+                    ->label('Ingrédient')
+                    ->relationship('supplierListing.ingredient', 'name')
+                    ->searchable()
+                    ->preload(),
+                SelectFilter::make('source')
+                    ->label('Source')
+                    ->options([
+                        'purchase' => 'Achat',
+                        'internal' => 'Interne',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return match ($data['value'] ?? null) {
+                            'purchase' => $query->whereNull('source_production_id'),
+                            'internal' => $query->whereNotNull('source_production_id'),
+                            default => $query,
+                        };
+                    }),
+                TernaryFilter::make('is_in_stock')
+                    ->label('En stock'),
                 TrashedFilter::make(),
             ])
             ->recordActions([

@@ -37,10 +37,10 @@ class ProductionItemsRelationManager extends RelationManager
                         return $query->orderByRaw('CAST(phase AS INTEGER) '.$direction);
                     }),
                 TextColumn::make('percentage_of_oils')
-                    ->label('% huiles')
+                    ->label('Coefficient')
                     ->numeric(decimalPlaces: 2),
                 TextColumn::make('calculated_quantity')
-                    ->label('Quantité calculée (kg)')
+                    ->label('Quantité calculée')
                     ->state(fn (ProductionItem $record): float => $record->getCalculatedQuantityKg())
                     ->numeric(decimalPlaces: 3),
                 TextColumn::make('product_cost')
@@ -56,7 +56,7 @@ class ProductionItemsRelationManager extends RelationManager
                                     ->leftJoin('supplier_listings', 'production_items.supplier_listing_id', '=', 'supplier_listings.id')
                                     ->leftJoin('ingredients', 'production_items.ingredient_id', '=', 'ingredients.id')
                                     ->leftJoin('productions', 'production_items.production_id', '=', 'productions.id')
-                                    ->selectRaw('SUM(((COALESCE(productions.planned_quantity, 0) * COALESCE(production_items.percentage_of_oils, 0)) / 100) * COALESCE(supplies.unit_price, supplier_listings.price, ingredients.price, 0)) as total_cost')
+                                    ->selectRaw("SUM((CASE WHEN production_items.phase = '40' THEN (COALESCE(productions.expected_units, 0) * COALESCE(production_items.percentage_of_oils, 0)) ELSE ((COALESCE(productions.planned_quantity, 0) * COALESCE(production_items.percentage_of_oils, 0)) / 100) END) * COALESCE(supplies.unit_price, supplier_listings.price, ingredients.price, 0)) as total_cost")
                                     ->value('total_cost');
 
                                 return round((float) ($total ?? 0), 2);

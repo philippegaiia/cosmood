@@ -11,6 +11,7 @@ enum Phases: string implements HasColor, HasLabel
     case Saponification = '10';
     case Lye = '20';
     case Additives = '30';
+    case Packaging = '40';
 
     public function getLabel(): string
     // This is the method that will be called to get the label of the enum
@@ -20,6 +21,7 @@ enum Phases: string implements HasColor, HasLabel
             self::Saponification => 'Huiles Saponifiées',
             self::Lye => 'Milieux Réactionnel',
             self::Additives => 'Additifs',
+            self::Packaging => 'Packaging',
         };
     }
 
@@ -30,6 +32,7 @@ enum Phases: string implements HasColor, HasLabel
             self::Saponification => 'gray',
             self::Lye => 'warning',
             self::Additives => 'info',
+            self::Packaging => 'success',
         };
     }
 }

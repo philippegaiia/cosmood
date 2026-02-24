@@ -64,10 +64,22 @@ class ProductionItem extends Model
 
     public function getCalculatedQuantityKg(): float
     {
-        $plannedQuantity = (float) ($this->production?->planned_quantity ?? 0);
-        $percentage = (float) ($this->percentage_of_oils ?? 0);
+        $coefficient = (float) ($this->percentage_of_oils ?? 0);
 
-        return round(($plannedQuantity * $percentage) / 100, 3);
+        if ($this->isPackagingPhase()) {
+            $expectedUnits = (float) ($this->production?->expected_units ?? 0);
+
+            return round($expectedUnits * $coefficient, 3);
+        }
+
+        $plannedQuantity = (float) ($this->production?->planned_quantity ?? 0);
+
+        return round(($plannedQuantity * $coefficient) / 100, 3);
+    }
+
+    public function isPackagingPhase(): bool
+    {
+        return (string) $this->phase === Phases::Packaging->value;
     }
 
     public function getReferenceUnitPrice(): ?float

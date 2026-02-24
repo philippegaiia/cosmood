@@ -35,7 +35,7 @@ class ProductionFactory extends Factory
             'masterbatch_lot_id' => null,
             'produced_ingredient_id' => null,
             'slug' => Str::slug('batch-'.$this->faker->unique()->numberBetween(1000, 9999)),
-            'batch_number' => 'B'.$this->faker->unique()->numberBetween(1000, 9999),
+            'batch_number' => 'T'.str_pad((string) $this->faker->unique()->numberBetween(1, 99999), 5, '0', STR_PAD_LEFT),
             'permanent_batch_number' => null,
             'status' => ProductionStatus::Planned,
             'production_date' => $this->faker->dateTimeBetween('now', '+30 days')->format('Y-m-d'),

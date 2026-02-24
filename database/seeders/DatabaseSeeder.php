@@ -59,7 +59,6 @@ class DatabaseSeeder extends Seeder
         $this->call(ProductionTaskTypeSeeder::class);
         $this->call(ProductionTaskSeeder::class);
         $this->call(ProductionIngredientRequirementSeeder::class);
-        $this->call(ProductionPackagingRequirementSeeder::class);
         $this->call(ProductionItemSeeder::class);
 
         $this->call(SupplierOrdersTableSeeder::class);

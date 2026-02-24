@@ -189,4 +189,31 @@ describe('ProductionItem Model', function () {
             ->and($itemWithIngredientPrice->getReferenceUnitPrice())->toBe(4.5)
             ->and($itemWithIngredientPrice->getEstimatedCost())->toBe(18.0);
     });
+
+    it('calculates packaging quantity from expected units', function () {
+        $production = Production::factory()->create([
+            'planned_quantity' => 26,
+            'expected_units' => 288,
+        ]);
+        $ingredient = Ingredient::factory()->create([
+            'price' => 0.45,
+        ]);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'price' => 0.5,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'supply_id' => null,
+            'phase' => Phases::Packaging->value,
+            'percentage_of_oils' => 1,
+        ]);
+
+        expect($item->isPackagingPhase())->toBeTrue()
+            ->and($item->getCalculatedQuantityKg())->toBe(288.0)
+            ->and($item->getEstimatedCost())->toBe(144.0);
+    });
 });

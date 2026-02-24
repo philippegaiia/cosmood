@@ -111,7 +111,6 @@ class ProductionCalendarWidget extends FullCalendarWidget
     private function getProductionEventColor(Production $production): string
     {
         return match ($production->status) {
-            ProductionStatus::Simulated => '#334155',
             ProductionStatus::Planned => '#334155',
             ProductionStatus::Confirmed => '#4338ca',
             ProductionStatus::Ongoing => '#b45309',
