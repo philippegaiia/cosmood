@@ -2,6 +2,7 @@
 
 use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
+use App\Models\Supply\Ingredient;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -35,12 +36,14 @@ describe('ProductResource List', function () {
 describe('ProductResource Create', function () {
     it('can create a product', function () {
         $category = ProductCategory::factory()->create();
+        $manufacturedIngredient = Ingredient::factory()->manufactured()->create();
 
         Livewire::test(\App\Filament\Resources\Production\ProductResource\Pages\CreateProduct::class)
             ->fillForm([
                 'name' => 'New Product',
                 'code' => 'PROD-001',
                 'product_category_id' => $category->id,
+                'produced_ingredient_id' => $manufacturedIngredient->id,
                 'launch_date' => now()->format('Y-m-d'),
                 'net_weight' => 100,
                 'is_active' => true,
@@ -51,6 +54,7 @@ describe('ProductResource Create', function () {
         $this->assertDatabaseHas(Product::class, [
             'name' => 'New Product',
             'code' => 'PROD-001',
+            'produced_ingredient_id' => $manufacturedIngredient->id,
         ]);
     });
 });

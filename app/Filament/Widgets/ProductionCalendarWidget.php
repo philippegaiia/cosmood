@@ -47,7 +47,7 @@ class ProductionCalendarWidget extends FullCalendarWidget
             ->whereBetween('production_date', [$start->toDateString(), $end->toDateString()])
             ->get()
             ->map(function (Production $production): array {
-                $title = trim('B '.$production->batch_number.' '.($production->product?->name ? '- '.$production->product->name : ''));
+                $title = trim('B '.$production->getLotIdentifier().' '.($production->product?->name ? '- '.$production->product->name : ''));
 
                 $eventColor = $this->getProductionEventColor($production);
 
@@ -62,17 +62,17 @@ class ProductionCalendarWidget extends FullCalendarWidget
                     'url' => ProductionResource::getUrl('edit', ['record' => $production]),
                     'extendedProps' => [
                         'type' => 'production',
-                        'batch_number' => $production->batch_number,
+                        'batch_number' => $production->getLotIdentifier(),
                     ],
                 ];
             });
 
         $taskEvents = ProductionTask::query()
-            ->with('production:id,batch_number')
+            ->with('production:id,batch_number,permanent_batch_number')
             ->whereBetween('scheduled_date', [$start->toDateString(), $end->toDateString()])
             ->get()
             ->map(function (ProductionTask $task): array {
-                $title = trim('T '.($task->name ?? 'Sans nom').' - '.($task->production?->batch_number ?? 'n/a'));
+                $title = trim('T '.($task->name ?? 'Sans nom').' - '.($task->production?->getLotIdentifier() ?? 'n/a'));
 
                 $eventColor = $this->getTaskEventColor($task);
 

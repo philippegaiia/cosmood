@@ -108,6 +108,29 @@ describe('Production - Masterbatch', function () {
 
         expect($masterbatch->usedInProductions)->toHaveCount(2);
     });
+
+    it('autofills manufactured ingredient from product when creating a masterbatch', function () {
+        $this->actingAs($this->user);
+
+        $ingredient = Ingredient::factory()->manufactured()->create();
+        $productType = ProductType::factory()->soap()->create();
+        $product = Product::factory()->create([
+            'product_type_id' => $productType->id,
+            'produced_ingredient_id' => $ingredient->id,
+        ]);
+        Formula::factory()->create([
+            'product_id' => $product->id,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction::class)
+            ->fillForm([
+                'is_masterbatch' => true,
+            ])
+            ->fillForm([
+                'product_id' => $product->id,
+            ])
+            ->assertSet('data.produced_ingredient_id', $ingredient->id);
+    });
 });
 
 describe('Production - Status', function () {

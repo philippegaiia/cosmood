@@ -2,6 +2,7 @@
 
 namespace App\Models\Production;
 
+use App\Models\Supply\Ingredient;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -31,6 +32,11 @@ class Product extends Model
     public function productType(): BelongsTo
     {
         return $this->belongsTo(ProductType::class);
+    }
+
+    public function producedIngredient(): BelongsTo
+    {
+        return $this->belongsTo(Ingredient::class, 'produced_ingredient_id');
     }
 
     public function formulas(): HasMany

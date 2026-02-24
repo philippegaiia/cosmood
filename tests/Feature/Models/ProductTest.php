@@ -4,6 +4,7 @@ use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
 use App\Models\Production\ProductType;
+use App\Models\Supply\Ingredient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -29,6 +30,14 @@ describe('Product Model', function () {
         $product = Product::factory()->create(['product_type_id' => $productType->id]);
 
         expect($product->productType->id)->toBe($productType->id);
+    });
+
+    it('can belong to a manufactured ingredient output', function () {
+        $ingredient = Ingredient::factory()->manufactured()->create();
+        $product = Product::factory()->create(['produced_ingredient_id' => $ingredient->id]);
+
+        expect($product->producedIngredient)->not->toBeNull()
+            ->and($product->producedIngredient->id)->toBe($ingredient->id);
     });
 
     it('has many formulas', function () {

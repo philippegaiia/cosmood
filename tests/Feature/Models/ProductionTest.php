@@ -7,6 +7,8 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionIngredientRequirement;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
+use App\Models\Supply\Ingredient;
+use App\Models\Supply\Supply;
 
 describe('Production Model', function () {
     it('can be created with factory', function () {
@@ -78,6 +80,16 @@ describe('Production Model', function () {
             ->and($production->expected_units)->toBe(288);
     });
 
+    it('formats lot label with permanent number when available', function () {
+        $production = Production::factory()->create([
+            'batch_number' => 'B-PLAN-001',
+            'permanent_batch_number' => '000321',
+        ]);
+
+        expect($production->getLotIdentifier())->toBe('000321')
+            ->and($production->getLotDisplayLabel())->toBe('000321 (plan B-PLAN-001)');
+    });
+
     it('computes supply coverage traffic light states', function () {
         $production = Production::factory()->create();
 
@@ -131,6 +143,27 @@ describe('Production Relationships', function () {
         $production = Production::factory()->create();
 
         expect($production->productionTasks())->not->toBeNull();
+    });
+
+    it('can reference a manufactured ingredient output', function () {
+        $ingredient = Ingredient::factory()->manufactured()->create();
+
+        $production = Production::factory()->masterbatch()->create([
+            'produced_ingredient_id' => $ingredient->id,
+        ]);
+
+        expect($production->producedIngredient)->not->toBeNull()
+            ->and($production->producedIngredient->id)->toBe($ingredient->id);
+    });
+
+    it('can link to produced supply lot', function () {
+        $production = Production::factory()->create();
+        $supply = Supply::factory()->create([
+            'source_production_id' => $production->id,
+        ]);
+
+        expect($production->producedSupply)->not->toBeNull()
+            ->and($production->producedSupply->id)->toBe($supply->id);
     });
 });
 

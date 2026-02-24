@@ -10,6 +10,9 @@ use App\Models\Supply\SupplierOrderItem;
 use App\Models\Supply\Supply;
 use Illuminate\Support\Collection;
 
+/**
+ * Synchronizes wave requirement statuses from linked supplier orders and receipts.
+ */
 class WaveRequirementStatusService
 {
     /**
@@ -22,6 +25,9 @@ class WaveRequirementStatusService
         OrderStatus::Checked,
     ];
 
+    /**
+     * Reconciles requirement statuses by ingredient across ordered and received quantities.
+     */
     public function syncForWave(ProductionWave $wave): void
     {
         $requirements = $this->getWaveRequirements($wave);
@@ -74,6 +80,8 @@ class WaveRequirementStatusService
     }
 
     /**
+     * Loads sortable wave requirements excluding masterbatch-fulfilled rows.
+     *
      * @return Collection<int, ProductionIngredientRequirement>
      */
     private function getWaveRequirements(ProductionWave $wave): Collection
@@ -88,6 +96,8 @@ class WaveRequirementStatusService
     }
 
     /**
+     * Returns ordered quantities keyed by ingredient id for the wave.
+     *
      * @return Collection<int, float>
      */
     private function getOrderedQuantitiesByIngredient(ProductionWave $wave): Collection
@@ -107,6 +117,8 @@ class WaveRequirementStatusService
     }
 
     /**
+     * Returns received quantities keyed by ingredient id for the wave.
+     *
      * @return Collection<int, float>
      */
     private function getReceivedQuantitiesByIngredient(ProductionWave $wave): Collection

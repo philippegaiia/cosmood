@@ -70,6 +70,10 @@ class IngredientResource extends Resource
                     ->maxLength(255),
                 Toggle::make('is_active')
                     ->required(),
+                Toggle::make('is_manufactured')
+                    ->label('Ingrédient fabriqué')
+                    ->helperText('Activez pour les ingrédients fabriqués en interne (masterbatch, macérats, etc.)')
+                    ->default(false),
                 Textarea::make('description')
                     ->columnSpanFull(),
             ]);
@@ -107,6 +111,9 @@ class IngredientResource extends Resource
                 TextColumn::make('einecs')
                     ->searchable(),
                 IconColumn::make('is_active')
+                    ->boolean(),
+                IconColumn::make('is_manufactured')
+                    ->label('Fabriqué')
                     ->boolean(),
                 TextColumn::make('deleted_at')
                     ->dateTime()

@@ -9,8 +9,14 @@ use App\Models\User;
 use Carbon\Carbon;
 use InvalidArgumentException;
 
+/**
+ * Manages generation, sequencing, and scheduling lifecycle for production tasks.
+ */
 class TaskGenerationService
 {
+    /**
+     * Creates missing tasks from template items while preserving order.
+     */
     public function generateFromTemplate(Production $production, TaskTemplate $template): void
     {
         $existingTaskIds = $production->productionTasks()
@@ -57,6 +63,9 @@ class TaskGenerationService
         }
     }
 
+    /**
+     * Cancels all unfinished and non-cancelled tasks for a production.
+     */
     public function cancelTasks(Production $production, ?string $reason = null): void
     {
         $production->productionTasks()
@@ -68,6 +77,9 @@ class TaskGenerationService
             ]);
     }
 
+    /**
+     * Recalculates scheduled dates for template-based tasks.
+     */
     public function rescheduleTasks(Production $production, bool $force = false): void
     {
         $production->load('productionTasks.templateItem');
@@ -127,6 +139,9 @@ class TaskGenerationService
         }
     }
 
+    /**
+     * Marks a task as finished while enforcing dependency order unless bypassed.
+     */
     public function markTaskAsFinished(ProductionTask $task, bool $bypassSequence = false): void
     {
         if ($task->isCancelled()) {
@@ -149,6 +164,9 @@ class TaskGenerationService
         ]);
     }
 
+    /**
+     * Force-finishes a task and records bypass audit details.
+     */
     public function forceFinishTask(ProductionTask $task, User $user, string $reason): void
     {
         if ($task->isCancelled()) {
@@ -171,11 +189,17 @@ class TaskGenerationService
         ]);
     }
 
+    /**
+     * Returns whether completion is blocked by earlier unfinished dependencies.
+     */
     public function isBlockedByDependencies(ProductionTask $task): bool
     {
         return $this->hasUnfinishedPredecessor($task);
     }
 
+    /**
+     * Sets a manual date for one task and shifts following auto tasks accordingly.
+     */
     public function setManualSchedule(ProductionTask $task, Carbon|string $scheduledDate): void
     {
         if ($task->is_finished || $task->isCancelled()) {
@@ -239,6 +263,9 @@ class TaskGenerationService
             });
     }
 
+    /**
+     * Restores one task to automatic scheduling.
+     */
     public function resetToAutoSchedule(ProductionTask $task): void
     {
         if (! $task->task_template_item_id || $task->is_finished || $task->isCancelled()) {
@@ -252,6 +279,9 @@ class TaskGenerationService
         $this->rescheduleTasks($task->production, false);
     }
 
+    /**
+     * Detects unfinished predecessor tasks in template sequence.
+     */
     protected function hasUnfinishedPredecessor(ProductionTask $task): bool
     {
         if ($task->source !== 'template' || $task->sequence_order === null) {
@@ -265,6 +295,9 @@ class TaskGenerationService
             ->exists();
     }
 
+    /**
+     * Resolves the default task template for a production.
+     */
     public function getTaskTemplateForProduction(Production $production): ?TaskTemplate
     {
         $productTypeId = $production->product_type_id ?? $production->product?->product_type_id;
@@ -286,6 +319,9 @@ class TaskGenerationService
             ->first();
     }
 
+    /**
+     * Calculates one scheduled date from a start date and day offset.
+     */
     public function calculateScheduledDate($startDate, int $offsetDays, bool $skipWeekends): Carbon
     {
         $date = Carbon::parse($startDate)->copy();
@@ -309,6 +345,9 @@ class TaskGenerationService
         return $date;
     }
 
+    /**
+     * Generates tasks using the resolved template for a production.
+     */
     public function generateTasksForProduction(Production $production): bool
     {
         $template = $this->getTaskTemplateForProduction($production);

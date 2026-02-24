@@ -6,8 +6,20 @@ use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
 
+/**
+ * Computes a non-persistent procurement and cost estimate from product/unit inputs.
+ */
 class FlashSimulationService
 {
+    /**
+     * @param  array<int, array{product_id: int|string|null, units: int|float|string|null}>  $lines
+     * @return array{
+     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, units: float, net_weight_g: float, multiplier: float, oils_kg: float, estimated_cost: float}>,
+     *     ingredient_totals: \Illuminate\Support\Collection<int, array{ingredient_id: int, ingredient_name: string, required_kg: float, unit_price: float, estimated_cost: float}>,
+     *     warnings: \Illuminate\Support\Collection<int, string>,
+     *     totals: array{products_count: int, total_units: float|int, total_batch_kg: float|int, total_estimated_cost: float|int}
+     * }
+     */
     public function simulate(array $lines): array
     {
         $normalizedLines = collect($lines)
@@ -142,6 +154,9 @@ class FlashSimulationService
         ];
     }
 
+    /**
+     * Resolves the active formula to use for simulation.
+     */
     private function resolveFormula(Product $product): ?Formula
     {
         $activeFormula = $product->formulas
@@ -159,6 +174,9 @@ class FlashSimulationService
             ->first(fn (Formula $formula): bool => $formula->formulaItems->isNotEmpty());
     }
 
+    /**
+     * Applies soap curing multiplier when the product is detected as soap.
+     */
     private function getProductMultiplier(Product $product): float
     {
         $productName = strtolower((string) $product->name);

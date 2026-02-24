@@ -28,6 +28,7 @@ class IngredientFactory extends Factory
             'cas_einecs' => null,
             'einecs' => null,
             'is_active' => true,
+            'is_manufactured' => false,
             'description' => $this->faker->sentence(),
             'price' => $this->faker->randomFloat(2, 2, 40),
         ];
@@ -45,6 +46,13 @@ class IngredientFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_active' => false,
+        ]);
+    }
+
+    public function manufactured(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_manufactured' => true,
         ]);
     }
 }

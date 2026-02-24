@@ -51,6 +51,16 @@ class ProductResource extends Resource
                     ->maxLength(255),
                 TextInput::make('wp_code')
                     ->maxLength(255),
+                Select::make('produced_ingredient_id')
+                    ->label('Ingrédient fabriqué lié')
+                    ->relationship(
+                        name: 'producedIngredient',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn (Builder $query): Builder => $query->where('is_manufactured', true),
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->nullable(),
 
                 DatePicker::make('launch_date')
                     ->native(false)
@@ -83,6 +93,10 @@ class ProductResource extends Resource
                     ->badge(),
                 TextColumn::make('code')
                     ->searchable(),
+                TextColumn::make('producedIngredient.name')
+                    ->label('Ingrédient fabriqué')
+                    ->placeholder('-')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('wp_code')
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),

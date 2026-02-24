@@ -7,8 +7,16 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionPackagingRequirement;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Generates and maintains packaging requirements derived from expected units.
+ */
 class PackagingRequirementsService
 {
+    /**
+     * Creates missing packaging requirements for a production.
+     *
+     * @param  array<int, array{code: string, name: string, quantity_per_unit?: int|float, supplier_id?: int|null, unit_cost?: float|null, notes?: string|null}>  $packagingData
+     */
     public function generateRequirements(Production $production, array $packagingData): void
     {
         $expectedUnits = $production->expected_units ?? 0;
@@ -47,6 +55,11 @@ class PackagingRequirementsService
         });
     }
 
+    /**
+     * Fully rebuilds packaging requirements from current packaging inputs.
+     *
+     * @param  array<int, array{code: string, name: string, quantity_per_unit?: int|float, supplier_id?: int|null, unit_cost?: float|null, notes?: string|null}>  $packagingData
+     */
     public function regenerateRequirements(Production $production, array $packagingData): void
     {
         DB::transaction(function () use ($production, $packagingData) {
@@ -57,6 +70,9 @@ class PackagingRequirementsService
         });
     }
 
+    /**
+     * Recomputes required packaging quantities when expected units change.
+     */
     public function updateQuantities(Production $production): void
     {
         $expectedUnits = $production->expected_units ?? 0;
@@ -73,6 +89,11 @@ class PackagingRequirementsService
         });
     }
 
+    /**
+     * Returns status counters for packaging requirement progress.
+     *
+     * @return array{not_ordered: int, ordered: int, received: int, allocated: int, total: int}
+     */
     public function getSummary(Production $production): array
     {
         $requirements = $production->packagingRequirements;

@@ -19,7 +19,9 @@ use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
+use App\Services\Production\PermanentBatchNumberService;
 use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -48,6 +50,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Str;
 
@@ -78,11 +81,17 @@ class ProductionResource extends Resource
                             ->placeholder('Aucune (production autonome)')
                             ->nullable(),
                         TextInput::make('batch_number')
-                            ->label('Numéro de batch')
+                            ->label('Réf. planification')
                             ->required()
                             ->maxLength(255)
                             ->default('B'.now()->format('YmdHis'))
                             ->unique(ignoreRecord: true),
+                        TextInput::make('permanent_batch_number')
+                            ->label('Lot permanent')
+                            ->placeholder('Attribué automatiquement au démarrage')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->visibleOn('edit'),
                     ])
                     ->columns(2),
 
@@ -99,20 +108,28 @@ class ProductionResource extends Resource
                                 if (! $state) {
                                     return;
                                 }
+
                                 $product = Product::find((int) $state);
-                                if ($product) {
-                                    $formula = $product->formulas()->first();
-                                    if ($formula) {
-                                        $set('formula_id', $formula->id);
-                                    }
-                                    if ($product->product_type_id) {
-                                        $set('product_type_id', $product->product_type_id);
-                                        $productType = ProductType::find($product->product_type_id);
-                                        if ($productType) {
-                                            $set('sizing_mode', $productType->sizing_mode->value);
-                                            $set('planned_quantity', $productType->default_batch_size);
-                                            $set('expected_units', $productType->expected_units_output);
-                                        }
+
+                                if (! $product) {
+                                    return;
+                                }
+
+                                if ($get('is_masterbatch') === true && $product->produced_ingredient_id) {
+                                    $set('produced_ingredient_id', $product->produced_ingredient_id);
+                                }
+
+                                $formula = $product->formulas()->first();
+                                if ($formula) {
+                                    $set('formula_id', $formula->id);
+                                }
+                                if ($product->product_type_id) {
+                                    $set('product_type_id', $product->product_type_id);
+                                    $productType = ProductType::find($product->product_type_id);
+                                    if ($productType) {
+                                        $set('sizing_mode', $productType->sizing_mode->value);
+                                        $set('planned_quantity', $productType->default_batch_size);
+                                        $set('expected_units', $productType->expected_units_output);
                                     }
                                 }
                             })
@@ -209,14 +226,31 @@ class ProductionResource extends Resource
                             ->helperText('Activé: vous fabriquez un masterbatch intermédiaire. Désactivé: vous utilisez un masterbatch existant.')
                             ->default(false)
                             ->live()
-                            ->afterStateUpdated(function (Set $set, ?bool $state): void {
+                            ->afterStateUpdated(function (Set $set, Get $get, ?bool $state): void {
                                 if ($state) {
                                     $set('masterbatch_lot_id', null);
+
+                                    if (filled($get('produced_ingredient_id'))) {
+                                        return;
+                                    }
+
+                                    $productId = $get('product_id');
+
+                                    if (! $productId) {
+                                        return;
+                                    }
+
+                                    $product = Product::query()->find((int) $productId);
+
+                                    if ($product?->produced_ingredient_id) {
+                                        $set('produced_ingredient_id', $product->produced_ingredient_id);
+                                    }
 
                                     return;
                                 }
 
                                 $set('replaces_phase', null);
+                                $set('produced_ingredient_id', null);
                             })
                             ->disabled(fn (string $operation) => $operation === 'edit'),
                         Select::make('replaces_phase')
@@ -236,6 +270,7 @@ class ProductionResource extends Resource
                                     ->where('is_masterbatch', true)
                                     ->whereNotNull('replaces_phase')
                                     ->where('status', 'finished')
+                                    ->with('product:id,name')
                                     ->orderByDesc('production_date')
                                     ->get()
                                     ->mapWithKeys(function (Production $masterbatch): array {
@@ -247,7 +282,7 @@ class ProductionResource extends Resource
                                         };
 
                                         return [
-                                            $masterbatch->id => $masterbatch->batch_number.' - '.$phaseLabel,
+                                            $masterbatch->id => trim($masterbatch->getLotDisplayLabel().' - '.($masterbatch->product?->name ?? 'Masterbatch').' ('.$phaseLabel.')'),
                                         ];
                                     })
                                     ->toArray();
@@ -256,6 +291,19 @@ class ProductionResource extends Resource
                             ->helperText('Choisissez un lot masterbatch déjà terminé, puis utilisez "Importer traçabilité MB" pour copier les lots supply.')
                             ->placeholder('Aucun')
                             ->visible(fn (Get $get) => $get('is_masterbatch') !== true)
+                            ->nullable(),
+                        Select::make('produced_ingredient_id')
+                            ->label('Ingrédient fabriqué (intermédiaire)')
+                            ->relationship(
+                                name: 'producedIngredient',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn (Builder $query): Builder => $query->where('is_manufactured', true),
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->helperText('Choisir un ingrédient de type fabriqué (ex: masterbatch, macérat).')
+                            ->visible(fn (Get $get) => $get('is_masterbatch') === true)
+                            ->dehydrated(fn (Get $get): bool => $get('is_masterbatch') === true)
                             ->nullable(),
                     ])
                     ->visible(fn (string $operation) => $operation !== 'view')
@@ -437,8 +485,13 @@ class ProductionResource extends Resource
     {
         return $table
             ->columns([
+                TextColumn::make('permanent_batch_number')
+                    ->label('Lot permanent')
+                    ->placeholder('-')
+                    ->searchable()
+                    ->sortable(),
                 TextColumn::make('batch_number')
-                    ->label('Batch')
+                    ->label('Réf. planif')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('product.name')
@@ -502,6 +555,7 @@ class ProductionResource extends Resource
                         $duplicate = $record->replicate();
                         $duplicate->status = ProductionStatus::Planned;
                         $duplicate->actual_units = null;
+                        $duplicate->permanent_batch_number = null;
                         $duplicate->batch_number = self::generateDuplicatedBatchNumber($record->batch_number);
                         $duplicate->slug = self::generateDuplicatedSlug($duplicate->batch_number);
                         $duplicate->save();
@@ -516,6 +570,21 @@ class ProductionResource extends Resource
                 EditAction::make(),
             ])
             ->toolbarActions([
+                BulkAction::make('assignPermanentBatchNumbers')
+                    ->label('Attribuer lots permanents')
+                    ->icon('heroicon-o-hashtag')
+                    ->requiresConfirmation()
+                    ->deselectRecordsAfterCompletion()
+                    ->action(function (Collection $records): void {
+                        $assigned = app(PermanentBatchNumberService::class)
+                            ->assignForProductions($records->pluck('id')->all());
+
+                        Notification::make()
+                            ->title('Lots permanents attribués')
+                            ->body($assigned.' lot(s) permanent(s) attribué(s).')
+                            ->success()
+                            ->send();
+                    }),
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),

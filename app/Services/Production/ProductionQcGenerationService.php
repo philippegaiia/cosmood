@@ -7,8 +7,14 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionQcCheck;
 use App\Models\Production\QcTemplate;
 
+/**
+ * Resolves QC templates and instantiates QC checks for productions.
+ */
 class ProductionQcGenerationService
 {
+    /**
+     * Generates QC checks from the best matching template.
+     */
     public function generateChecksForProduction(Production $production): bool
     {
         $template = $this->getTemplateForProduction($production);
@@ -22,6 +28,9 @@ class ProductionQcGenerationService
         return true;
     }
 
+    /**
+     * Resolves product-type specific template first, then fallback default template.
+     */
     public function getTemplateForProduction(Production $production): ?QcTemplate
     {
         $productTypeId = $production->product_type_id ?? $production->product?->product_type_id;
@@ -45,6 +54,9 @@ class ProductionQcGenerationService
             ->first();
     }
 
+    /**
+     * Creates missing QC check rows from template items.
+     */
     public function generateFromTemplate(Production $production, QcTemplate $template): void
     {
         $existingTemplateItemIds = $production->productionQcChecks()

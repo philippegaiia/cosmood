@@ -43,7 +43,7 @@ class ProductionTaskResource extends Resource
                     ->schema([
                         TextInput::make('production_id')
                             ->label('Batch / Produit')
-                            ->formatStateUsing(fn (mixed $state, ?ProductionTask $record): string => trim(($record?->production?->batch_number ?? '-').' - '.($record?->production?->product?->name ?? '-')))
+                            ->formatStateUsing(fn (mixed $state, ?ProductionTask $record): string => trim(($record?->production?->getLotDisplayLabel() ?? '-').' - '.($record?->production?->product?->name ?? '-')))
                             ->disabled()
                             ->dehydrated(false),
                         TextInput::make('production_task_type_id')
@@ -69,8 +69,9 @@ class ProductionTaskResource extends Resource
             ->components([
                 Section::make('Détails tâche de production')
                     ->schema([
-                        TextEntry::make('production.batch_number')
-                            ->label('Batch'),
+                        TextEntry::make('production_lot')
+                            ->label('Batch')
+                            ->state(fn (ProductionTask $record): string => $record->production?->getLotDisplayLabel() ?? '-'),
                         TextEntry::make('production.product.name')
                             ->label('Produit')
                             ->placeholder('-'),
@@ -99,6 +100,7 @@ class ProductionTaskResource extends Resource
             ->columns([
                 TextColumn::make('production.batch_number')
                     ->label('Batch')
+                    ->formatStateUsing(fn (mixed $state, ?ProductionTask $record): string => $record?->production?->getLotDisplayLabel() ?? '-')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('production.product.name')

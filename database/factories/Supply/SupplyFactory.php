@@ -15,6 +15,7 @@ class SupplyFactory extends Factory
         return [
             'supplier_listing_id' => SupplierListing::factory(),
             'supplier_order_item_id' => null,
+            'source_production_id' => null,
             'order_ref' => strtoupper($this->faker->bothify('ORD-####')),
             'batch_number' => strtoupper($this->faker->bothify('BATCH-####')),
             'initial_quantity' => $this->faker->randomFloat(3, 10, 100),

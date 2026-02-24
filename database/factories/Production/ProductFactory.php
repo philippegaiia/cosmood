@@ -5,6 +5,7 @@ namespace Database\Factories\Production;
 use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
 use App\Models\Production\ProductType;
+use App\Models\Supply\Ingredient;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class ProductFactory extends Factory
@@ -16,6 +17,7 @@ class ProductFactory extends Factory
         return [
             'product_category_id' => ProductCategory::factory(),
             'product_type_id' => null,
+            'produced_ingredient_id' => null,
             'code' => strtoupper($this->faker->bothify('PRD-###')),
             'wp_code' => null,
             'name' => $this->faker->words(2, true),
@@ -47,6 +49,13 @@ class ProductFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'product_type_id' => $productType->id,
+        ]);
+    }
+
+    public function withProducedIngredient(?Ingredient $ingredient = null): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'produced_ingredient_id' => $ingredient?->id ?? Ingredient::factory()->manufactured(),
         ]);
     }
 }

@@ -27,6 +27,7 @@ class Ingredient extends Model
         'cas_einecs',
         'einecs',
         'is_active',
+        'is_manufactured',
         'description',
         'price',
         'deleted_at',
@@ -38,6 +39,7 @@ class Ingredient extends Model
     {
         return [
             'price' => 'decimal:2',
+            'is_manufactured' => 'boolean',
         ];
     }
 

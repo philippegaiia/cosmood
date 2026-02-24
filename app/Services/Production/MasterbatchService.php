@@ -7,8 +7,14 @@ use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use Illuminate\Support\Collection;
 
+/**
+ * Encapsulates masterbatch selection, phase collapsing, and traceability helpers.
+ */
 class MasterbatchService
 {
+    /**
+     * Assigns a finished compatible masterbatch to a production.
+     */
     public function selectMasterbatch(Production $production, Production $masterbatch): void
     {
         $this->validateMasterbatch($production, $masterbatch);
@@ -18,6 +24,9 @@ class MasterbatchService
         $this->collapsePhaseRequirements($production, $masterbatch);
     }
 
+    /**
+     * Removes masterbatch assignment and re-expands collapsed requirements.
+     */
     public function removeMasterbatch(Production $production): void
     {
         $production->update(['masterbatch_lot_id' => null]);
@@ -30,6 +39,9 @@ class MasterbatchService
             ]);
     }
 
+    /**
+     * Validates masterbatch eligibility before assignment.
+     */
     protected function validateMasterbatch(Production $production, Production $masterbatch): void
     {
         if (! $masterbatch->is_masterbatch) {
@@ -45,6 +57,9 @@ class MasterbatchService
         }
     }
 
+    /**
+     * Marks requirements in the replaced phase as fulfilled by masterbatch.
+     */
     protected function collapsePhaseRequirements(Production $production, Production $masterbatch): void
     {
         $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
@@ -61,6 +76,9 @@ class MasterbatchService
             ]);
     }
 
+    /**
+     * Checks whether the target production contains the phase replaced by the masterbatch.
+     */
     public function isMasterbatchCompatible(Production $production, Production $masterbatch): bool
     {
         $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
@@ -76,6 +94,9 @@ class MasterbatchService
         return $hasPhase;
     }
 
+    /**
+     * Returns the expanded ingredient composition of the linked masterbatch formula.
+     */
     public function getExpandedIngredients(Production $production): Collection
     {
         $masterbatch = $production->masterbatchLot;
@@ -106,6 +127,9 @@ class MasterbatchService
         return $expandedIngredients;
     }
 
+    /**
+     * Returns requirements currently collapsed by masterbatch replacement.
+     */
     public function getCollapsedRequirements(Production $production): Collection
     {
         return $production->ingredientRequirements()
@@ -114,6 +138,9 @@ class MasterbatchService
             ->get();
     }
 
+    /**
+     * Returns requirements that remain visible in standard planning views.
+     */
     public function getVisibleRequirements(Production $production): Collection
     {
         return $production->ingredientRequirements()
@@ -121,6 +148,11 @@ class MasterbatchService
             ->get();
     }
 
+    /**
+     * Builds the synthetic "masterbatch line" used in production sheet outputs.
+     *
+     * @return array{masterbatch_id: int, masterbatch_batch_number: string|null, phase: string, quantity: float, ingredients: Collection<int, array<string, mixed>>}|null
+     */
     public function getMasterbatchLine(Production $production): ?array
     {
         $masterbatch = $production->masterbatchLot;
@@ -158,6 +190,9 @@ class MasterbatchService
         ];
     }
 
+    /**
+     * Returns traceability lines based on the consumed masterbatch source items.
+     */
     public function getMasterbatchTraceabilityLines(Production $production): Collection
     {
         $masterbatch = $production->masterbatchLot;
@@ -189,6 +224,9 @@ class MasterbatchService
             });
     }
 
+    /**
+     * Copies source traceability from masterbatch items into target production items.
+     */
     public function applyTraceabilityToProductionItems(Production $production): int
     {
         $masterbatch = $production->masterbatchLot;
@@ -258,6 +296,9 @@ class MasterbatchService
         return $updated;
     }
 
+    /**
+     * Compares formula percentages with selected masterbatch percentages by ingredient.
+     */
     public function getPercentageMismatches(Production $production): Collection
     {
         $masterbatch = $production->masterbatchLot;
@@ -306,6 +347,9 @@ class MasterbatchService
             ->values();
     }
 
+    /**
+     * Normalizes legacy phase aliases into internal phase enum values.
+     */
     private function normalizePhase(Phases|string|null $phase): ?string
     {
         if ($phase === null) {

@@ -2,6 +2,7 @@
 
 namespace App\Models\Supply;
 
+use App\Models\Production\Production;
 use App\Models\Production\ProductionIngredientRequirement;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -38,6 +39,11 @@ class Supply extends Model
     public function supplierOrderItem(): BelongsTo
     {
         return $this->belongsTo(SupplierOrderItem::class);
+    }
+
+    public function sourceProduction(): BelongsTo
+    {
+        return $this->belongsTo(Production::class, 'source_production_id');
     }
 
     public function ingredientRequirements(): HasMany

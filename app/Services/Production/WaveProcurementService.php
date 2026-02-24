@@ -13,10 +13,16 @@ use App\Models\Supply\Supply;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Builds procurement views and purchase-order suggestions for production waves.
+ */
 class WaveProcurementService
 {
     public function __construct(private readonly ProductionRequirementsService $productionRequirementsService) {}
 
+    /**
+     * Aggregates remaining requirements by ingredient and supplier listing.
+     */
     public function aggregateRequirements(ProductionWave $wave): Collection
     {
         $this->ensureWaveRequirements($wave);
@@ -45,6 +51,9 @@ class WaveProcurementService
             ->values();
     }
 
+    /**
+     * Builds advisory planning data with shortages and estimated cost.
+     */
     public function getPlanningList(ProductionWave $wave): Collection
     {
         $this->ensureWaveRequirements($wave);
@@ -93,6 +102,9 @@ class WaveProcurementService
             ->values();
     }
 
+    /**
+     * Generates draft supplier orders from not-ordered wave requirements.
+     */
     public function generatePurchaseOrders(ProductionWave $wave): Collection
     {
         if (! $wave->isApproved()) {
@@ -163,6 +175,11 @@ class WaveProcurementService
         return $orders;
     }
 
+    /**
+     * Returns requirement status counters for wave procurement.
+     *
+     * @return array{not_ordered: int, ordered: int, received: int, allocated: int, total: int}
+     */
     public function getProcurementSummary(ProductionWave $wave): array
     {
         $this->ensureWaveRequirements($wave);
@@ -180,6 +197,9 @@ class WaveProcurementService
         ];
     }
 
+    /**
+     * Computes next supplier order serial number.
+     */
     protected function getNextSerialNumber(): int
     {
         $lastOrder = SupplierOrder::orderBy('id', 'desc')->first();
@@ -187,6 +207,9 @@ class WaveProcurementService
         return $lastOrder ? $lastOrder->serial_number + 1 : 1001;
     }
 
+    /**
+     * Ensures each production in the wave has generated ingredient requirements.
+     */
     private function ensureWaveRequirements(ProductionWave $wave): void
     {
         $wave->loadMissing('productions');

@@ -5,10 +5,13 @@ namespace App\Models\Production;
 use App\Enums\ProductionStatus;
 use App\Enums\RequirementStatus;
 use App\Enums\SizingMode;
+use App\Models\Supply\Ingredient;
+use App\Models\Supply\Supply;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Production extends Model
@@ -29,6 +32,7 @@ class Production extends Model
             'expected_waste_kg' => 'decimal:3',
             'production_date' => 'date',
             'ready_date' => 'date',
+            'permanent_batch_number' => 'string',
         ];
     }
 
@@ -67,9 +71,19 @@ class Production extends Model
         return $this->belongsTo(Production::class, 'masterbatch_lot_id');
     }
 
+    public function producedIngredient(): BelongsTo
+    {
+        return $this->belongsTo(Ingredient::class, 'produced_ingredient_id');
+    }
+
     public function usedInProductions(): HasMany
     {
         return $this->hasMany(Production::class, 'masterbatch_lot_id');
+    }
+
+    public function producedSupply(): HasOne
+    {
+        return $this->hasOne(Supply::class, 'source_production_id');
     }
 
     public function productionItems(): HasMany
@@ -110,6 +124,20 @@ class Production extends Model
     public function usesMasterbatch(): bool
     {
         return $this->masterbatch_lot_id !== null;
+    }
+
+    public function getLotIdentifier(): string
+    {
+        return $this->permanent_batch_number ?: $this->batch_number;
+    }
+
+    public function getLotDisplayLabel(): string
+    {
+        if (! filled($this->permanent_batch_number)) {
+            return (string) $this->batch_number;
+        }
+
+        return $this->permanent_batch_number.' (plan '.$this->batch_number.')';
     }
 
     public function getSupplyCoverageState(): string

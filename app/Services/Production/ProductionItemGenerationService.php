@@ -6,8 +6,14 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Creates production items from formula items when a production is created.
+ */
 class ProductionItemGenerationService
 {
+    /**
+     * Generates production items once per production.
+     */
     public function generateFromFormula(Production $production): void
     {
         if ($production->productionItems()->exists()) {

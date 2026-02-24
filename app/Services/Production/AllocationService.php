@@ -8,8 +8,14 @@ use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Allocates and deallocates ingredient requirements against stock lots.
+ */
 class AllocationService
 {
+    /**
+     * Allocates a quantity from one supply lot to a production requirement.
+     */
     public function allocate(ProductionIngredientRequirement $requirement, Supply $supply, float $quantity): void
     {
         if ($requirement->isFulfilledByMasterbatch()) {
@@ -39,6 +45,9 @@ class AllocationService
         });
     }
 
+    /**
+     * Reverts an existing allocation quantity.
+     */
     public function deallocate(ProductionIngredientRequirement $requirement, float $quantity): void
     {
         if ($quantity > $requirement->allocated_quantity) {
@@ -64,6 +73,9 @@ class AllocationService
         });
     }
 
+    /**
+     * Returns available stock lots for one ingredient ordered by expiry date.
+     */
     public function getAvailableSupplies(Ingredient $ingredient): \Illuminate\Database\Eloquent\Collection
     {
         return Supply::query()
@@ -73,11 +85,17 @@ class AllocationService
             ->get();
     }
 
+    /**
+     * Checks whether enough available stock exists for one ingredient.
+     */
     public function checkAvailability(Ingredient $ingredient, float $quantity): bool
     {
         return $this->getTotalAvailable($ingredient) >= $quantity;
     }
 
+    /**
+     * Computes the net available quantity for one ingredient.
+     */
     public function getTotalAvailable(Ingredient $ingredient): float
     {
         return Supply::query()
