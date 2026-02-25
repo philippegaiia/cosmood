@@ -5,6 +5,7 @@ namespace App\Services\Production;
 use App\Enums\QcResult;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionQcCheck;
+use App\Models\Production\ProductType;
 use App\Models\Production\QcTemplate;
 
 /**
@@ -29,28 +30,33 @@ class ProductionQcGenerationService
     }
 
     /**
-     * Resolves product-type specific template first, then fallback default template.
+     * Resolves product-type assigned template first, then fallback global default template.
      */
     public function getTemplateForProduction(Production $production): ?QcTemplate
     {
         $productTypeId = $production->product_type_id ?? $production->product?->product_type_id;
 
         if ($productTypeId) {
-            $specificTemplate = QcTemplate::query()
-                ->where('product_type_id', $productTypeId)
-                ->where('is_default', true)
-                ->where('is_active', true)
-                ->first();
+            $assignedTemplateId = ProductType::query()
+                ->whereKey((int) $productTypeId)
+                ->value('qc_template_id');
 
-            if ($specificTemplate) {
-                return $specificTemplate;
+            if ($assignedTemplateId) {
+                $assignedTemplate = QcTemplate::query()
+                    ->whereKey((int) $assignedTemplateId)
+                    ->where('is_active', true)
+                    ->first();
+
+                if ($assignedTemplate) {
+                    return $assignedTemplate;
+                }
             }
         }
 
         return QcTemplate::query()
-            ->whereNull('product_type_id')
             ->where('is_default', true)
             ->where('is_active', true)
+            ->whereDoesntHave('productTypes')
             ->first();
     }
 
@@ -72,7 +78,6 @@ class ProductionQcGenerationService
                 ProductionQcCheck::query()->create([
                     'production_id' => $production->id,
                     'qc_template_item_id' => $item->id,
-                    'code' => $item->code,
                     'label' => $item->label,
                     'input_type' => $item->input_type,
                     'unit' => $item->unit,

@@ -29,7 +29,7 @@ class InventoryMovementService
                 throw new \RuntimeException('Supplier order item is already in stock.');
             }
 
-            $totalQuantity = (float) ($lockedItem->quantity ?? 0) * (float) ($lockedItem->unit_weight ?? 0);
+            $totalQuantity = $this->resolveOrderItemStockQuantity($lockedItem);
 
             if ($totalQuantity <= 0) {
                 throw new \InvalidArgumentException('Supplier order item quantity must be greater than zero.');
@@ -80,14 +80,17 @@ class InventoryMovementService
      */
     public function recordInboundFromOrderItem(Supply $supply, SupplierOrderItem $item, ?User $user = null): SuppliesMovement
     {
+        $quantity = $this->resolveOrderItemStockQuantity($item);
+        $unit = $item->supplierListing?->unit_of_measure ?: 'kg';
+
         return SuppliesMovement::query()->create([
             'supply_id' => $supply->id,
             'supplier_order_item_id' => $item->id,
             'production_id' => null,
             'user_id' => $user?->id,
             'movement_type' => 'in',
-            'quantity' => ($item->quantity ?? 0) * ($item->unit_weight ?? 0),
-            'unit' => 'kg',
+            'quantity' => $quantity,
+            'unit' => $unit,
             'reason' => 'Supplier order received into stock',
             'meta' => [
                 'supplier_order_id' => $item->supplier_order_id,
@@ -155,12 +158,21 @@ class InventoryMovementService
             'user_id' => $user?->id,
             'movement_type' => 'adjustment',
             'quantity' => $quantityKg,
-            'unit' => 'kg',
+            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
             'reason' => $reason,
             'meta' => [
                 'supply_batch' => $supply->batch_number,
             ],
             'moved_at' => now(),
         ]);
+    }
+
+    private function resolveOrderItemStockQuantity(SupplierOrderItem $item): float
+    {
+        $quantity = (float) ($item->quantity ?? 0);
+        $unitWeight = (float) ($item->unit_weight ?? 0);
+        $unitMultiplier = $unitWeight > 0 ? $unitWeight : 1;
+
+        return round($quantity * $unitMultiplier, 3);
     }
 }

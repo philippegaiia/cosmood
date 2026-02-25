@@ -19,10 +19,10 @@ class QcTemplatesTable
                     ->label('Nom')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('productType.name')
-                    ->label('Type produit')
+                TextColumn::make('product_types_count')
+                    ->label('Types liés')
+                    ->counts('productTypes')
                     ->badge()
-                    ->placeholder('Global')
                     ->sortable(),
                 TextColumn::make('items_count')
                     ->label('Contrôles')

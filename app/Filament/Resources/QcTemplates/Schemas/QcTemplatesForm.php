@@ -20,18 +20,17 @@ class QcTemplatesForm
         return $schema
             ->components([
                 Section::make('Informations générales')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
                     ->schema([
                         TextInput::make('name')
                             ->label('Nom')
                             ->required()
                             ->maxLength(255),
-                        Select::make('product_type_id')
-                            ->label('Type de produit')
-                            ->relationship('productType', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->nullable()
-                            ->helperText('Laisser vide pour un modèle global'),
                         Toggle::make('is_default')
                             ->label('Modèle par défaut')
                             ->default(false),
@@ -42,9 +41,9 @@ class QcTemplatesForm
                             ->label('Notes')
                             ->columnSpanFull()
                             ->rows(3),
-                    ])
-                    ->columns(2),
+                    ]),
                 Section::make('Contrôles QC')
+                    ->columnSpanFull()
                     ->schema([
                         Repeater::make('items')
                             ->relationship()
@@ -54,40 +53,68 @@ class QcTemplatesForm
                                     ->label('Contrôle')
                                     ->required()
                                     ->maxLength(255)
-                                    ->columnSpan(2),
-                                TextInput::make('code')
-                                    ->label('Code')
-                                    ->maxLength(255),
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 6,
+                                    ]),
                                 Select::make('input_type')
                                     ->label('Type de saisie')
                                     ->options(QcInputType::class)
                                     ->default(QcInputType::Number)
                                     ->required()
-                                    ->live(),
+                                    ->live()
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 3,
+                                    ]),
                                 TextInput::make('unit')
                                     ->label('Unité')
                                     ->maxLength(20)
                                     ->placeholder('kg, g, pH...')
-                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value),
+                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value)
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 1,
+                                    ]),
                                 TextInput::make('min_value')
                                     ->label('Min')
                                     ->numeric()
                                     ->step(0.001)
-                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value),
+                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value)
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 1,
+                                    ]),
                                 TextInput::make('max_value')
                                     ->label('Max')
                                     ->numeric()
                                     ->step(0.001)
-                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value),
+                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value)
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 1,
+                                    ]),
                                 TextInput::make('target_value')
                                     ->label('Cible')
-                                    ->maxLength(255),
+                                    ->maxLength(255)
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 3,
+                                    ]),
                                 TagsInput::make('options')
                                     ->label('Options')
-                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Select->value),
+                                    ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Select->value)
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 3,
+                                    ]),
                                 Toggle::make('required')
                                     ->label('Obligatoire')
-                                    ->default(true),
+                                    ->default(true)
+                                    ->columnSpan([
+                                        'default' => 1,
+                                        'xl' => 1,
+                                    ]),
                                 TextInput::make('stage')
                                     ->default('final_release')
                                     ->hidden(),
@@ -96,7 +123,11 @@ class QcTemplatesForm
                                     ->default(0)
                                     ->hidden(),
                             ])
-                            ->columns(4)
+                            ->columns([
+                                'default' => 1,
+                                'md' => 2,
+                                'xl' => 12,
+                            ])
                             ->defaultItems(0)
                             ->reorderableWithButtons()
                             ->orderColumn('sort_order')

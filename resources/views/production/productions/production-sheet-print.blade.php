@@ -3,12 +3,18 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Fiche production - {{ $production->batch_number }}</title>
+    @php
+        $permanentBatchNumber = $production->permanent_batch_number ?: '-';
+        $planningBatchNumber = $production->batch_number ?: '-';
+        $productName = $production->product?->name ?? '-';
+    @endphp
+    <title>Fiche Production - {{ $permanentBatchNumber }} - {{ $productName }}</title>
     <style>
         body {
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
             margin: 24px;
             color: #111827;
+            font-size: 14px;
         }
 
         h1, h2 {
@@ -38,7 +44,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 12px;
+            font-size: 13px;
         }
 
         th,
@@ -54,6 +60,24 @@
             font-weight: 600;
         }
 
+        .production-items-table {
+            font-size: 15px;
+        }
+
+        .production-items-table th,
+        .production-items-table td {
+            padding: 10px;
+        }
+
+        .production-items-table .ingredient-cell {
+            font-weight: 700;
+        }
+
+        .production-items-table .qty-cell {
+            font-size: 17px;
+            font-weight: 800;
+        }
+
         .signatures {
             margin-top: 24px;
             display: grid;
@@ -66,6 +90,14 @@
             min-height: 70px;
             padding: 8px;
             font-size: 12px;
+        }
+
+        .comments-box {
+            border: 1px solid #d1d5db;
+            min-height: 110px;
+            padding: 10px;
+            font-size: 12px;
+            white-space: pre-wrap;
         }
 
         .print-controls {
@@ -93,66 +125,50 @@
     </style>
 </head>
 <body>
-    <h1>Fiche production - {{ $production->batch_number }}</h1>
+    <h1>Fiche Production - {{ $permanentBatchNumber }} - {{ $productName }}</h1>
 
     <div class="meta">
-        <div><strong>Produit:</strong> {{ $production->product?->name ?? '-' }}</div>
+        <div><strong>Batch permanent:</strong> {{ $permanentBatchNumber }}</div>
+        <div><strong>Batch planning:</strong> {{ $planningBatchNumber }}</div>
+        <div><strong>Produit:</strong> {{ $productName }}</div>
         <div><strong>Vague:</strong> {{ $production->wave?->name ?? 'Autonome' }}</div>
         <div><strong>Formule:</strong> {{ $production->formula?->name ?? '-' }}</div>
         <div><strong>Statut:</strong> {{ $production->status?->getLabel() ?? '-' }}</div>
         <div><strong>Date production:</strong> {{ $production->production_date?->format('d/m/Y') ?? '-' }}</div>
         <div><strong>Date disponibilite:</strong> {{ $production->ready_date?->format('d/m/Y') ?? '-' }}</div>
         <div><strong>Quantite planifiee:</strong> {{ number_format((float) $production->planned_quantity, 3, ',', ' ') }} kg</div>
-        <div><strong>Unites attendues:</strong> {{ $production->expected_units ?? '-' }}</div>
+        <div><strong>Unites produites (reelles):</strong> {{ $production->actual_units ?? '' }}</div>
     </div>
 
     <h2>Items de production</h2>
-    <table>
+    <table class="production-items-table">
         <thead>
             <tr>
                 <th>Ingredient</th>
                 <th>Phase</th>
                 <th>Quantite calculee (kg)</th>
                 <th>Lot supply</th>
-                <th>Prix ref (EUR/kg)</th>
-                <th>Cout estime (EUR)</th>
             </tr>
         </thead>
         <tbody>
             @if (($masterbatchLine ?? null) !== null)
                 <tr>
-                    <td><strong>Masterbatch {{ $masterbatchLine['masterbatch_batch_number'] ?? '-' }}</strong></td>
+                    <td class="ingredient-cell"><strong>Masterbatch {{ $masterbatchLine['masterbatch_batch_number'] ?? '-' }}</strong></td>
                     <td>{{ (string) ($masterbatchLine['phase'] ?? '-') }} - {{ \App\Enums\Phases::tryFrom((string) ($masterbatchLine['phase'] ?? ''))?->getLabel() ?? '-' }}</td>
-                    <td>{{ number_format((float) ($masterbatchLine['quantity'] ?? 0), 3, ',', ' ') }}</td>
+                    <td class="qty-cell">{{ number_format((float) ($masterbatchLine['quantity'] ?? 0), 3, ',', ' ') }}</td>
                     <td>{{ $masterbatchLine['masterbatch_batch_number'] ?? '-' }}</td>
-                    <td>-</td>
-                    <td>-</td>
                 </tr>
             @endif
             @forelse (($displayItems ?? collect()) as $item)
                 <tr>
-                    <td>{{ $item->ingredient?->name ?? '-' }}</td>
+                    <td class="ingredient-cell">{{ $item->ingredient?->name ?? '-' }}</td>
                     <td>{{ (string) ($item->phase ?? '-') }} - {{ $item->getPhaseLabel() }}</td>
-                    <td>{{ number_format($item->getCalculatedQuantityKg(), 3, ',', ' ') }}</td>
+                    <td class="qty-cell">{{ number_format($item->getCalculatedQuantityKg(), 3, ',', ' ') }}</td>
                     <td>{{ $item->supply_batch_number ?? '-' }}</td>
-                    <td>
-                        @if ($item->getReferenceUnitPrice() !== null)
-                            {{ number_format((float) $item->getReferenceUnitPrice(), 2, ',', ' ') }}
-                        @else
-                            -
-                        @endif
-                    </td>
-                    <td>
-                        @if ($item->getEstimatedCost() !== null)
-                            {{ number_format((float) $item->getEstimatedCost(), 2, ',', ' ') }}
-                        @else
-                            -
-                        @endif
-                    </td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="6">Aucun item de production.</td>
+                    <td colspan="4">Aucun item de production.</td>
                 </tr>
             @endforelse
         </tbody>
@@ -230,7 +246,6 @@
                 <th>Type</th>
                 <th>Tolerance / Cible</th>
                 <th>Fait</th>
-                <th>Non fait</th>
                 <th>Mesure systeme</th>
                 <th>Mesure papier</th>
             </tr>
@@ -250,17 +265,19 @@
                         @endif
                     </td>
                     <td>{{ $check->isDone() ? '[x]' : '[ ]' }}</td>
-                    <td>{{ $check->isDone() ? '[ ]' : '[x]' }}</td>
                     <td>{{ $check->getDisplayValue() ?? '-' }}</td>
-                    <td>....................................</td>
+                    <td></td>
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7">Aucun controle QC.</td>
+                    <td colspan="6">Aucun controle QC.</td>
                 </tr>
             @endforelse
         </tbody>
     </table>
+
+    <h2>Commentaires / Observations</h2>
+    <div class="comments-box">{{ $production->notes ?? '' }}</div>
 
     <div class="signatures">
         <div class="signature-box">

@@ -4,20 +4,18 @@ namespace App\Filament\Resources\Supply\SupplyResource\Pages;
 
 use App\Filament\Resources\Supply\SupplyResource;
 use App\Models\Supply\Supply;
-use Filament\Actions\CreateAction;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Support\Enums\Width;
 use Illuminate\Database\Eloquent\Builder;
 
 class ListSupplies extends ListRecords
 {
     protected static string $resource = SupplyResource::class;
 
-    protected function getHeaderActions(): array
+    public function getMaxContentWidth(): Width|string|null
     {
-        return [
-            CreateAction::make(),
-        ];
+        return Width::Full;
     }
 
     public function getTabs(): array

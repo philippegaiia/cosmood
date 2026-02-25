@@ -17,8 +17,8 @@ it('assigns sequential permanent batch numbers with locking-safe service', funct
 
     $service = app(PermanentBatchNumberService::class);
 
-    expect($service->assignIfMissing($first))->toBe('000001')
-        ->and($service->assignIfMissing($second))->toBe('000002');
+    expect($service->assignIfMissing($first))->toBe('00001')
+        ->and($service->assignIfMissing($second))->toBe('00002');
 });
 
 it('auto assigns permanent batch number when production becomes ongoing', function () {
@@ -30,7 +30,7 @@ it('auto assigns permanent batch number when production becomes ongoing', functi
         'status' => ProductionStatus::Ongoing,
     ]);
 
-    expect($production->fresh()->permanent_batch_number)->toBe('000001');
+    expect($production->fresh()->permanent_batch_number)->toBe('00001');
 });
 
 it('bulk assigns by production chronology and skips pre-numbered records', function () {
@@ -46,7 +46,7 @@ it('bulk assigns by production chronology and skips pre-numbered records', funct
 
     $preNumbered = Production::factory()->confirmed()->create([
         'production_date' => now()->addDays(3)->toDateString(),
-        'permanent_batch_number' => '001200',
+        'permanent_batch_number' => '01200',
     ]);
 
     $assigned = app(PermanentBatchNumberService::class)->assignForProductions([
@@ -56,7 +56,7 @@ it('bulk assigns by production chronology and skips pre-numbered records', funct
     ]);
 
     expect($assigned)->toBe(2)
-        ->and($earlier->fresh()->permanent_batch_number)->toBe('000001')
-        ->and($later->fresh()->permanent_batch_number)->toBe('000002')
-        ->and($preNumbered->fresh()->permanent_batch_number)->toBe('001200');
+        ->and($earlier->fresh()->permanent_batch_number)->toBe('00001')
+        ->and($later->fresh()->permanent_batch_number)->toBe('00002')
+        ->and($preNumbered->fresh()->permanent_batch_number)->toBe('01200');
 });

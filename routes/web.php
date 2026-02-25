@@ -59,6 +59,16 @@ Route::get('/productions/{production}/print-sheet', function (Production $produc
     ]);
 })->middleware('auth')->name('productions.print-sheet');
 
+Route::get('/productions/{production}/follow-sheet', function (Production $production) {
+    $production->load([
+        'product',
+    ]);
+
+    return view('production.productions.production-follow-sheet-print', [
+        'production' => $production,
+    ]);
+})->middleware('auth')->name('productions.follow-sheet');
+
 Route::get('/productions/{production}/sheet-pdf', function (Production $production) {
     $production->load([
         'wave',
@@ -94,7 +104,9 @@ Route::get('/productions/{production}/sheet-pdf', function (Production $producti
         'isPdf' => true,
     ]);
 
-    return $pdf->download('fiche-production-'.$production->batch_number.'.pdf');
+    $pdfBatchNumber = $production->permanent_batch_number ?: $production->batch_number;
+
+    return $pdf->download('fiche-production-'.$pdfBatchNumber.'.pdf');
 })->middleware('auth')->name('productions.sheet-pdf');
 
 $resolveSupplierOrderDocumentData = function (SupplierOrder $supplierOrder): array {

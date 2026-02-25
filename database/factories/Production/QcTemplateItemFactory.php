@@ -20,7 +20,7 @@ class QcTemplateItemFactory extends Factory
     {
         return [
             'qc_template_id' => QcTemplate::factory(),
-            'code' => strtoupper($this->faker->bothify('QC-###')),
+            'code' => null,
             'label' => $this->faker->words(3, true),
             'input_type' => $this->faker->randomElement([
                 QcInputType::Number,

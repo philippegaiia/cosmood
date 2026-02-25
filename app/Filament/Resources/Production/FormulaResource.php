@@ -8,8 +8,10 @@ use App\Filament\Resources\Production\FormulaResource\Pages\EditFormula;
 use App\Filament\Resources\Production\FormulaResource\Pages\ListFormulas;
 use App\Filament\Resources\Production\FormulaResource\Pages\ViewFormula;
 use App\Models\Production\Formula;
+use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
 use App\Models\Supply\Ingredient;
+use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -25,6 +27,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
@@ -37,6 +40,7 @@ use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\DB;
 
 class FormulaResource extends Resource
 {
@@ -54,6 +58,12 @@ class FormulaResource extends Resource
         return $schema
             ->components([
                 Section::make('Détails Formule')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
                     ->schema([
                         TextInput::make('name')
                             ->unique(Formula::class, ignoreRecord: true)
@@ -75,8 +85,9 @@ class FormulaResource extends Resource
                         TextInput::make('dip_number')
                             ->maxLength(50),
 
-                        Toggle::make('is_active')
-                            ->default(true),
+                        Toggle::make('is_soap')
+                            ->label('Savon saponifie (soude/potasse)')
+                            ->helperText('Active uniquement le controle 100% pour les vrais savons saponifies. Laisser decoche pour bases deja saponifiees (noodles).'),
 
                         Fieldset::make('Dates')
                             ->schema([
@@ -85,6 +96,8 @@ class FormulaResource extends Resource
                                     ->default(now())
                                     ->native(false)
                                     ->weekStartsOnMonday(),
+                                Toggle::make('is_active')
+                                    ->default(true),
 
                             ])->columnSpanFull(),
 
@@ -95,50 +108,55 @@ class FormulaResource extends Resource
                             ->collapsed()
                             ->columnSpanFull(),
 
-                    ])
-                    ->columns(4)
-                    ->columnSpanFull(),
-                //  ]);
-                Section::make()
+                    ]),
+                Section::make('Composition')
                     ->hiddenOn('create')
-                    ->columns(1)
                     ->columnSpanFull()
                     ->schema([
                         Fieldset::make('Totaux')
+                            ->columnSpanFull()
+                            ->columns([
+                                'default' => 1,
+                                'md' => 2,
+                            ])
                             ->schema([
                                 TextEntry::make('total_saponified')
-                                    ->state(function ($get) {
-                                        $total = 0;
+                                    ->label('Total saponifie')
+                                    ->state(function (Get $get): string {
+                                        $shouldApplyControl = self::shouldApplySaponifiedControl(
+                                            (bool) ($get('is_soap') ?? false),
+                                        );
 
-                                        foreach ($get('formulaItems') as $item) {
-                                            if ($item['phase'] === Phases::Saponification->value) {
-                                                $total += (int) $item['percentage_of_oils'];
-                                            }
-
+                                        if (! $shouldApplyControl) {
+                                            return '-';
                                         }
 
-                                        return $total;
-                                    }),
+                                        $total = self::calculateSaponifiedTotal($get('formulaItems') ?? []);
 
-                                TextEntry::make('total_formula')
-                                    ->state(function ($get) {
-                                        $total = 0;
-                                        foreach ($get('formulaItems') as $item) {
-                                            if (($item['phase'] ?? null) === Phases::Packaging->value) {
-                                                continue;
-                                            }
+                                        return number_format($total, 2, '.', ' ').' %';
+                                    })
+                                    ->color(function (Get $get): string {
+                                        $shouldApplyControl = self::shouldApplySaponifiedControl(
+                                            (bool) ($get('is_soap') ?? false),
+                                        );
 
-                                            $total += (int) $item['percentage_of_oils'];
-
+                                        if (! $shouldApplyControl) {
+                                            return 'gray';
                                         }
-                                        if ($total !== 0) {
-                                            $totalformula = 100 / $total;
 
-                                            return $totalformula;
-                                        }
-                                    }),
+                                        $total = self::calculateSaponifiedTotal($get('formulaItems') ?? []);
+
+                                        return abs($total - 100.0) < 0.01 ? 'success' : 'danger';
+                                    })
+                                    ->helperText(fn (Get $get): string => self::shouldApplySaponifiedControl(
+                                        (bool) ($get('is_soap') ?? false),
+                                    )
+                                        ? 'Doit etre a 100 % (alerte rouge si ecart).'
+                                        : 'Controle desactive: cochez "Savon saponifie" pour activer.'),
                             ]),
                         Section::make('Items Formule')
+                            ->columnSpanFull()
+                            ->columns(1)
                             ->schema([
                                 Repeater::make('formulaItems')
                                     ->relationship()
@@ -157,7 +175,10 @@ class FormulaResource extends Resource
                                             ->required()
                                             ->disableOptionsWhenSelectedInSiblingRepeaterItems()
                                             ->native(false)
-                                            ->columnSpan(6),
+                                            ->columnSpan([
+                                                'default' => 1,
+                                                'xl' => 5,
+                                            ]),
 
                                         TextInput::make('percentage_of_oils')
                                             ->label(function (Get $get): string {
@@ -179,20 +200,29 @@ class FormulaResource extends Resource
                                                 $set('percentage_of_total', 'percentage_of_oils');
                                             })
                                             ->default(1)
-                                            ->columnSpan(3),
+                                            ->columnSpan([
+                                                'default' => 1,
+                                                'xl' => 2,
+                                            ]),
 
                                         Select::make('phase')
                                             ->label('Phase')
                                             ->options(Phases::class)
                                             ->default(Phases::Saponification)
                                             ->native(false)
-                                            ->columnSpan(4),
+                                            ->columnSpan([
+                                                'default' => 1,
+                                                'xl' => 3,
+                                            ]),
 
                                         Toggle::make('organic')
                                             ->label('Bio')
                                             // ->default(true)
                                             ->inline(false)
-                                            ->columnSpan(3),
+                                            ->columnSpan([
+                                                'default' => 1,
+                                                'xl' => 1,
+                                            ]),
 
                                         TextEntry::make('percentage_of_total')
                                             ->label('Total')
@@ -200,9 +230,17 @@ class FormulaResource extends Resource
                                             ->state(function (Get $get): string {
                                                 return number_format($get('percentage_of_oils'), 2);
                                             })
+                                            ->columnSpan([
+                                                'default' => 1,
+                                                'xl' => 1,
+                                            ])
                                             ->live(),
 
-                                    ])->columns(18)
+                                    ])->columns([
+                                        'default' => 1,
+                                        'md' => 2,
+                                        'xl' => 12,
+                                    ])
                                     ->defaultItems(1)
                                     ->reorderableWithButtons()
                                     ->orderColumn('sort')
@@ -271,6 +309,7 @@ class FormulaResource extends Resource
             ])
             ->recordActions([
                 ActionGroup::make([
+                    self::makeDuplicateAction(),
                     ViewAction::make(),
                     EditAction::make(),
                 ]),
@@ -308,5 +347,67 @@ class FormulaResource extends Resource
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
+    }
+
+    private static function calculateSaponifiedTotal(array $items): float
+    {
+        $total = 0.0;
+
+        foreach ($items as $item) {
+            if (($item['phase'] ?? null) !== Phases::Saponification->value) {
+                continue;
+            }
+
+            $total += (float) ($item['percentage_of_oils'] ?? 0);
+        }
+
+        return $total;
+    }
+
+    private static function shouldApplySaponifiedControl(bool $isSoap): bool
+    {
+        return $isSoap;
+    }
+
+    public static function makeDuplicateAction(): Action
+    {
+        return Action::make('duplicate')
+            ->label('Dupliquer')
+            ->icon('heroicon-o-document-duplicate')
+            ->color('gray')
+            ->requiresConfirmation()
+            ->action(function (Formula $record): void {
+                self::duplicateFormula($record);
+            });
+    }
+
+    private static function duplicateFormula(Formula $record): Formula
+    {
+        $duplicate = DB::transaction(function () use ($record): Formula {
+            $duplicate = $record->replicate();
+            $duplicate->name = $record->name.' (copie)';
+            $duplicate->slug = null;
+            $duplicate->code = null;
+            $duplicate->save();
+
+            $record->formulaItems()
+                ->orderBy('sort')
+                ->get()
+                ->each(function (FormulaItem $item) use ($duplicate): void {
+                    $itemDuplicate = $item->replicate();
+                    $itemDuplicate->formula_id = $duplicate->id;
+                    $itemDuplicate->save();
+                });
+
+            return $duplicate;
+        });
+
+        Notification::make()
+            ->title('Formule dupliquee')
+            ->body('Nouvelle formule: '.$duplicate->name)
+            ->success()
+            ->send();
+
+        return $duplicate;
     }
 }

@@ -47,9 +47,9 @@ class ProductType extends Model
         return $this->hasMany(Product::class);
     }
 
-    public function qcTemplates(): HasMany
+    public function qcTemplate(): BelongsTo
     {
-        return $this->hasMany(QcTemplate::class);
+        return $this->belongsTo(QcTemplate::class);
     }
 
     public function defaultPreset(): ?BatchSizePreset

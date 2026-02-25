@@ -16,7 +16,7 @@ class BatchSizePresetSeeder extends Seeder
         $productTypes = ProductType::query()->get();
 
         if ($productTypes->isEmpty()) {
-            $productTypes = ProductType::factory()->count(3)->create();
+            return;
         }
 
         foreach ($productTypes as $productType) {

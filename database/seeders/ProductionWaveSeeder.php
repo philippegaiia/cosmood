@@ -12,6 +12,10 @@ class ProductionWaveSeeder extends Seeder
      */
     public function run(): void
     {
+        if (ProductionWave::query()->exists()) {
+            return;
+        }
+
         ProductionWave::factory()->draft()->count(2)->create();
         ProductionWave::factory()->approved()->count(2)->create();
         ProductionWave::factory()->inProgress()->create();

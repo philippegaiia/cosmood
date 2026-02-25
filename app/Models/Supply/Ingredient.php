@@ -30,6 +30,7 @@ class Ingredient extends Model
         'is_manufactured',
         'description',
         'price',
+        'stock_min',
         'deleted_at',
         'created_at',
         'updated_at',
@@ -39,6 +40,7 @@ class Ingredient extends Model
     {
         return [
             'price' => 'decimal:2',
+            'stock_min' => 'decimal:3',
             'is_manufactured' => 'boolean',
         ];
     }
@@ -51,6 +53,16 @@ class Ingredient extends Model
     public function supplier_listings(): HasMany
     {
         return $this->hasMany(SupplierListing::class);
+    }
+
+    public function getTotalAvailableStock(): float
+    {
+        $total = Supply::query()
+            ->whereHas('supplierListing', fn ($query) => $query->where('ingredient_id', $this->id))
+            ->selectRaw('COALESCE(SUM(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)), 0) as total')
+            ->value('total');
+
+        return round((float) ($total ?? 0), 3);
     }
 
     /*public function formula_items(): HasMany

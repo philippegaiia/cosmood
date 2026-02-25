@@ -6,6 +6,7 @@ use App\Filament\Resources\Production\ProductResource\Pages\CreateProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\ListProducts;
 use App\Models\Production\Product;
+use App\Models\Production\ProductType;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -17,6 +18,8 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
@@ -40,8 +43,45 @@ class ProductResource extends Resource
         return $schema
             ->components([
                 Select::make('product_category_id')
+                    ->label('Catégorie')
                     ->relationship('productCategory', 'name')
                     ->native(false)
+                    ->live()
+                    ->afterStateUpdated(function (Set $set): void {
+                        $set('product_type_id', null);
+                    })
+                    ->helperText('La catégorie détermine les types disponibles.')
+                    ->required(),
+
+                Select::make('product_type_id')
+                    ->label('Type de produit')
+                    ->options(function (Get $get): array {
+                        return self::getProductTypeOptionsForCategory((int) ($get('product_category_id') ?? 0));
+                    })
+                    ->searchable()
+                    ->preload()
+                    ->native(false)
+                    ->placeholder(function (Get $get): string {
+                        if (blank($get('product_category_id'))) {
+                            return 'Choisissez d\'abord une catégorie';
+                        }
+
+                        return 'Sélectionnez un type';
+                    })
+                    ->helperText(function (Get $get): ?string {
+                        $categoryId = (int) ($get('product_category_id') ?? 0);
+
+                        if ($categoryId <= 0) {
+                            return 'Sélectionnez la catégorie avant le type.';
+                        }
+
+                        if (self::getProductTypeOptionsForCategory($categoryId) === []) {
+                            return 'Aucun type défini pour cette catégorie. Créez-le dans Types de Produit.';
+                        }
+
+                        return 'Le type pilote les presets de batch et le modèle QC.';
+                    })
+                    ->disabled(fn (Get $get): bool => blank($get('product_category_id')))
                     ->required(),
 
                 TextInput::make('name')
@@ -89,6 +129,10 @@ class ProductResource extends Resource
                     ->sortable(),
                 TextColumn::make('product_category.name')
                     ->sortable(),
+                TextColumn::make('productType.name')
+                    ->label('Type')
+                    ->sortable()
+                    ->placeholder('-'),
                 TextColumn::make('formulas.name')
                     ->badge(),
                 TextColumn::make('code')
@@ -162,5 +206,18 @@ class ProductResource extends Resource
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
+    }
+
+    private static function getProductTypeOptionsForCategory(int $categoryId): array
+    {
+        if ($categoryId <= 0) {
+            return [];
+        }
+
+        return ProductType::query()
+            ->where('product_category_id', $categoryId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
     }
 }

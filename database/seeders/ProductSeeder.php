@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Production\Product;
+use App\Models\Production\ProductCategory;
 use Illuminate\Database\Seeder;
 
 class ProductSeeder extends Seeder
@@ -12,6 +13,27 @@ class ProductSeeder extends Seeder
      */
     public function run(): void
     {
+        $productCategories = [
+            ['id' => 1, 'name' => 'Savons cosmétiques', 'is_active' => 1],
+            ['id' => 2, 'name' => 'Soins de la peau', 'is_active' => 1],
+            ['id' => 3, 'name' => 'Déodorants', 'is_active' => 1],
+            ['id' => 4, 'name' => 'Accessoires hygiène', 'is_active' => 1],
+            ['id' => 5, 'name' => 'Accessoires savonnerie', 'is_active' => 1],
+            ['id' => 6, 'name' => 'Soins capillaires', 'is_active' => 1],
+            ['id' => 7, 'name' => 'Shampoings', 'is_active' => 1],
+            ['id' => 8, 'name' => 'Autres', 'is_active' => 1],
+            ['id' => 9, 'name' => 'Savons ménagers', 'is_active' => 1],
+            ['id' => 10, 'name' => 'Arompathérapie', 'is_active' => 1],
+            ['id' => 11, 'name' => 'Hygiène bucco-dentaire', 'is_active' => 1],
+        ];
+
+        foreach ($productCategories as $category) {
+            ProductCategory::query()->updateOrCreate(
+                ['id' => $category['id']],
+                $category,
+            );
+        }
+
         $products = [
             ['id' => '1', 'product_category_id' => '1', 'code' => '001', 'name' => 'Savon très doux',  'launch_date' => '2011-03-21', 'net_weight' => '100.000', 'ean_code' => '1234567891234', 'wp_code' => '1', 'description' => null, 'is_active' => '0', 'deleted_at' => null, 'created_at' => '2021-01-29 04:25:10', 'updated_at' => '2021-01-29 04:25:10'],
             ['id' => '2', 'product_category_id' => '1', 'code' => '002', 'name' => 'Savon nature',  'launch_date' => '2021-01-29', 'net_weight' => '100.000', 'ean_code' => '1234567894561236', 'wp_code' => '2', 'description' => null, 'is_active' => '0', 'deleted_at' => null, 'created_at' => '2021-01-29 04:25:55', 'updated_at' => '2021-01-29 04:25:55'],

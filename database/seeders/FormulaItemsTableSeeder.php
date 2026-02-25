@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
 
 class FormulaItemsTableSeeder extends Seeder
 {
@@ -13,10 +14,7 @@ class FormulaItemsTableSeeder extends Seeder
      */
     public function run()
     {
-
-        \DB::table('formula_items')->delete();
-
-        \DB::table('formula_items')->insert([
+        $formulaItems = [
             0 => [
                 'id' => 1,
                 'formula_id' => 1,
@@ -221,7 +219,14 @@ class FormulaItemsTableSeeder extends Seeder
                 'created_at' => '2024-02-18 17:41:08',
                 'updated_at' => '2024-02-18 17:41:33',
             ],
-        ]);
+        ];
+
+        foreach ($formulaItems as $formulaItem) {
+            DB::table('formula_items')->updateOrInsert(
+                ['id' => $formulaItem['id']],
+                $formulaItem,
+            );
+        }
 
     }
 }

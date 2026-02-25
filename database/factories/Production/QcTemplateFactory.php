@@ -2,7 +2,6 @@
 
 namespace Database\Factories\Production;
 
-use App\Models\Production\ProductType;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -18,7 +17,6 @@ class QcTemplateFactory extends Factory
     public function definition(): array
     {
         return [
-            'product_type_id' => ProductType::factory(),
             'name' => 'QC '.$this->faker->words(2, true),
             'is_default' => false,
             'is_active' => true,
@@ -29,7 +27,6 @@ class QcTemplateFactory extends Factory
     public function globalDefault(): static
     {
         return $this->state(fn (array $attributes): array => [
-            'product_type_id' => null,
             'is_default' => true,
         ]);
     }

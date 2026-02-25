@@ -19,6 +19,7 @@ class Formula extends Model
     {
         return [
             'is_active' => 'boolean',
+            'is_soap' => 'boolean',
             'date_of_creation' => 'date',
         ];
     }

@@ -14,7 +14,7 @@ class PermanentBatchNumberService
 {
     private const SEQUENCE_NAME = 'production_permanent_batch';
 
-    private const SERIAL_PADDING = 6;
+    private const SERIAL_PADDING = 5;
 
     /**
      * Assigns a permanent number to a production when eligible and missing.

@@ -7,6 +7,7 @@ use App\Enums\RequirementStatus;
 use App\Enums\SizingMode;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,31 @@ class Production extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (Production $production): void {
+            if ($production->isDirty('ready_date') && filled($production->ready_date)) {
+                return;
+            }
+
+            if (! $production->production_date) {
+                return;
+            }
+
+            $shouldRefreshReadyDate =
+                ! filled($production->ready_date)
+                || $production->isDirty('production_date')
+                || $production->isDirty('product_type_id');
+
+            if (! $shouldRefreshReadyDate) {
+                return;
+            }
+
+            $production->ready_date = self::estimateReadyDate(
+                $production->production_date,
+                $production->resolveProductTypeSlug(),
+                $production->resolveProductTypeName(),
+            )?->toDateString();
+        });
+
         static::updating(function (Production $production): void {
             if (! $production->isDirty('status')) {
                 return;
@@ -254,5 +280,49 @@ class Production extends Model
     public static function allowedTransitionsFor(ProductionStatus $from): array
     {
         return array_merge([$from], self::transitionMap()[$from->value] ?? []);
+    }
+
+    public function resolveProductTypeSlug(): string
+    {
+        if ($this->relationLoaded('productType') && $this->productType) {
+            return strtolower((string) ($this->productType->slug ?? ''));
+        }
+
+        if (! $this->product_type_id) {
+            return '';
+        }
+
+        return strtolower((string) (ProductType::query()->find($this->product_type_id)?->slug ?? ''));
+    }
+
+    public function resolveProductTypeName(): string
+    {
+        if ($this->relationLoaded('productType') && $this->productType) {
+            return strtolower((string) ($this->productType->name ?? ''));
+        }
+
+        if (! $this->product_type_id) {
+            return '';
+        }
+
+        return strtolower((string) (ProductType::query()->find($this->product_type_id)?->name ?? ''));
+    }
+
+    public static function estimateReadyDate(Carbon|string $productionDate, string $productTypeSlug = '', string $productTypeName = ''): Carbon
+    {
+        $baseDate = $productionDate instanceof Carbon
+            ? $productionDate->copy()->startOfDay()
+            : Carbon::parse($productionDate)->startOfDay();
+
+        $slug = strtolower($productTypeSlug);
+        $name = strtolower($productTypeName);
+
+        $isSoap = str_contains($slug, 'soap') || str_contains($slug, 'savon') || str_contains($name, 'soap') || str_contains($name, 'savon');
+
+        if ($isSoap) {
+            return $baseDate->addDays(35);
+        }
+
+        return $baseDate->addDays(2);
     }
 }

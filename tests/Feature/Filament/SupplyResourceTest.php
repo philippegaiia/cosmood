@@ -26,3 +26,7 @@ it('loads supplies list page successfully', function () {
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$supplyA, $supplyB]);
 });
+
+it('disables manual supply creation from inventory resource', function () {
+    expect(\App\Filament\Resources\Supply\SupplyResource::canCreate())->toBeFalse();
+});

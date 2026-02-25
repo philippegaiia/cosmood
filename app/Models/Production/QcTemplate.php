@@ -4,7 +4,6 @@ namespace App\Models\Production;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -25,9 +24,9 @@ class QcTemplate extends Model
         ];
     }
 
-    public function productType(): BelongsTo
+    public function productTypes(): HasMany
     {
-        return $this->belongsTo(ProductType::class);
+        return $this->hasMany(ProductType::class);
     }
 
     public function items(): HasMany

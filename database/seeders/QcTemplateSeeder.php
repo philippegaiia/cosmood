@@ -29,20 +29,22 @@ class QcTemplateSeeder extends Seeder
         if ($soapType) {
             $soapTemplate = QcTemplate::query()->updateOrCreate(
                 [
-                    'product_type_id' => $soapType->id,
                     'name' => 'QC Soap Bars',
                 ],
                 [
-                    'is_default' => true,
+                    'is_default' => false,
                     'is_active' => true,
                 ]
             );
+
+            $soapType->update([
+                'qc_template_id' => $soapTemplate->id,
+            ]);
 
             $soapTemplate->items()->delete();
 
             $soapTemplate->items()->createMany([
                 [
-                    'code' => 'WEIGHT_AVG',
                     'label' => 'Poids unitaire moyen',
                     'input_type' => QcInputType::Number,
                     'unit' => 'g',
@@ -55,7 +57,6 @@ class QcTemplateSeeder extends Seeder
                     'sort_order' => 1,
                 ],
                 [
-                    'code' => 'PH_CHECK',
                     'label' => 'pH à 10%',
                     'input_type' => QcInputType::Number,
                     'unit' => 'pH',
@@ -68,7 +69,6 @@ class QcTemplateSeeder extends Seeder
                     'sort_order' => 2,
                 ],
                 [
-                    'code' => 'ODOUR_OK',
                     'label' => 'Odeur conforme',
                     'input_type' => QcInputType::Boolean,
                     'unit' => null,
@@ -86,20 +86,22 @@ class QcTemplateSeeder extends Seeder
         if ($balmType) {
             $balmTemplate = QcTemplate::query()->updateOrCreate(
                 [
-                    'product_type_id' => $balmType->id,
                     'name' => 'QC Balms',
                 ],
                 [
-                    'is_default' => true,
+                    'is_default' => false,
                     'is_active' => true,
                 ]
             );
+
+            $balmType->update([
+                'qc_template_id' => $balmTemplate->id,
+            ]);
 
             $balmTemplate->items()->delete();
 
             $balmTemplate->items()->createMany([
                 [
-                    'code' => 'NET_WEIGHT',
                     'label' => 'Poids net',
                     'input_type' => QcInputType::Number,
                     'unit' => 'g',
@@ -112,7 +114,6 @@ class QcTemplateSeeder extends Seeder
                     'sort_order' => 1,
                 ],
                 [
-                    'code' => 'ODOUR_OK',
                     'label' => 'Odeur conforme',
                     'input_type' => QcInputType::Boolean,
                     'unit' => null,
@@ -125,7 +126,6 @@ class QcTemplateSeeder extends Seeder
                     'sort_order' => 2,
                 ],
                 [
-                    'code' => 'TEXTURE',
                     'label' => 'Texture homogène',
                     'input_type' => QcInputType::Text,
                     'unit' => null,
@@ -142,7 +142,6 @@ class QcTemplateSeeder extends Seeder
 
         $globalTemplate = QcTemplate::query()->updateOrCreate(
             [
-                'product_type_id' => null,
                 'name' => 'QC Global Standard',
             ],
             [
@@ -155,7 +154,6 @@ class QcTemplateSeeder extends Seeder
 
         $globalTemplate->items()->createMany([
             [
-                'code' => 'VISUAL',
                 'label' => 'Aspect visuel conforme',
                 'input_type' => QcInputType::Boolean,
                 'unit' => null,

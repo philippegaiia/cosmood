@@ -17,7 +17,7 @@ class TaskTemplateSeeder extends Seeder
         $productTypes = ProductType::query()->take(3)->get();
 
         if ($productTypes->isEmpty()) {
-            $productTypes = ProductType::factory()->count(3)->create();
+            return;
         }
 
         foreach ($productTypes as $productType) {

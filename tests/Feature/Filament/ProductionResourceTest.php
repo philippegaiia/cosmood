@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Models\Production\BatchSizePreset;
@@ -246,6 +247,208 @@ describe('Production - Relationships', function () {
                 ->contains(fn (array $item): bool => ($item['supply_batch_number'] ?? null) === 'LOT-UI-001');
         });
     });
+
+    it('keeps the original product when editing a production', function () {
+        $this->actingAs($this->user);
+
+        $originalProduct = Product::factory()->create();
+        Formula::factory()->create([
+            'product_id' => $originalProduct->id,
+        ]);
+
+        $replacementProduct = Product::factory()->create();
+        Formula::factory()->create([
+            'product_id' => $replacementProduct->id,
+        ]);
+
+        $production = Production::factory()->create([
+            'product_id' => $originalProduct->id,
+            'formula_id' => $originalProduct->formulas()->value('id'),
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->set('data.product_id', $replacementProduct->id)
+            ->call('save');
+
+        expect($production->fresh()->product_id)->toBe($originalProduct->id);
+    });
+
+    it('refreshes permanent batch number in edit form after moving to ongoing', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->confirmed()->create([
+            'permanent_batch_number' => null,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->set('data.status', ProductionStatus::Ongoing->value)
+            ->call('save')
+            ->assertSet('data.permanent_batch_number', '00001');
+
+        expect($production->fresh()->permanent_batch_number)->toBe('00001');
+    });
+
+    it('asks confirmation on save when soap production total saponified is not 100 percent', function () {
+        $this->actingAs($this->user);
+
+        $soapType = ProductType::factory()->create([
+            'name' => 'Savon solide',
+            'slug' => 'savon-solide',
+        ]);
+        $product = Product::factory()->create([
+            'product_type_id' => $soapType->id,
+        ]);
+        $formula = Formula::factory()->create([
+            'product_id' => $product->id,
+            'is_soap' => true,
+        ]);
+
+        $production = Production::factory()->create([
+            'product_id' => $product->id,
+            'formula_id' => $formula->id,
+            'product_type_id' => $soapType->id,
+        ]);
+
+        $production->productionItems()->delete();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'phase' => Phases::Saponification->value,
+            'percentage_of_oils' => 40,
+        ]);
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'phase' => Phases::Saponification->value,
+            'percentage_of_oils' => 30,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->fillForm([
+                'notes' => 'Save should require confirmation',
+            ])
+            ->call('save')
+            ->assertNotified('Total saponifie different de 100%');
+
+        expect($production->fresh()->notes)->not->toBe('Save should require confirmation');
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->fillForm([
+                'notes' => 'Save should require confirmation',
+            ])
+            ->call('save')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        expect($production->fresh()->notes)->toBe('Save should require confirmation');
+    });
+
+    it('does not ask confirmation when formula control is disabled, even with saponification lines', function () {
+        $this->actingAs($this->user);
+
+        $balmType = ProductType::factory()->create([
+            'name' => 'Baume',
+            'slug' => 'baume',
+        ]);
+        $product = Product::factory()->create([
+            'product_type_id' => $balmType->id,
+        ]);
+        $formula = Formula::factory()->create([
+            'product_id' => $product->id,
+            'is_soap' => false,
+        ]);
+
+        $production = Production::factory()->create([
+            'product_id' => $product->id,
+            'formula_id' => $formula->id,
+            'product_type_id' => $balmType->id,
+        ]);
+
+        $production->productionItems()->delete();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'phase' => Phases::Saponification->value,
+            'percentage_of_oils' => 40,
+        ]);
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'phase' => Phases::Saponification->value,
+            'percentage_of_oils' => 30,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->fillForm([
+                'notes' => 'Save without confirmation',
+            ])
+            ->call('save')
+            ->assertNotNotified('Total saponifie different de 100%')
+            ->assertHasNoFormErrors();
+
+        expect($production->fresh()->notes)->toBe('Save without confirmation');
+    });
+
+    it('asks confirmation on save when linked formula has manual soap control enabled', function () {
+        $this->actingAs($this->user);
+
+        $balmType = ProductType::factory()->create([
+            'name' => 'Baume',
+            'slug' => 'baume',
+        ]);
+        $product = Product::factory()->create([
+            'product_type_id' => $balmType->id,
+        ]);
+        $formula = Formula::factory()->create([
+            'product_id' => $product->id,
+            'is_soap' => true,
+        ]);
+
+        $production = Production::factory()->create([
+            'product_id' => $product->id,
+            'formula_id' => $formula->id,
+            'product_type_id' => $balmType->id,
+        ]);
+
+        $production->productionItems()->delete();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'phase' => Phases::Packaging->value,
+            'percentage_of_oils' => 1,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->fillForm([
+                'notes' => 'Formula flag should require confirmation',
+            ])
+            ->call('save')
+            ->assertNotified('Total saponifie different de 100%');
+
+        expect($production->fresh()->notes)->not->toBe('Formula flag should require confirmation');
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->fillForm([
+                'notes' => 'Formula flag should require confirmation',
+            ])
+            ->call('save')
+            ->call('save')
+            ->assertHasNoFormErrors();
+
+        expect($production->fresh()->notes)->toBe('Formula flag should require confirmation');
+    });
 });
 
 describe('Production - Soft Deletes', function () {
@@ -271,8 +474,16 @@ describe('Production sheet print route', function () {
     it('renders printable production sheet with items tasks and qc', function () {
         $this->actingAs($this->user);
 
+        $product = Product::factory()->create([
+            'name' => 'Savon Tres Doux',
+        ]);
+
         $production = Production::factory()->create([
+            'product_id' => $product->id,
             'batch_number' => 'B-PRINT-001',
+            'permanent_batch_number' => '00042',
+            'actual_units' => 243,
+            'notes' => 'Verifier visuellement la couleur avant emballage.',
         ]);
 
         ProductionItem::factory()->create([
@@ -293,9 +504,19 @@ describe('Production sheet print route', function () {
 
         $response
             ->assertOk()
-            ->assertSee('Fiche production - B-PRINT-001')
+            ->assertSee('Fiche Production - 00042 - Savon Tres Doux')
+            ->assertSee('Batch planning:')
+            ->assertSee('B-PRINT-001')
+            ->assertSee('Unites produites (reelles):')
+            ->assertSee('243')
             ->assertSee('Melange cuve')
-            ->assertSee('Poids net');
+            ->assertSee('Poids net')
+            ->assertDontSee('Prix ref (EUR/kg)')
+            ->assertDontSee('Cout estime (EUR)')
+            ->assertDontSee('Non fait')
+            ->assertDontSee('....................................')
+            ->assertSee('Commentaires / Observations')
+            ->assertSee('Verifier visuellement la couleur avant emballage.');
     });
 
     it('exports production sheet as pdf', function () {
@@ -310,6 +531,34 @@ describe('Production sheet print route', function () {
         $response
             ->assertOk()
             ->assertHeader('content-type', 'application/pdf');
+    });
+
+    it('renders follow sheet with six secondary crate labels in two rows', function () {
+        $this->actingAs($this->user);
+
+        $product = Product::factory()->create([
+            'name' => 'Baume Mains',
+        ]);
+
+        $production = Production::factory()->create([
+            'product_id' => $product->id,
+            'batch_number' => 'T01234',
+            'permanent_batch_number' => '00111',
+            'expected_units' => 320,
+            'production_date' => '2026-02-25',
+        ]);
+
+        $response = $this->get(route('productions.follow-sheet', $production));
+
+        $response
+            ->assertOk()
+            ->assertSee('Fiche de suivi - Baume Mains - 00111')
+            ->assertSee('Date de production: 25/02/2026 - Quantité attendue: 320 - Quantité réelle:')
+            ->assertSee('Référence planning: T01234');
+
+        $content = $response->getContent();
+
+        expect(substr_count($content, 'Baume Mains - 00111'))->toBeGreaterThanOrEqual(7);
     });
 
     it('shows collapsed masterbatch line and traceability details in production sheet', function () {

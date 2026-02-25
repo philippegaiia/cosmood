@@ -14,10 +14,7 @@ class FormulasTableSeeder extends Seeder
      */
     public function run()
     {
-
-        DB::table('formulas')->delete();
-
-        DB::table('formulas')->insert([
+        $formulas = [
             0 => [
                 'id' => 1,
                 'name' => 'Savon Très Doux',
@@ -46,7 +43,14 @@ class FormulasTableSeeder extends Seeder
                 'created_at' => '2024-02-18 17:38:24',
                 'updated_at' => '2024-02-18 17:41:33',
             ],
-        ]);
+        ];
+
+        foreach ($formulas as $formula) {
+            DB::table('formulas')->updateOrInsert(
+                ['id' => $formula['id']],
+                $formula,
+            );
+        }
 
     }
 }

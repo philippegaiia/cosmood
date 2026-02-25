@@ -26,6 +26,11 @@ class ProductTypesTable
                     ->label('Catégorie')
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('qcTemplate.name')
+                    ->label('Modèle QC')
+                    ->badge()
+                    ->placeholder('-')
+                    ->sortable(),
                 TextColumn::make('sizing_mode')
                     ->label('Mode de calcul')
                     ->badge()

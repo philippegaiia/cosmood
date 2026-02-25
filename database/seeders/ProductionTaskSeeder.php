@@ -15,6 +15,10 @@ class ProductionTaskSeeder extends Seeder
      */
     public function run(): void
     {
+        if (ProductionTask::query()->exists()) {
+            return;
+        }
+
         $productions = Production::query()
             ->whereIn('status', [
                 ProductionStatus::Confirmed,
@@ -25,13 +29,13 @@ class ProductionTaskSeeder extends Seeder
             ->get();
 
         if ($productions->isEmpty()) {
-            $productions = Production::factory()->count(12)->confirmed()->create();
+            return;
         }
 
         $taskTypes = ProductionTaskType::query()->get();
 
         if ($taskTypes->isEmpty()) {
-            $taskTypes = ProductionTaskType::factory()->count(5)->create();
+            return;
         }
 
         foreach ($productions as $production) {

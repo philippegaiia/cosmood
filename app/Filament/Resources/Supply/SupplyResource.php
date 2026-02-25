@@ -2,7 +2,6 @@
 
 namespace App\Filament\Resources\Supply;
 
-use App\Filament\Resources\Supply\SupplyResource\Pages\CreateSupply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
@@ -19,9 +18,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ToggleButtons;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\Summarizers\Sum;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
@@ -42,44 +41,78 @@ class SupplyResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-c-book-open';
 
+    public static function canCreate(): bool
+    {
+        return false;
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema
             ->components([
-                Select::make('supplier_listing_id')
-                    ->label('Ingrédient')
-                    ->relationship('supplierListing', 'name')
-                    ->getOptionLabelFromRecordUsing(fn (Model $record) => "{$record->name} {$record->unit_weight}kg {$record->unit_of_measure} - {$record->supplier->name}")
-                    ->native(false)
-                    ->searchable()
-                    ->preload()
-                    ->required(),
+                Section::make('Lot et source')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 3,
+                    ])
+                    ->schema([
+                        Select::make('supplier_listing_id')
+                            ->label('Ingrédient')
+                            ->relationship('supplierListing', 'name')
+                            ->getOptionLabelFromRecordUsing(fn (Model $record) => trim("{$record->name} ({$record->unit_weight} {$record->unit_of_measure}) - {$record->supplier->name}"))
+                            ->native(false)
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+                        TextInput::make('order_ref')
+                            ->label('Réf commande')
+                            ->maxLength(255),
+                        TextInput::make('batch_number')
+                            ->label('N° lot')
+                            ->maxLength(255),
+                    ]),
 
-                TextInput::make('order_ref')
-                    ->maxLength(255),
+                Section::make('Quantités')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
+                    ->schema([
+                        TextInput::make('initial_quantity')
+                            ->label('Qté initiale')
+                            ->numeric(),
+                        TextInput::make('quantity_in')
+                            ->label('Qté reçue')
+                            ->numeric(),
+                        TextInput::make('quantity_out')
+                            ->label('Qté consommée')
+                            ->numeric(),
+                        ToggleButtons::make('is_in_stock')
+                            ->label('En stock')
+                            ->inline(false)
+                            ->boolean()
+                            ->grouped(),
+                    ]),
 
-                TextInput::make('batch_number')
-                    ->maxLength(255),
-
-                TextInput::make('initial_quantity')
-                    ->numeric(),
-
-                TextInput::make('quantity_in')
-                    ->numeric(),
-
-                TextInput::make('quantity_out')
-                    ->numeric(),
-
-                TextInput::make('unit_price')
-                    ->numeric(),
-
-                DatePicker::make('expiry_date'),
-                DatePicker::make('delivery_date'),
-                ToggleButtons::make('is_in_stock')
-                    ->label('En stock')
-                    ->inline(false)
-                    ->boolean()
-                    ->grouped(),
+                Section::make('Prix et dates')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 3,
+                    ])
+                    ->schema([
+                        TextInput::make('unit_price')
+                            ->label('Prix unitaire')
+                            ->numeric(),
+                        DatePicker::make('delivery_date')
+                            ->label('Date d\'entrée'),
+                        DatePicker::make('expiry_date')
+                            ->label('DLUO'),
+                    ]),
             ]);
     }
 
@@ -119,32 +152,72 @@ class SupplyResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('quantity_in')
-                    ->label('Qté reçue (kg)')
+                    ->label('Qté reçue')
                     ->numeric(decimalPlaces: 3)
-                    ->sortable()
-                    ->summarize(Sum::make()->label('Total')),
+                    ->sortable(),
 
                 TextColumn::make('quantity_out')
-                    ->label('Qté sortie (kg)')
+                    ->label('Qté consommée')
+                    ->description('Sortie réelle (prod terminées)')
                     ->numeric(decimalPlaces: 3)
-                    ->sortable()
-                    ->summarize(Sum::make()),
+                    ->sortable(),
+
+                TextColumn::make('physical_stock')
+                    ->label('Stock physique')
+                    ->state(fn (Supply $record): float => round($record->getTotalQuantity(), 3))
+                    ->description('Reçue - consommée')
+                    ->numeric(decimalPlaces: 3)
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0)) '.$direction)),
 
                 TextColumn::make('allocated_quantity')
-                    ->label('Réservée (kg)')
+                    ->label('Qté allouée')
+                    ->description('Réservée non consommée')
                     ->numeric(decimalPlaces: 3)
-                    ->sortable()
-                    ->summarize(Sum::make()),
+                    ->sortable(),
 
                 TextColumn::make('available_quantity')
-                    ->label('Disponible (kg)')
+                    ->label('Disponible à allouer')
                     ->state(fn (Supply $record): float => round($record->getAvailableQuantity(), 3))
                     ->numeric(decimalPlaces: 3)
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) '.$direction))
-                    ->color(fn (float $state): string => $state <= 0 ? 'danger' : ($state < 5 ? 'warning' : 'success')),
+                    ->description('Stock physique - allouée')
+                    ->color(function (Supply $record): string {
+                        $available = $record->getAvailableQuantity();
+
+                        if ($available <= 0) {
+                            return 'danger';
+                        }
+
+                        $ingredient = $record->supplierListing?->ingredient;
+
+                        if (! $ingredient) {
+                            return 'success';
+                        }
+
+                        $ingredientId = (int) $ingredient->id;
+
+                        static $ingredientTotals = [];
+
+                        if (! array_key_exists($ingredientId, $ingredientTotals)) {
+                            $ingredientTotals[$ingredientId] = $ingredient->getTotalAvailableStock();
+                        }
+
+                        $stockMin = (float) ($ingredient->stock_min ?? 0);
+
+                        if ($stockMin > 0 && (float) $ingredientTotals[$ingredientId] <= $stockMin) {
+                            return 'danger';
+                        }
+
+                        return 'success';
+                    }),
+
+                TextColumn::make('supplierListing.unit_of_measure')
+                    ->label('Unité')
+                    ->state(fn (Supply $record): string => $record->getUnitOfMeasure())
+                    ->sortable(),
 
                 TextColumn::make('unit_price')
-                    ->label('Prix (EUR/kg)')
+                    ->label('Prix unitaire')
                     ->numeric(decimalPlaces: 2)
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -245,7 +318,6 @@ class SupplyResource extends Resource
     {
         return [
             'index' => ListSupplies::route('/'),
-            'create' => CreateSupply::route('/create'),
             'view' => ViewSupply::route('/{record}'),
             'edit' => EditSupply::route('/{record}/edit'),
         ];

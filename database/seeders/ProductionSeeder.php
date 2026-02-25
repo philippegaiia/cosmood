@@ -15,6 +15,10 @@ class ProductionSeeder extends Seeder
      */
     public function run(): void
     {
+        if (Production::query()->exists()) {
+            return;
+        }
+
         $formulas = Formula::query()
             ->with(['product'])
             ->whereHas('formulaItems')
@@ -27,7 +31,7 @@ class ProductionSeeder extends Seeder
         $waves = ProductionWave::query()->get();
 
         if ($waves->isEmpty()) {
-            $waves = ProductionWave::factory()->count(3)->create();
+            return;
         }
 
         foreach ($waves as $wave) {

@@ -15,16 +15,20 @@ class ProductionItemSeeder extends Seeder
      */
     public function run(): void
     {
+        if (ProductionItem::query()->exists()) {
+            return;
+        }
+
         $productions = Production::query()->take(12)->get();
 
         if ($productions->isEmpty()) {
-            $productions = Production::factory()->count(12)->create();
+            return;
         }
 
         $ingredients = Ingredient::query()->get();
 
         if ($ingredients->isEmpty()) {
-            $ingredients = Ingredient::factory()->count(20)->create();
+            return;
         }
 
         $listingsByIngredient = SupplierListing::query()->get()->groupBy('ingredient_id');
@@ -37,7 +41,7 @@ class ProductionItemSeeder extends Seeder
                 ProductionItem::factory()->create([
                     'production_id' => $production->id,
                     'ingredient_id' => $ingredient->id,
-                    'supplier_listing_id' => $listing?->id ?? SupplierListing::factory()->create(['ingredient_id' => $ingredient->id])->id,
+                    'supplier_listing_id' => $listing?->id,
                 ]);
             }
         }

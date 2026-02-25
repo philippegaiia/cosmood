@@ -69,4 +69,9 @@ class Supply extends Model
 
         return $stockIn - ($this->quantity_out ?? 0);
     }
+
+    public function getUnitOfMeasure(): string
+    {
+        return (string) ($this->supplierListing?->unit_of_measure ?: 'kg');
+    }
 }

@@ -20,6 +20,7 @@ class ProductTypeFactory extends Factory
             'name' => $name,
             'slug' => Str::slug($name),
             'product_category_id' => ProductCategory::factory(),
+            'qc_template_id' => null,
             'sizing_mode' => SizingMode::OilWeight,
             'default_batch_size' => $this->faker->randomFloat(3, 10, 50),
             'expected_units_output' => $this->faker->numberBetween(100, 500),

@@ -52,6 +52,12 @@ class IngredientResource extends Resource
                     ->label('Dernier prix (EUR/kg)')
                     ->numeric()
                     ->step(0.01),
+                TextInput::make('stock_min')
+                    ->label('Stock min alerte')
+                    ->numeric()
+                    ->step(0.001)
+                    ->default(0)
+                    ->helperText('Alerte visuelle en inventaire quand le disponible ingrédient passe sous ce seuil.'),
                 TextInput::make('slug')
                     ->maxLength(255),
                 TextInput::make('name_en')
@@ -93,6 +99,10 @@ class IngredientResource extends Resource
                 TextColumn::make('price')
                     ->label('Dernier prix')
                     ->money('EUR')
+                    ->sortable(),
+                TextColumn::make('stock_min')
+                    ->label('Stock min')
+                    ->numeric(decimalPlaces: 3)
                     ->sortable(),
                 TextColumn::make('slug')
                     ->searchable(),

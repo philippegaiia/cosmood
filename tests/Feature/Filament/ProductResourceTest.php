@@ -2,6 +2,7 @@
 
 use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
+use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -36,6 +37,7 @@ describe('ProductResource List', function () {
 describe('ProductResource Create', function () {
     it('can create a product', function () {
         $category = ProductCategory::factory()->create();
+        $productType = ProductType::factory()->forCategory($category)->create();
         $manufacturedIngredient = Ingredient::factory()->manufactured()->create();
 
         Livewire::test(\App\Filament\Resources\Production\ProductResource\Pages\CreateProduct::class)
@@ -43,6 +45,7 @@ describe('ProductResource Create', function () {
                 'name' => 'New Product',
                 'code' => 'PROD-001',
                 'product_category_id' => $category->id,
+                'product_type_id' => $productType->id,
                 'produced_ingredient_id' => $manufacturedIngredient->id,
                 'launch_date' => now()->format('Y-m-d'),
                 'net_weight' => 100,
@@ -54,6 +57,7 @@ describe('ProductResource Create', function () {
         $this->assertDatabaseHas(Product::class, [
             'name' => 'New Product',
             'code' => 'PROD-001',
+            'product_type_id' => $productType->id,
             'produced_ingredient_id' => $manufacturedIngredient->id,
         ]);
     });
@@ -61,7 +65,12 @@ describe('ProductResource Create', function () {
 
 describe('ProductResource Edit', function () {
     it('can edit a product', function () {
-        $product = Product::factory()->create();
+        $category = ProductCategory::factory()->create();
+        $productType = ProductType::factory()->forCategory($category)->create();
+        $product = Product::factory()->create([
+            'product_category_id' => $category->id,
+            'product_type_id' => $productType->id,
+        ]);
 
         Livewire::test(\App\Filament\Resources\Production\ProductResource\Pages\EditProduct::class, ['record' => $product->id])
             ->fillForm([

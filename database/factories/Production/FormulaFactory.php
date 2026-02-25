@@ -14,14 +14,16 @@ class FormulaFactory extends Factory
     public function definition(): array
     {
         $name = $this->faker->words(2, true);
+        $slug = Str::slug($name.'-'.$this->faker->unique()->numberBetween(1, 999999));
 
         return [
             'product_id' => Product::factory(),
             'name' => $name,
-            'slug' => Str::slug($name),
-            'code' => strtoupper($this->faker->bothify('FML-######')),
+            'slug' => $slug,
+            'code' => strtoupper($this->faker->unique()->bothify('FML-######')),
             'dip_number' => null,
             'is_active' => true,
+            'is_soap' => false,
             'date_of_creation' => $this->faker->date(),
             'description' => $this->faker->sentence(),
             'replaces_phase' => null,

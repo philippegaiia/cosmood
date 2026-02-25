@@ -38,6 +38,18 @@
         }
     },
     "scripts": {
+        "seed:prod": [
+            "@php artisan db:seed --class=ProductionDatabaseSeeder --no-interaction"
+        ],
+        "seed:dev": [
+            "@php artisan db:seed --class=DevelopmentDatabaseSeeder --no-interaction"
+        ],
+        "seed:fresh:prod": [
+            "@php artisan migrate:fresh --seed --seeder=ProductionDatabaseSeeder --no-interaction"
+        ],
+        "seed:fresh:dev": [
+            "@php artisan migrate:fresh --seed --seeder=DevelopmentDatabaseSeeder --no-interaction"
+        ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi",

@@ -18,6 +18,12 @@ class ProductTypeForm
         return $schema
             ->components([
                 Section::make('Informations générales')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
                     ->schema([
                         TextInput::make('name')
                             ->label('Nom')
@@ -29,20 +35,37 @@ class ProductTypeForm
                             ->label('Slug')
                             ->required()
                             ->maxLength(255)
-                            ->unique(ignoreRecord: true),
+                            ->unique(ignoreRecord: true)
+                            ->helperText('Généré automatiquement à partir du nom, modifiable si besoin.'),
                         Select::make('product_category_id')
                             ->label('Catégorie de produit')
                             ->relationship('productCategory', 'name')
                             ->searchable()
                             ->preload()
                             ->nullable(),
+                        Select::make('qc_template_id')
+                            ->label('Modèle QC')
+                            ->relationship(
+                                name: 'qcTemplate',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn ($query) => $query->where('is_active', true),
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->nullable()
+                            ->helperText('Choisissez le modèle QC partagé par ce type de produit.'),
                         Toggle::make('is_active')
                             ->label('Actif')
                             ->default(true),
-                    ])
-                    ->columns(2),
+                    ]),
 
                 Section::make('Paramètres de taille de batch')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
                     ->schema([
                         Select::make('sizing_mode')
                             ->label('Mode de calcul')
@@ -71,10 +94,10 @@ class ProductTypeForm
                             ->numeric()
                             ->suffix('g')
                             ->visible(fn (callable $get) => $get('sizing_mode') === SizingMode::FinalMass->value),
-                    ])
-                    ->columns(3),
+                    ]),
 
                 Section::make('Préréglages de taille de batch')
+                    ->columnSpanFull()
                     ->schema([
                         Repeater::make('batchSizePresets')
                             ->label('')
@@ -101,7 +124,11 @@ class ProductTypeForm
                                     ->label('Par défaut')
                                     ->default(false),
                             ])
-                            ->columns(5)
+                            ->columns([
+                                'default' => 1,
+                                'md' => 2,
+                                'xl' => 5,
+                            ])
                             ->defaultItems(0)
                             ->reorderableWithButtons()
                             ->collapsible()

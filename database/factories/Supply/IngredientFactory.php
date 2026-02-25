@@ -31,6 +31,7 @@ class IngredientFactory extends Factory
             'is_manufactured' => false,
             'description' => $this->faker->sentence(),
             'price' => $this->faker->randomFloat(2, 2, 40),
+            'stock_min' => 0,
         ];
     }
 

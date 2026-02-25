@@ -13,10 +13,14 @@ class SupplierContactSeeder extends Seeder
      */
     public function run(): void
     {
+        if (SupplierContact::query()->exists()) {
+            return;
+        }
+
         $suppliers = Supplier::query()->take(8)->get();
 
         if ($suppliers->isEmpty()) {
-            $suppliers = Supplier::factory()->count(8)->create();
+            return;
         }
 
         foreach ($suppliers as $supplier) {

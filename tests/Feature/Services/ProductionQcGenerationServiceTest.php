@@ -15,12 +15,12 @@ function qcGenerationService(): ProductionQcGenerationService
     return app(ProductionQcGenerationService::class);
 }
 
-it('generates checks from product type default template', function () {
+it('generates checks from product type assigned template', function () {
     $productType = ProductType::factory()->create();
-    $template = QcTemplate::factory()->create([
-        'product_type_id' => $productType->id,
-        'is_default' => true,
-        'is_active' => true,
+    $template = QcTemplate::factory()->create(['is_active' => true]);
+
+    $productType->update([
+        'qc_template_id' => $template->id,
     ]);
 
     QcTemplateItem::factory()->count(2)->create([
@@ -58,10 +58,10 @@ it('falls back to global template when no specific product type template exists'
 
 it('does not duplicate checks when generation runs multiple times', function () {
     $productType = ProductType::factory()->create();
-    $template = QcTemplate::factory()->create([
-        'product_type_id' => $productType->id,
-        'is_default' => true,
-        'is_active' => true,
+    $template = QcTemplate::factory()->create(['is_active' => true]);
+
+    $productType->update([
+        'qc_template_id' => $template->id,
     ]);
 
     QcTemplateItem::factory()->count(3)->create([
@@ -76,4 +76,27 @@ it('does not duplicate checks when generation runs multiple times', function () 
     qcGenerationService()->generateChecksForProduction($production);
 
     expect($production->fresh()->productionQcChecks)->toHaveCount(3);
+});
+
+it('does not propagate template code values to production checks', function () {
+    $productType = ProductType::factory()->create();
+    $template = QcTemplate::factory()->create(['is_active' => true]);
+
+    $productType->update([
+        'qc_template_id' => $template->id,
+    ]);
+
+    QcTemplateItem::factory()->create([
+        'qc_template_id' => $template->id,
+        'code' => 'POIDS_NET',
+    ]);
+
+    $production = Production::factory()->create([
+        'product_type_id' => $productType->id,
+    ]);
+
+    qcGenerationService()->generateChecksForProduction($production);
+
+    expect($production->fresh()->productionQcChecks)->toHaveCount(1)
+        ->and($production->fresh()->productionQcChecks->first()->code)->toBeNull();
 });

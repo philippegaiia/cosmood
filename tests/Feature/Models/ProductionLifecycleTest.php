@@ -126,9 +126,12 @@ describe('Production lifecycle orchestration', function () {
         $productType = ProductType::factory()->create();
 
         $qcTemplate = QcTemplate::factory()->create([
-            'product_type_id' => $productType->id,
             'is_default' => true,
             'is_active' => true,
+        ]);
+
+        $productType->update([
+            'qc_template_id' => $qcTemplate->id,
         ]);
 
         QcTemplateItem::factory()->count(2)->create([

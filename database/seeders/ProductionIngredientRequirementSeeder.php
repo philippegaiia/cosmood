@@ -15,16 +15,20 @@ class ProductionIngredientRequirementSeeder extends Seeder
      */
     public function run(): void
     {
+        if (ProductionIngredientRequirement::query()->exists()) {
+            return;
+        }
+
         $productions = Production::query()->take(12)->get();
 
         if ($productions->isEmpty()) {
-            $productions = Production::factory()->count(12)->create();
+            return;
         }
 
         $ingredients = Ingredient::query()->get();
 
         if ($ingredients->isEmpty()) {
-            $ingredients = Ingredient::factory()->count(20)->create();
+            return;
         }
 
         $listingsByIngredient = SupplierListing::query()->get()->groupBy('ingredient_id');

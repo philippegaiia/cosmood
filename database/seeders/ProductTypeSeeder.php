@@ -17,7 +17,7 @@ class ProductTypeSeeder extends Seeder
         $categories = ProductCategory::query()->take(3)->get();
 
         if ($categories->isEmpty()) {
-            $categories = ProductCategory::factory()->count(3)->create();
+            return;
         }
 
         ProductType::updateOrCreate(
@@ -61,8 +61,5 @@ class ProductTypeSeeder extends Seeder
             ]
         );
 
-        ProductType::factory()->count(2)->create([
-            'product_category_id' => $categories->first()->id,
-        ]);
     }
 }

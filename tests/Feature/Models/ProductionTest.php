@@ -87,6 +87,47 @@ describe('Production Model', function () {
         expect($production->fresh()->status)->toBe(ProductionStatus::Finished);
     });
 
+    it('auto-calculates ready date from production date based on product type', function () {
+        $soapType = ProductType::factory()->create([
+            'slug' => 'soap-bars',
+            'name' => 'Soap Bars',
+        ]);
+        $balmType = ProductType::factory()->create([
+            'slug' => 'balms',
+            'name' => 'Balms',
+        ]);
+
+        $soapProduction = Production::factory()->create([
+            'product_type_id' => $soapType->id,
+            'production_date' => '2026-03-01',
+            'ready_date' => null,
+        ]);
+
+        $balmProduction = Production::factory()->create([
+            'product_type_id' => $balmType->id,
+            'production_date' => '2026-03-01',
+            'ready_date' => null,
+        ]);
+
+        expect($soapProduction->fresh()->ready_date?->format('Y-m-d'))->toBe('2026-04-05')
+            ->and($balmProduction->fresh()->ready_date?->format('Y-m-d'))->toBe('2026-03-03');
+    });
+
+    it('keeps manually provided ready date', function () {
+        $soapType = ProductType::factory()->create([
+            'slug' => 'soap-bars',
+            'name' => 'Soap Bars',
+        ]);
+
+        $production = Production::factory()->create([
+            'product_type_id' => $soapType->id,
+            'production_date' => '2026-03-01',
+            'ready_date' => '2026-03-15',
+        ]);
+
+        expect($production->fresh()->ready_date?->format('Y-m-d'))->toBe('2026-03-15');
+    });
+
     it('can have product type defaults applied', function () {
         $productType = ProductType::factory()->soap()->create();
         $production = Production::factory()->withProductType($productType)->create();

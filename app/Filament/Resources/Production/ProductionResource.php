@@ -13,6 +13,7 @@ use App\Filament\Resources\Production\ProductionResource\RelationManagers\Produc
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager;
 use App\Models\Production\BatchSizePreset;
+use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionWave;
@@ -71,6 +72,11 @@ class ProductionResource extends Resource
         return $schema
             ->components([
                 Section::make('Lot de production')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 3,
+                    ])
                     ->schema([
                         Select::make('production_wave_id')
                             ->label('Vague de production')
@@ -91,12 +97,16 @@ class ProductionResource extends Resource
                             ->label('Lot permanent')
                             ->placeholder('Attribué automatiquement au démarrage')
                             ->disabled()
-                            ->dehydrated(false)
-                            ->visibleOn('edit'),
-                    ])
-                    ->columns(2),
+                            ->dehydrated(false),
+                    ]),
 
                 Section::make('Choisir produit')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
                     ->schema([
                         Select::make('product_id')
                             ->label('Produit')
@@ -104,6 +114,7 @@ class ProductionResource extends Resource
                             ->native(false)
                             ->searchable()
                             ->preload()
+                            ->disabled(fn (string $operation): bool => $operation === 'edit')
                             ->live()
                             ->afterStateUpdated(function (Set $set, Get $get, ?string $state) {
                                 if (! $state) {
@@ -156,6 +167,19 @@ class ProductionResource extends Resource
                                     $set('sizing_mode', $productType->sizing_mode->value);
                                     $set('planned_quantity', $productType->default_batch_size);
                                     $set('expected_units', $productType->expected_units_output);
+
+                                    $productionDate = $get('production_date');
+
+                                    if ($productionDate) {
+                                        $set(
+                                            'ready_date',
+                                            Production::estimateReadyDate(
+                                                $productionDate,
+                                                (string) ($productType->slug ?? ''),
+                                                (string) ($productType->name ?? ''),
+                                            )->toDateString(),
+                                        );
+                                    }
                                 }
                             })
                             ->nullable(),
@@ -184,10 +208,15 @@ class ProductionResource extends Resource
                             })
                             ->visible(fn (Get $get) => $get('product_type_id') !== null)
                             ->nullable(),
-                    ])
-                    ->columns(4),
+                    ]),
 
                 Section::make('Taille de batch')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 4,
+                    ])
                     ->schema([
                         Select::make('sizing_mode')
                             ->label('Mode de calcul')
@@ -204,8 +233,7 @@ class ProductionResource extends Resource
                             })
                             ->numeric()
                             ->required()
-                            ->suffix('kg')
-                            ->columnSpan(2),
+                            ->suffix('kg'),
                         TextInput::make('expected_units')
                             ->label('Unités attendues')
                             ->numeric()
@@ -218,10 +246,14 @@ class ProductionResource extends Resource
                             ->label('Unités réelles')
                             ->numeric()
                             ->visibleOn('edit'),
-                    ])
-                    ->columns(4),
+                    ]),
 
                 Section::make('Masterbatch')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                    ])
                     ->schema([
                         Toggle::make('is_masterbatch')
                             ->label('Créer ce lot comme masterbatch')
@@ -309,14 +341,16 @@ class ProductionResource extends Resource
                             ->nullable(),
                     ])
                     ->visible(fn (string $operation) => $operation !== 'view')
-                    ->columns(2)
                     ->collapsible(),
 
-                Section::make('Détails')
+                Section::make('Flux de production')
+                    ->columnSpanFull()
+                    ->columns([
+                        'default' => 1,
+                        'md' => 2,
+                        'xl' => 2,
+                    ])
                     ->schema([
-                        TextInput::make('slug')
-                            ->maxLength(255)
-                            ->visibleOn('edit'),
                         Hidden::make('status')
                             ->default(ProductionStatus::Planned->value)
                             ->dehydrated(fn (string $operation): bool => $operation === 'create'),
@@ -337,23 +371,38 @@ class ProductionResource extends Resource
                             ->inline()
                             ->required()
                             ->visibleOn('edit'),
-                        Toggle::make('organic')
-                            ->label('Bio')
-                            ->default(true),
                         Textarea::make('notes')
                             ->label('Notes')
                             ->columnSpanFull()
                             ->rows(3),
-                    ])
-                    ->columns(3),
+                    ]),
 
                 Section::make('Dates')
+                    ->columnSpanFull()
                     ->schema([
                         Fieldset::make('Période')
+                            ->columnSpanFull()
                             ->schema([
                                 DatePicker::make('production_date')
                                     ->label('Date de production')
                                     ->required()
+                                    ->live()
+                                    ->afterStateUpdated(function (Set $set, Get $get, ?string $state): void {
+                                        if (! $state) {
+                                            return;
+                                        }
+
+                                        $productType = ProductType::query()->find((int) ($get('product_type_id') ?? 0));
+
+                                        $set(
+                                            'ready_date',
+                                            Production::estimateReadyDate(
+                                                $state,
+                                                (string) ($productType?->slug ?? ''),
+                                                (string) ($productType?->name ?? ''),
+                                            )->toDateString(),
+                                        );
+                                    })
                                     ->minDate(function (Get $get): ?string {
                                         $waveId = $get('production_wave_id');
 
@@ -386,14 +435,45 @@ class ProductionResource extends Resource
                                 DatePicker::make('ready_date')
                                     ->label('Date de disponibilité')
                                     ->afterOrEqual('production_date')
+                                    ->helperText('Calcul automatique: savons +35 jours, autres types +2 jours (modifiable).')
                                     ->native(false)
                                     ->weekStartsOnMonday(),
                             ])
-                            ->columns(2),
+                            ->columns([
+                                'default' => 1,
+                                'md' => 2,
+                            ]),
                     ]),
 
                 Section::make('Items de production')
                     ->schema([
+                        TextEntry::make('saponified_total_control')
+                            ->label('Controle saponifie')
+                            ->columnSpanFull()
+                            ->state(function (Get $get): string {
+                                $formulaId = (int) ($get('formula_id') ?? 0);
+                                $items = $get('productionItems') ?? [];
+
+                                if (! self::shouldApplySaponifiedControlFromProductionState($formulaId)) {
+                                    return 'N/A (controle desactive sur la formule)';
+                                }
+
+                                $total = self::calculateSaponifiedTotalFromProductionItems($items);
+
+                                return number_format($total, 2, '.', ' ').' % (cible 100 %)';
+                            })
+                            ->color(function (Get $get): string {
+                                $formulaId = (int) ($get('formula_id') ?? 0);
+                                $items = $get('productionItems') ?? [];
+
+                                if (! self::shouldApplySaponifiedControlFromProductionState($formulaId)) {
+                                    return 'gray';
+                                }
+
+                                $total = self::calculateSaponifiedTotalFromProductionItems($items);
+
+                                return abs($total - 100.0) < 0.01 ? 'success' : 'danger';
+                            }),
                         Repeater::make('productionItems')
                             ->relationship()
                             ->schema([
@@ -432,7 +512,12 @@ class ProductionResource extends Resource
                                             ->orderBy('expiry_date')
                                             ->get()
                                             ->mapWithKeys(fn (Supply $supply): array => [
-                                                $supply->id => sprintf('%s (%.3f kg)', $supply->batch_number, $supply->getAvailableQuantity()),
+                                                $supply->id => sprintf(
+                                                    '%s (%.3f %s)',
+                                                    $supply->batch_number,
+                                                    $supply->getAvailableQuantity(),
+                                                    $supply->getUnitOfMeasure(),
+                                                ),
                                             ])
                                             ->toArray();
                                     })
@@ -493,9 +578,12 @@ class ProductionResource extends Resource
 
                                         return $phase === Phases::Packaging->value ? 'Qté / unité' : '% d\'huiles';
                                     })
+                                    ->helperText('Pour le packaging, saisir la quantité par unité (ex: 1 boîte / unité).')
                                     ->numeric()
                                     ->columnSpan(1)
                                     ->live()
+                                    ->default(1)
+                                    ->dehydrateStateUsing(fn (mixed $state): float => (float) ($state ?? 1))
                                     ->required(),
                                 Toggle::make('organic')
                                     ->label('Bio')
@@ -510,7 +598,11 @@ class ProductionResource extends Resource
                                     ->default(0)
                                     ->hidden(),
                             ])
-                            ->columns(6)
+                            ->columns([
+                                'default' => 1,
+                                'md' => 2,
+                                'xl' => 6,
+                            ])
                             ->reorderableWithButtons()
                             ->orderColumn('sort'),
                     ])
@@ -706,5 +798,43 @@ class ProductionResource extends Resource
     private static function getDuplicateBaseBatchNumber(string $batchNumber): string
     {
         return preg_replace('/(?:-D[A-Z0-9]{2,4})+$/', '', $batchNumber) ?: $batchNumber;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $items
+     */
+    private static function calculateSaponifiedTotalFromProductionItems(array $items): float
+    {
+        $total = 0.0;
+
+        foreach ($items as $item) {
+            if (($item['phase'] ?? null) !== Phases::Saponification->value) {
+                continue;
+            }
+
+            $total += (float) ($item['percentage_of_oils'] ?? 0);
+        }
+
+        return $total;
+    }
+
+    private static function shouldApplySaponifiedControlFromProductionState(int $formulaId): bool
+    {
+        return self::isSoapFormula($formulaId);
+    }
+
+    private static function isSoapFormula(int $formulaId): bool
+    {
+        if ($formulaId <= 0) {
+            return false;
+        }
+
+        static $cache = [];
+
+        if (array_key_exists($formulaId, $cache)) {
+            return $cache[$formulaId];
+        }
+
+        return $cache[$formulaId] = (bool) (Formula::query()->find($formulaId)?->is_soap ?? false);
     }
 }
