@@ -31,6 +31,8 @@ class ProductionRequirementsService
             return;
         }
 
+        $formula->loadMissing('formulaItems.ingredient');
+
         $batchSize = $production->planned_quantity ?? 0;
 
         DB::transaction(function () use ($production, $formula, $batchSize) {

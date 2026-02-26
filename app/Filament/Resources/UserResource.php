@@ -13,6 +13,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Hash;
@@ -22,7 +23,7 @@ class UserResource extends Resource
 {
     protected static ?string $model = User::class;
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-users';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
     public static function form(Schema $schema): Schema
     {

@@ -50,6 +50,76 @@ This document describes the current production-side business rules implemented i
 - "Flux de production" section stays visible (not collapsed).
 - Product cannot be changed during edit; if wrong product, recreate batch.
 - Permanent lot field is visible in create/edit and refreshes after status transitions that assign it.
+- Status change in edit requires explicit save confirmation to reduce accidental transitions.
+- Edit and view pages use contextual titles with lot + planning reference + product name (no generic "View" heading).
+
+## Production Lifecycle Contract
+
+### Status transitions
+
+- Allowed transitions are strictly:
+  - `planned -> confirmed`
+  - `confirmed -> ongoing`
+  - `ongoing -> finished`
+  - `planned|confirmed|ongoing -> cancelled`
+- `finished` and `cancelled` are terminal.
+- Backward transitions are not allowed (`confirmed -> planned`, `cancelled -> planned`, etc.).
+- Finishing is blocked when required production items have no selected supply lot.
+
+### Status semantics
+
+- `production_date` is a planning/anchor date used for scheduling tasks and capacity.
+- `ongoing` is a manual operational action (operator/manager), not an automatic date job.
+- `ready_date` remains an availability date (soap default +35 days, others +2 days unless overridden).
+
+### Observer side effects by status
+
+- Create:
+  - generate production items,
+  - generate QC checks,
+  - generate template tasks for all non-cancelled batches.
+- `ongoing|finished`: assign permanent lot if missing.
+- `finished`: ensure manufactured output lot exists when batch produces an internal ingredient.
+
+### Stock reservation and staged consumption
+
+- Reservation source is manual lot selection on production items (`supply_id`).
+- Reserved quantity is tracked through `supplies.allocated_quantity` and reservation movements.
+- Availability rule is strict: reserved stock is immediately unavailable.
+
+Lifecycle stock behavior:
+
+- `planned|confirmed`:
+  - reserve all selected inputs (packaging + non-packaging).
+- `ongoing`:
+  - consume non-packaging inputs (oils, lye, additives, masterbatch lot),
+  - keep only packaging reserved.
+- `finished`:
+  - release remaining reservations,
+  - consume packaging inputs.
+- `cancelled`:
+  - release all reservations,
+  - no new consumption is created.
+
+Recompute behavior:
+
+- Item edits re-sync stock logic for `planned|confirmed|ongoing|finished`.
+- Consumption is idempotent by stage-specific movement reason.
+
+### Cancellation and deletion behavior
+
+- On cancellation, production tasks are deleted via soft delete.
+- Cancellation is intended for manager/admin governance (policies/gates layer).
+- Finished productions cannot be deleted.
+- Bulk delete / force-delete actions must exclude finished productions.
+- Non-finished production deletion must rollback reservations and staged consumptions before soft delete.
+- Production items cannot be deleted once a production is finished.
+- Production record deletion remains separate from cancellation and should stay exceptional due to traceability impact.
+
+### Wave interaction guardrail
+
+- Wave procurement and requirement status synchronization ignore requirements belonging to cancelled productions.
+- This prevents cancelled batches from inflating wave purchase planning.
 
 ## Print / PDF Documents
 

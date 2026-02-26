@@ -3,6 +3,7 @@
 namespace App\Services\Production;
 
 use App\Enums\OrderStatus;
+use App\Enums\ProductionStatus;
 use App\Enums\RequirementStatus;
 use App\Models\Production\ProductionIngredientRequirement;
 use App\Models\Production\ProductionWave;
@@ -88,6 +89,7 @@ class WaveRequirementStatusService
     {
         return ProductionIngredientRequirement::query()
             ->where('production_wave_id', $wave->id)
+            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
             ->whereNull('fulfilled_by_masterbatch_id')
             ->with('production:id,production_date')
             ->get()

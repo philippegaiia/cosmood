@@ -6,6 +6,8 @@ The simulator provides fast planning estimates for ingredients and oils load bas
 
 It is non-persistent and used for planning decisions, not for creating production records.
 
+It does not reserve or consume inventory; reservation/consumption happens only through the production lifecycle.
+
 ## Inputs per Line
 
 - Product search + product selection.
@@ -50,6 +52,8 @@ Example:
 - Ingredient totals table.
 - Per-product extra summary table.
 - Per-line detail table.
+- Print action (`Print`) to export current simulator view through browser print.
+- Results are advisory for wave/batch sizing and procurement estimation, not stock commitment.
 
 ## UX / Technical Constraints
 

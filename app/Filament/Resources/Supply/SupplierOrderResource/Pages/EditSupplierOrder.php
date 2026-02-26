@@ -9,6 +9,7 @@ use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Support\Icons\Heroicon;
 
 class EditSupplierOrder extends EditRecord
 {
@@ -19,17 +20,17 @@ class EditSupplierOrder extends EditRecord
         return [
             Action::make('exportPdf')
                 ->label('Exporter PO PDF')
-                ->icon('heroicon-o-document-arrow-down')
+                ->icon(Heroicon::OutlinedDocumentArrowDown)
                 ->url(fn (): string => route('supplier-orders.po-pdf', $this->record))
                 ->openUrlInNewTab(),
             Action::make('printPo')
                 ->label('Imprimer PO')
-                ->icon('heroicon-o-printer')
+                ->icon(Heroicon::OutlinedPrinter)
                 ->url(fn (): string => route('supplier-orders.po-print', $this->record))
                 ->openUrlInNewTab(),
             Action::make('copyEmail')
                 ->label('Copier email')
-                ->icon('heroicon-o-clipboard-document')
+                ->icon(Heroicon::OutlinedClipboardDocument)
                 ->url(fn (): string => route('supplier-orders.po-email-copy', $this->record))
                 ->openUrlInNewTab(),
             DeleteAction::make()->action(function ($data, $record) {

@@ -21,6 +21,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TrashedFilter;
@@ -36,7 +37,7 @@ class ProductResource extends Resource
 
     protected static ?string $navigationLabel = 'Produits';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema
     {

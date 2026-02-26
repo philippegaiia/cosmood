@@ -7,10 +7,24 @@ use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Support\Enums\Width;
+use Filament\Support\Icons\Heroicon;
 
 class ViewProduction extends ViewRecord
 {
     protected static string $resource = ProductionResource::class;
+
+    public function getTitle(): string
+    {
+        $permanentBatch = trim((string) ($this->record->permanent_batch_number ?? ''));
+        $planningBatch = trim((string) ($this->record->batch_number ?? ''));
+        $productName = trim((string) ($this->record->product?->name ?? 'Produit inconnu'));
+
+        $lotLabel = filled($permanentBatch)
+            ? $permanentBatch.' ('.$planningBatch.')'
+            : ($planningBatch !== '' ? '- ('.$planningBatch.')' : '- (-)');
+
+        return 'Production - '.$lotLabel.' - '.$productName;
+    }
 
     public function getMaxContentWidth(): Width|string|null
     {
@@ -27,17 +41,17 @@ class ViewProduction extends ViewRecord
         return [
             Action::make('exportPdf')
                 ->label('Exporter PDF production')
-                ->icon('heroicon-o-document-arrow-down')
+                ->icon(Heroicon::OutlinedDocumentArrowDown)
                 ->url(fn (): string => route('productions.sheet-pdf', $this->record))
                 ->openUrlInNewTab(),
             Action::make('printSheet')
                 ->label('Imprimer fiche de production')
-                ->icon('heroicon-o-printer')
+                ->icon(Heroicon::OutlinedPrinter)
                 ->url(fn (): string => route('productions.print-sheet', $this->record))
                 ->openUrlInNewTab(),
             Action::make('followSheet')
                 ->label('Fiche de suivi')
-                ->icon('heroicon-o-document-text')
+                ->icon(Heroicon::OutlinedDocumentText)
                 ->url(fn (): string => route('productions.follow-sheet', $this->record))
                 ->openUrlInNewTab(),
             EditAction::make(),

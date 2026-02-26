@@ -72,6 +72,16 @@ class Production extends Model
                     $to->value,
                 ));
             }
+
+            if ($from !== ProductionStatus::Finished && $to === ProductionStatus::Finished) {
+                self::assertLotsAssignedBeforeFinish($production);
+            }
+        });
+
+        static::deleting(function (Production $production): void {
+            if ($production->status === ProductionStatus::Finished) {
+                throw new InvalidArgumentException('Finished productions cannot be deleted. Cancel before deletion if needed.');
+            }
         });
     }
 
@@ -249,9 +259,7 @@ class Production extends Model
                 ProductionStatus::Cancelled,
             ],
             ProductionStatus::Confirmed->value => [
-                ProductionStatus::Planned,
                 ProductionStatus::Ongoing,
-                ProductionStatus::Finished,
                 ProductionStatus::Cancelled,
             ],
             ProductionStatus::Ongoing->value => [
@@ -259,9 +267,7 @@ class Production extends Model
                 ProductionStatus::Cancelled,
             ],
             ProductionStatus::Finished->value => [],
-            ProductionStatus::Cancelled->value => [
-                ProductionStatus::Planned,
-            ],
+            ProductionStatus::Cancelled->value => [],
         ];
     }
 
@@ -324,5 +330,74 @@ class Production extends Model
         }
 
         return $baseDate->addDays(2);
+    }
+
+    /**
+     * Ensures all required production item lots are assigned before finalizing a batch.
+     */
+    private static function assertLotsAssignedBeforeFinish(Production $production): void
+    {
+        $missingIngredientNames = $production->getMissingLotIngredientNamesForFinish();
+
+        if ($missingIngredientNames === []) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'Cannot set production to finished: missing lot selection for %s.',
+            implode(', ', $missingIngredientNames),
+        ));
+    }
+
+    /**
+     * Returns ingredient names missing lot assignment for finish transition.
+     *
+     * If a masterbatch is linked, items in the replaced phase are exempt because
+     * their consumption is represented by the selected masterbatch lot.
+     *
+     * @return array<int, string>
+     */
+    public function getMissingLotIngredientNamesForFinish(int $limit = 5): array
+    {
+        $replacedPhase = self::resolveMasterbatchReplacedPhase($this);
+
+        return $this->productionItems()
+            ->leftJoin('ingredients', 'production_items.ingredient_id', '=', 'ingredients.id')
+            ->whereNull('production_items.supply_id')
+            ->when($replacedPhase !== null, function ($query) use ($replacedPhase): void {
+                $query->where('production_items.phase', '!=', $replacedPhase);
+            })
+            ->select([
+                'production_items.id as production_item_id',
+                'ingredients.name as ingredient_name',
+            ])
+            ->get()
+            ->map(fn (object $row): string => (string) ($row->ingredient_name ?: 'Item #'.$row->production_item_id))
+            ->unique()
+            ->take($limit)
+            ->values()
+            ->all();
+    }
+
+    private static function resolveMasterbatchReplacedPhase(Production $production): ?string
+    {
+        if (! $production->masterbatch_lot_id) {
+            return null;
+        }
+
+        $masterbatch = $production->relationLoaded('masterbatchLot')
+            ? $production->masterbatchLot
+            : self::query()->select(['id', 'replaces_phase'])->find($production->masterbatch_lot_id);
+
+        if (! $masterbatch || ! filled($masterbatch->replaces_phase)) {
+            return null;
+        }
+
+        return match ((string) $masterbatch->replaces_phase) {
+            'saponified_oils' => '10',
+            'lye' => '20',
+            'additives' => '30',
+            default => (string) $masterbatch->replaces_phase,
+        };
     }
 }

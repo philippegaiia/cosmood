@@ -47,7 +47,7 @@ class QcTemplatesForm
                     ->schema([
                         Repeater::make('items')
                             ->relationship()
-                            ->label('')
+                            ->hiddenLabel()
                             ->schema([
                                 TextInput::make('label')
                                     ->label('Contrôle')

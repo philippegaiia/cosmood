@@ -28,6 +28,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
@@ -43,7 +44,7 @@ class SupplierListingResource extends Resource
 
     protected static ?string $navigationLabel = 'Ingrédients référencés';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-document-check';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentCheck;
 
     protected static ?int $navigationSort = 6;
 

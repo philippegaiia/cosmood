@@ -17,6 +17,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\ColorColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
@@ -33,7 +34,7 @@ class ProductCategoryResource extends Resource
 
     protected static ?string $navigationLabel = 'Catégories Produits';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-rectangle-stack';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
     public static function form(Schema $schema): Schema
     {

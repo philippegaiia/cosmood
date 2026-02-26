@@ -5,6 +5,7 @@ use App\Enums\RequirementStatus;
 use App\Enums\SizingMode;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
@@ -75,6 +76,25 @@ describe('Production Model', function () {
 
         expect(fn () => $production->update(['status' => ProductionStatus::Planned]))
             ->toThrow(InvalidArgumentException::class, 'Invalid production status transition from ongoing to planned.');
+
+        $confirmedProduction = Production::factory()->confirmed()->create();
+
+        expect(fn () => $confirmedProduction->update(['status' => ProductionStatus::Finished]))
+            ->toThrow(InvalidArgumentException::class, 'Invalid production status transition from confirmed to finished.');
+    });
+
+    it('requires lot assignment for all required items before finishing', function () {
+        $production = Production::factory()->inProgress()->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'supply_id' => null,
+            'supplier_listing_id' => null,
+            'supply_batch_number' => null,
+        ]);
+
+        expect(fn () => $production->update(['status' => ProductionStatus::Finished]))
+            ->toThrow(InvalidArgumentException::class);
     });
 
     it('allows valid status transitions', function () {
@@ -85,6 +105,15 @@ describe('Production Model', function () {
         $production->update(['status' => ProductionStatus::Finished]);
 
         expect($production->fresh()->status)->toBe(ProductionStatus::Finished);
+    });
+
+    it('prevents deleting finished productions', function () {
+        $production = Production::factory()->finished()->create();
+
+        expect(fn () => $production->delete())
+            ->toThrow(InvalidArgumentException::class, 'Finished productions cannot be deleted. Cancel before deletion if needed.');
+
+        expect(Production::query()->find($production->id))->not->toBeNull();
     });
 
     it('auto-calculates ready date from production date based on product type', function () {

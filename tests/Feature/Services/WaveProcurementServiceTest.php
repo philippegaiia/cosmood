@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\ProductionStatus;
 use App\Enums\RequirementStatus;
 use App\Enums\WaveStatus;
 use App\Models\Production\Formula;
@@ -125,6 +126,42 @@ describe('aggregateRequirements', function () {
             'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 15.0,
+        ]);
+
+        $aggregated = waveProcurementService()->aggregateRequirements($wave);
+
+        expect($aggregated)->toHaveCount(1)
+            ->and((float) $aggregated->first()->total_quantity)->toBe(10.0);
+    });
+
+    it('ignores requirements from cancelled productions', function () {
+        $wave = ProductionWave::factory()->create();
+        $ingredient = Ingredient::factory()->create();
+
+        $activeProduction = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Planned,
+        ]);
+
+        $cancelledProduction = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Cancelled,
+        ]);
+
+        ProductionIngredientRequirement::factory()->create([
+            'production_id' => $activeProduction->id,
+            'production_wave_id' => $wave->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10.0,
+            'status' => RequirementStatus::NotOrdered,
+        ]);
+
+        ProductionIngredientRequirement::factory()->create([
+            'production_id' => $cancelledProduction->id,
+            'production_wave_id' => $wave->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 15.0,
+            'status' => RequirementStatus::NotOrdered,
         ]);
 
         $aggregated = waveProcurementService()->aggregateRequirements($wave);

@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\ProductionStatus;
 use App\Enums\RequirementStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionIngredientRequirement;
@@ -128,6 +129,45 @@ it('does not mark requirements as ordered from draft orders', function () {
         'supplier_id' => $supplier->id,
         'production_wave_id' => $wave->id,
         'order_status' => OrderStatus::Draft,
+    ]);
+
+    SupplierOrderItem::factory()->create([
+        'supplier_order_id' => $order->id,
+        'supplier_listing_id' => $listing->id,
+        'quantity' => 1,
+        'unit_weight' => 25,
+    ]);
+
+    waveRequirementStatusService()->syncForWave($wave);
+
+    expect($requirement->fresh()->status)->toBe(RequirementStatus::NotOrdered);
+});
+
+it('does not update requirements belonging to cancelled productions', function () {
+    $wave = ProductionWave::factory()->create();
+    $production = Production::factory()->forWave($wave)->create([
+        'status' => ProductionStatus::Cancelled,
+    ]);
+    $ingredient = Ingredient::factory()->create();
+    $supplier = Supplier::factory()->create();
+    $listing = SupplierListing::factory()->create([
+        'supplier_id' => $supplier->id,
+        'ingredient_id' => $ingredient->id,
+        'unit_weight' => 25,
+    ]);
+
+    $requirement = ProductionIngredientRequirement::factory()->create([
+        'production_id' => $production->id,
+        'production_wave_id' => $wave->id,
+        'ingredient_id' => $ingredient->id,
+        'required_quantity' => 25,
+        'status' => RequirementStatus::NotOrdered,
+    ]);
+
+    $order = SupplierOrder::factory()->create([
+        'supplier_id' => $supplier->id,
+        'production_wave_id' => $wave->id,
+        'order_status' => OrderStatus::Passed,
     ]);
 
     SupplierOrderItem::factory()->create([

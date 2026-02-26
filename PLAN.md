@@ -4,7 +4,7 @@
 
 Small-manufacturing MRP for soap making and cosmetics. Simple, opinionated, and enjoyable.
 
-**Workflow:** plan → procure/order → allocate/reserve → produce → track
+**Workflow:** plan (tasks + reservations) → procure/order → start production (consume process inputs) → finish (consume packaging) → track
 
 ## Core Concepts
 
@@ -30,6 +30,17 @@ Small-manufacturing MRP for soap making and cosmetics. Simple, opinionated, and 
 - Per-production visibility (not wave-level)
 - Affects available quantity at reservation time
 - Track: not_ordered → ordered → confirmed → received → allocated
+
+### Production Lifecycle (Batch)
+- Statuses: planned → confirmed → ongoing → finished
+- Allowed cancellation: planned/confirmed/ongoing → cancelled
+- `finished` and `cancelled` are terminal (no backward transitions)
+- `production_date` is planning anchor; real start is explicit `ongoing` action
+- Tasks are generated from planning stage for hour estimation and scheduling
+- Reserved stock is unavailable immediately (`allocated_quantity` impact)
+- Stage consumption:
+  - `ongoing`: oils/lye/additives/masterbatch consumption
+  - `finished`: packaging consumption
 
 ---
 
@@ -269,8 +280,8 @@ tests/Feature/
 
 - [ ] Plan a wave → generate procurement → create POs → see per-batch readiness
 - [ ] Reserving/allocating affects "available" immediately
-- [ ] Confirming a batch generates tasks (no weekends)
-- [ ] Cancelling a batch cancels tasks
+- [ ] Planning/confirming a batch generates tasks (no weekends)
+- [ ] Cancelling a batch deletes tasks (soft delete) and releases reservations
 - [ ] Formulas scale correctly (% and quantities)
 - [ ] Masterbatch selection collapses oils in UI, expands in PDF
 - [ ] Orphan productions work independently

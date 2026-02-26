@@ -14,7 +14,8 @@ it('renders the livewire simulateur flash component', function () {
         ->assertSuccessful()
         ->assertSee('Simulateur Flash')
         ->assertSee('Rechercher')
-        ->assertSee('Synthese');
+        ->assertSee('Synthese')
+        ->assertSee('Print');
 });
 
 it('shows products in selection even when they are inactive in legacy data', function () {

@@ -8,6 +8,8 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
 
@@ -30,12 +32,12 @@ class ProductTypeForm
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true)
-                            ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
+                            ->afterStateUpdated(fn ($state, Set $set) => $set('slug', Str::slug($state))),
                         TextInput::make('slug')
                             ->label('Slug')
                             ->required()
                             ->maxLength(255)
-                            ->unique(ignoreRecord: true)
+                            ->unique()
                             ->helperText('Généré automatiquement à partir du nom, modifiable si besoin.'),
                         Select::make('product_category_id')
                             ->label('Catégorie de produit')
@@ -93,14 +95,14 @@ class ProductTypeForm
                             ->label('Taille de remplissage unitaire (g)')
                             ->numeric()
                             ->suffix('g')
-                            ->visible(fn (callable $get) => $get('sizing_mode') === SizingMode::FinalMass->value),
+                            ->visible(fn (Get $get) => $get('sizing_mode') === SizingMode::FinalMass->value),
                     ]),
 
                 Section::make('Préréglages de taille de batch')
                     ->columnSpanFull()
                     ->schema([
                         Repeater::make('batchSizePresets')
-                            ->label('')
+                            ->hiddenLabel()
                             ->relationship()
                             ->schema([
                                 TextInput::make('name')

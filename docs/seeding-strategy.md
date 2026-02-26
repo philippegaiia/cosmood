@@ -47,6 +47,7 @@ Avoid factory-generated fake formulas/products in production-like environments.
 
 - Waves, production tasks/items/requirements, supplier orders, supplies movement, contacts.
 - Included in `DevelopmentDatabaseSeeder` only.
+- Demo production flows should respect lifecycle contract (`planned -> confirmed -> ongoing -> finished|cancelled`) to avoid inconsistent stock side effects.
 
 ## Current Guardrails
 
@@ -58,6 +59,7 @@ Avoid factory-generated fake formulas/products in production-like environments.
 
 - Do not seed formulas via factories for production-like data.
 - Prefer business keys and deterministic records over random generation.
+- Keep seeded stock examples compatible with reservation semantics (`allocated_quantity` reduces available stock).
 - When changing production-safe seed structure, update this document and matching seeders in same branch.
 
 ## Commenting Hotspots

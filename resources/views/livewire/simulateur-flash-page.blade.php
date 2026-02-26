@@ -1,4 +1,4 @@
-<div>
+<div id="flash-print-area">
     @once
         <style>
             .flash-sim-grid {
@@ -26,6 +26,26 @@
             .flash-col-4 {
                 grid-column: span 4 / span 4;
                 min-width: 0;
+            }
+
+            @media print {
+                body * {
+                    visibility: hidden !important;
+                }
+
+                #flash-print-area,
+                #flash-print-area * {
+                    visibility: visible !important;
+                }
+
+                #flash-print-area {
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: 100%;
+                    margin: 0;
+                    padding: 0;
+                }
             }
         </style>
     @endonce
@@ -106,9 +126,10 @@
                 </div>
                 @endforeach
 
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 print:hidden">
                     <flux:button wire:click="addLine" variant="filled">Ajouter un produit</flux:button>
                     <flux:button wire:click="recalculate" variant="primary">Recalculer</flux:button>
+                    <flux:button type="button" onclick="window.print()" variant="ghost">Print</flux:button>
                 </div>
             </div>
         </div>

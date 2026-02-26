@@ -14,7 +14,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
-it('consumes mapped supplies when production is finished and stays idempotent', function () {
+it('consumes non-packaging supplies when production starts and stays idempotent', function () {
     $supplyA = Supply::factory()->inStock(50)->create();
     $supplyB = Supply::factory()->inStock(50)->create();
 
@@ -40,9 +40,7 @@ it('consumes mapped supplies when production is finished and stays idempotent', 
         'percentage_of_oils' => 5,
     ]);
 
-    $production->update([
-        'status' => ProductionStatus::Finished,
-    ]);
+    $production->update(['status' => ProductionStatus::Ongoing]);
 
     expect((float) $supplyA->fresh()->quantity_out)->toBe(2.0)
         ->and((float) $supplyB->fresh()->quantity_out)->toBe(1.0)
@@ -50,11 +48,11 @@ it('consumes mapped supplies when production is finished and stays idempotent', 
             SuppliesMovement::query()
                 ->where('production_id', $production->id)
                 ->where('movement_type', 'out')
-                ->where('reason', 'Consumed in finished production')
+                ->where('reason', ProductionConsumptionService::REASON_ONGOING_CONSUMPTION)
                 ->count()
         )->toBe(2);
 
-    app(ProductionConsumptionService::class)->consumeForFinishedProduction($production->fresh());
+    app(ProductionConsumptionService::class)->consumeForOngoingProduction($production->fresh());
 
     expect((float) $supplyA->fresh()->quantity_out)->toBe(2.0)
         ->and((float) $supplyB->fresh()->quantity_out)->toBe(1.0)
@@ -62,7 +60,7 @@ it('consumes mapped supplies when production is finished and stays idempotent', 
             SuppliesMovement::query()
                 ->where('production_id', $production->id)
                 ->where('movement_type', 'out')
-                ->where('reason', 'Consumed in finished production')
+                ->where('reason', ProductionConsumptionService::REASON_ONGOING_CONSUMPTION)
                 ->count()
         )->toBe(2);
 });
@@ -108,9 +106,7 @@ it('consumes masterbatch lot and avoids double counting replaced phase ingredien
         'percentage_of_oils' => 5,
     ]);
 
-    $production->update([
-        'status' => ProductionStatus::Finished,
-    ]);
+    $production->update(['status' => ProductionStatus::Ongoing]);
 
     expect((float) $rawSupply->fresh()->quantity_out)->toBe(0.0)
         ->and((float) $additiveSupply->fresh()->quantity_out)->toBe(1.0)
@@ -124,7 +120,7 @@ it('consumes masterbatch lot and avoids double counting replaced phase ingredien
         )->toBeFalse();
 });
 
-it('reconciles inventory when a finished production item changes supply lot', function () {
+it('reconciles inventory when an ongoing production item changes supply lot', function () {
     $supplyA = Supply::factory()->inStock(50)->create();
     $supplyB = Supply::factory()->inStock(50)->create([
         'supplier_listing_id' => $supplyA->supplier_listing_id,
@@ -143,9 +139,7 @@ it('reconciles inventory when a finished production item changes supply lot', fu
         'percentage_of_oils' => 10,
     ]);
 
-    $production->update([
-        'status' => ProductionStatus::Finished,
-    ]);
+    $production->update(['status' => ProductionStatus::Ongoing]);
 
     expect((float) $supplyA->fresh()->quantity_out)->toBe(2.0)
         ->and((float) $supplyB->fresh()->quantity_out)->toBe(0.0);
@@ -161,12 +155,12 @@ it('reconciles inventory when a finished production item changes supply lot', fu
             SuppliesMovement::query()
                 ->where('production_id', $production->id)
                 ->where('movement_type', 'out')
-                ->where('reason', 'Consumed in finished production')
+                ->where('reason', ProductionConsumptionService::REASON_ONGOING_CONSUMPTION)
                 ->count()
         )->toBe(1);
 });
 
-it('consumes packaging lot using expected units coefficient', function () {
+it('consumes packaging lot only when production is finished', function () {
     $packagingSupply = Supply::factory()->inStock(500)->create();
 
     $production = Production::factory()->confirmed()->create([
@@ -184,9 +178,11 @@ it('consumes packaging lot using expected units coefficient', function () {
         'percentage_of_oils' => 1,
     ]);
 
-    $production->update([
-        'status' => ProductionStatus::Finished,
-    ]);
+    $production->update(['status' => ProductionStatus::Ongoing]);
+
+    expect((float) $packagingSupply->fresh()->quantity_out)->toBe(0.0);
+
+    $production->update(['status' => ProductionStatus::Finished]);
 
     expect((float) $packagingSupply->fresh()->quantity_out)->toBe(300.0);
 });

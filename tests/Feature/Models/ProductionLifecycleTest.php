@@ -8,6 +8,7 @@ use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionTask;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
@@ -82,6 +83,37 @@ describe('Production lifecycle orchestration', function () {
         ]);
 
         expect($production->fresh()->productionTasks)->toHaveCount(1);
+    });
+
+    it('generates template tasks when created as planned', function () {
+        $category = ProductCategory::factory()->create();
+        $productType = ProductType::factory()->create(['product_category_id' => $category->id]);
+        $product = Product::factory()->create([
+            'product_category_id' => $category->id,
+            'product_type_id' => $productType->id,
+        ]);
+
+        $template = TaskTemplate::factory()->default()->create([
+            'product_type_id' => $productType->id,
+            'product_category_id' => $category->id,
+        ]);
+
+        TaskTemplateItem::factory()->forTemplate($template)->create([
+            'name' => 'Préparation',
+            'offset_days' => 0,
+            'skip_weekends' => true,
+            'sort_order' => 1,
+        ]);
+
+        $production = Production::factory()->create([
+            'product_id' => $product->id,
+            'product_type_id' => $productType->id,
+            'status' => ProductionStatus::Planned,
+            'production_date' => now()->toDateString(),
+        ]);
+
+        expect($production->fresh()->productionTasks)->toHaveCount(1)
+            ->and($production->fresh()->productionTasks->first()->source)->toBe('template');
     });
 
     it('creates production items from formula when production is created', function () {
@@ -189,19 +221,21 @@ describe('Production lifecycle orchestration', function () {
         expect($production->fresh()->productionTasks)->toHaveCount(0);
     });
 
-    it('deletes tasks when production is moved back to planned', function () {
+    it('rejects transition from confirmed back to planned', function () {
         $production = Production::factory()->create(['status' => ProductionStatus::Confirmed]);
 
         ProductionTask::factory()->count(2)->create([
             'production_id' => $production->id,
         ]);
 
-        $production->update(['status' => ProductionStatus::Planned]);
+        expect(fn () => $production->update(['status' => ProductionStatus::Planned]))
+            ->toThrow(InvalidArgumentException::class);
 
-        expect($production->fresh()->productionTasks)->toHaveCount(0);
+        expect($production->fresh()->status)->toBe(ProductionStatus::Confirmed)
+            ->and($production->fresh()->productionTasks)->toHaveCount(2);
     });
 
-    it('keeps planned productions taskless when production date changes', function () {
+    it('keeps planned productions tasks when production date changes', function () {
         $production = Production::factory()->create(['status' => ProductionStatus::Planned]);
 
         ProductionTask::factory()->count(2)->create([
@@ -212,7 +246,7 @@ describe('Production lifecycle orchestration', function () {
             'production_date' => now()->addDays(5)->toDateString(),
         ]);
 
-        expect($production->fresh()->productionTasks)->toHaveCount(0);
+        expect($production->fresh()->productionTasks)->toHaveCount(2);
     });
 
     it('keeps tasks when production is ongoing or finished', function () {
@@ -227,6 +261,19 @@ describe('Production lifecycle orchestration', function () {
 
         $production->update(['status' => ProductionStatus::Finished]);
         expect($production->fresh()->productionTasks)->toHaveCount(2);
+    });
+
+    it('prevents deleting production items when production is finished', function () {
+        $production = Production::factory()->finished()->create();
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+        ]);
+
+        expect(fn () => $item->delete())
+            ->toThrow(InvalidArgumentException::class, 'Production items cannot be deleted once production is finished.');
+
+        expect(ProductionItem::query()->find($item->id))->not->toBeNull();
     });
 
     it('auto-reschedules non-manual tasks when production date changes', function () {

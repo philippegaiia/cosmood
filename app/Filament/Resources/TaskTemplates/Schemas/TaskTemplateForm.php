@@ -38,7 +38,7 @@ class TaskTemplateForm
                 Section::make('Tâches')
                     ->schema([
                         Repeater::make('items')
-                            ->label('')
+                            ->hiddenLabel()
                             ->relationship()
                             ->schema([
                                 TextInput::make('name')

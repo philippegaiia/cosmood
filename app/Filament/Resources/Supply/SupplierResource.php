@@ -25,6 +25,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -39,7 +40,7 @@ class SupplierResource extends Resource
 
     protected static ?string $navigationLabel = 'Fournisseurs';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-building-office';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingOffice;
 
     protected static ?int $navigationSort = 1;
 
@@ -66,7 +67,7 @@ class SupplierResource extends Resource
                                     return;
                                 }
                             })
-                            ->unique(Supplier::class, 'name', ignoreRecord: true)
+                            ->unique(Supplier::class, 'name')
                             ->columnSpan(3),
 
                         TextInput::make('slug')
@@ -74,13 +75,13 @@ class SupplierResource extends Resource
                             ->label('Slug')
                             ->required()
                             ->dehydrated()
-                            ->unique(ignoreRecord: true)
+                            ->unique()
                             ->maxLength(100)
                             ->columnSpan(3),
 
                         TextInput::make('code')
                             ->required()
-                            ->unique(Supplier::class, 'code', ignoreRecord: true)
+                            ->unique(Supplier::class, 'code')
                             ->maxLength(3)
                             ->columnSpan(2),
 
@@ -291,7 +292,7 @@ class SupplierResource extends Resource
                     ->collapsed()
                     ->schema([
                         TextEntry::make('description')
-                            ->label('')
+                            ->hiddenLabel()
                             ->markdown()
                             ->prose(),
 

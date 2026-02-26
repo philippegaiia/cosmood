@@ -5,6 +5,7 @@ namespace App\Models\Production;
 use App\Enums\FormulaItemCalculationMode;
 use App\Enums\IngredientBaseUnit;
 use App\Enums\Phases;
+use App\Enums\ProductionStatus;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\Supply;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use InvalidArgumentException;
 
 class ProductionItem extends Model
 {
@@ -31,6 +33,16 @@ class ProductionItem extends Model
         static::saving(function (ProductionItem $item): void {
             if ($item->supply_id !== null) {
                 $item->is_supplied = true;
+            }
+        });
+
+        static::deleting(function (ProductionItem $item): void {
+            $production = $item->relationLoaded('production')
+                ? $item->production
+                : $item->production()->first();
+
+            if ($production?->status === ProductionStatus::Finished) {
+                throw new InvalidArgumentException('Production items cannot be deleted once production is finished.');
             }
         });
     }
@@ -65,18 +77,24 @@ class ProductionItem extends Model
         return Phases::tryFrom((string) $this->phase)?->getLabel() ?? (string) $this->phase;
     }
 
-    public function getCalculatedQuantityKg(): float
+    public function getCalculatedQuantityKg(?Production $production = null): float
     {
+        $production ??= $this->relationLoaded('production')
+            ? $this->production
+            : ($this->production_id
+                ? Production::query()->select(['id', 'planned_quantity', 'expected_units'])->find($this->production_id)
+                : null);
+
         $coefficient = (float) ($this->percentage_of_oils ?? 0);
         $calculationMode = $this->resolveCalculationMode();
 
         if ($calculationMode === FormulaItemCalculationMode::QuantityPerUnit) {
-            $expectedUnits = (float) ($this->production?->expected_units ?? 0);
+            $expectedUnits = (float) ($production?->expected_units ?? 0);
 
             return round($expectedUnits * $coefficient, 3);
         }
 
-        $plannedQuantity = (float) ($this->production?->planned_quantity ?? 0);
+        $plannedQuantity = (float) ($production?->planned_quantity ?? 0);
 
         return round(($plannedQuantity * $coefficient) / 100, 3);
     }
@@ -92,7 +110,18 @@ class ProductionItem extends Model
             return FormulaItemCalculationMode::QuantityPerUnit;
         }
 
-        if (($this->ingredient?->base_unit?->value ?? null) === IngredientBaseUnit::Unit->value) {
+        $ingredient = $this->relationLoaded('ingredient')
+            ? $this->ingredient
+            : ($this->ingredient_id
+                ? Ingredient::query()->select(['id', 'base_unit'])->find($this->ingredient_id)
+                : null);
+
+        $ingredientBaseUnit = $ingredient?->base_unit;
+        $isUnitBasedIngredient = $ingredientBaseUnit instanceof IngredientBaseUnit
+            ? $ingredientBaseUnit === IngredientBaseUnit::Unit
+            : (string) $ingredientBaseUnit === IngredientBaseUnit::Unit->value;
+
+        if ($isUnitBasedIngredient) {
             return FormulaItemCalculationMode::QuantityPerUnit;
         }
 
@@ -111,19 +140,37 @@ class ProductionItem extends Model
 
     public function getReferenceUnitPrice(): ?float
     {
-        $supplyUnitPrice = $this->supply?->unit_price;
+        $supply = $this->relationLoaded('supply')
+            ? $this->supply
+            : ($this->supply_id
+                ? Supply::query()->select(['id', 'unit_price'])->find($this->supply_id)
+                : null);
+
+        $supplyUnitPrice = $supply?->unit_price;
 
         if ($supplyUnitPrice !== null) {
             return (float) $supplyUnitPrice;
         }
 
-        $listingPrice = $this->supplierListing?->price;
+        $supplierListing = $this->relationLoaded('supplierListing')
+            ? $this->supplierListing
+            : ($this->supplier_listing_id
+                ? SupplierListing::query()->select(['id', 'price'])->find($this->supplier_listing_id)
+                : null);
+
+        $listingPrice = $supplierListing?->price;
 
         if ($listingPrice !== null) {
             return (float) $listingPrice;
         }
 
-        $ingredientPrice = $this->ingredient?->price;
+        $ingredient = $this->relationLoaded('ingredient')
+            ? $this->ingredient
+            : ($this->ingredient_id
+                ? Ingredient::query()->select(['id', 'price'])->find($this->ingredient_id)
+                : null);
+
+        $ingredientPrice = $ingredient?->price;
 
         if ($ingredientPrice !== null) {
             return (float) $ingredientPrice;

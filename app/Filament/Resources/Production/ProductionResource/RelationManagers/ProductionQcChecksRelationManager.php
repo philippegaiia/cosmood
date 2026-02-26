@@ -11,6 +11,8 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Support\Facades\Auth;
@@ -72,7 +74,7 @@ class ProductionQcChecksRelationManager extends RelationManager
             ->recordActions([
                 Action::make('markDone')
                     ->label('Marquer fait')
-                    ->icon('heroicon-o-check-circle')
+                    ->icon(Heroicon::OutlinedCheckCircle)
                     ->color('success')
                     ->visible(fn (ProductionQcCheck $record): bool => ! $record->isDone())
                     ->action(function (ProductionQcCheck $record): void {
@@ -88,24 +90,24 @@ class ProductionQcChecksRelationManager extends RelationManager
                     }),
                 Action::make('recordResult')
                     ->label('Saisir')
-                    ->icon('heroicon-o-pencil-square')
-                    ->form([
+                    ->icon(Heroicon::OutlinedPencilSquare)
+                    ->schema([
                         Hidden::make('input_type'),
                         TextInput::make('value_number')
                             ->label('Valeur numérique')
                             ->numeric()
                             ->step(0.001)
-                            ->visible(fn (callable $get): bool => $get('input_type') === QcInputType::Number->value),
+                            ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value),
                         Select::make('value_boolean')
                             ->label('Valeur oui/non')
                             ->options([
                                 1 => 'Oui',
                                 0 => 'Non',
                             ])
-                            ->visible(fn (callable $get): bool => $get('input_type') === QcInputType::Boolean->value),
+                            ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Boolean->value),
                         TextInput::make('value_text')
                             ->label('Valeur texte')
-                            ->visible(fn (callable $get): bool => in_array($get('input_type'), [QcInputType::Text->value, QcInputType::Select->value], true)),
+                            ->visible(fn (Get $get): bool => in_array($get('input_type'), [QcInputType::Text->value, QcInputType::Select->value], true)),
                         Textarea::make('notes')
                             ->label('Notes')
                             ->rows(3),
@@ -136,7 +138,7 @@ class ProductionQcChecksRelationManager extends RelationManager
                     }),
                 Action::make('markUndone')
                     ->label('Marquer non fait')
-                    ->icon('heroicon-o-arrow-uturn-left')
+                    ->icon(Heroicon::OutlinedArrowUturnLeft)
                     ->color('warning')
                     ->visible(fn (ProductionQcCheck $record): bool => $record->isDone())
                     ->requiresConfirmation()

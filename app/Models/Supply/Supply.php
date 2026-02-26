@@ -72,6 +72,12 @@ class Supply extends Model
 
     public function getUnitOfMeasure(): string
     {
-        return (string) ($this->supplierListing?->unit_of_measure ?: 'kg');
+        $supplierListing = $this->relationLoaded('supplierListing')
+            ? $this->supplierListing
+            : ($this->supplier_listing_id
+                ? SupplierListing::query()->select(['id', 'unit_of_measure'])->find($this->supplier_listing_id)
+                : null);
+
+        return (string) ($supplierListing?->unit_of_measure ?: 'kg');
     }
 }

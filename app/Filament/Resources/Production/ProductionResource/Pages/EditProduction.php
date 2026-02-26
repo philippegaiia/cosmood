@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Production\ProductionResource\Pages;
 
 use App\Enums\Phases;
+use App\Enums\ProductionStatus;
 use App\Filament\Resources\Production\ProductionResource;
 use App\Models\Production\Formula;
 use App\Services\Production\MasterbatchService;
@@ -15,15 +16,31 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
 use Filament\Support\Exceptions\Halt;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Session;
 
 class EditProduction extends EditRecord
 {
     protected static string $resource = ProductionResource::class;
 
+    public static bool $formActionsAreSticky = true;
+
     public function getMaxContentWidth(): Width|string|null
     {
         return Width::Full;
+    }
+
+    public function getTitle(): string
+    {
+        $permanentBatch = trim((string) ($this->record->permanent_batch_number ?? ''));
+        $planningBatch = trim((string) ($this->record->batch_number ?? ''));
+        $productName = trim((string) ($this->record->product?->name ?? 'Produit inconnu'));
+
+        $lotLabel = filled($permanentBatch)
+            ? $permanentBatch.' ('.$planningBatch.')'
+            : ($planningBatch !== '' ? '- ('.$planningBatch.')' : '- (-)');
+
+        return 'Modifier Production - '.$lotLabel.' - '.$productName;
     }
 
     public function hasCombinedRelationManagerTabsWithContent(): bool
@@ -49,6 +66,40 @@ class EditProduction extends EditRecord
 
     protected function beforeSave(): void
     {
+        if ($this->isTransitioningToFinished()) {
+            $missingIngredientNames = $this->record->getMissingLotIngredientNamesForFinish();
+
+            if ($missingIngredientNames !== []) {
+                Notification::make()
+                    ->danger()
+                    ->title('Lots supply manquants')
+                    ->body('Impossible de terminer: sélectionner un lot pour '.implode(', ', $missingIngredientNames).'.')
+                    ->send();
+
+                throw new Halt;
+            }
+        }
+
+        if ($this->shouldConfirmStatusTransition()) {
+            $statusSignature = $this->getStatusTransitionConfirmationSignature();
+
+            if (! $this->hasStatusTransitionConfirmation($statusSignature)) {
+                $this->storeStatusTransitionConfirmation($statusSignature);
+
+                Notification::make()
+                    ->warning()
+                    ->title('Confirmer le changement de statut')
+                    ->body($this->getStatusTransitionConfirmationMessage())
+                    ->send();
+
+                throw new Halt;
+            }
+
+            $this->clearStatusTransitionConfirmationState();
+        } else {
+            $this->clearStatusTransitionConfirmationState();
+        }
+
         if (! $this->shouldConfirmSaponifiedTotalMismatch()) {
             $this->clearSaponifiedConfirmationState();
 
@@ -79,6 +130,11 @@ class EditProduction extends EditRecord
         return sprintf('production:saponified-confirm:%s', $this->record->getKey());
     }
 
+    private function getStatusTransitionConfirmationSessionKey(): string
+    {
+        return sprintf('production:status-confirm:%s', $this->record->getKey());
+    }
+
     private function getSaponifiedConfirmationSignature(): string
     {
         return implode('|', [
@@ -93,9 +149,19 @@ class EditProduction extends EditRecord
         return Session::get($this->getSaponifiedConfirmationSessionKey()) === $signature;
     }
 
+    private function hasStatusTransitionConfirmation(string $signature): bool
+    {
+        return Session::get($this->getStatusTransitionConfirmationSessionKey()) === $signature;
+    }
+
     private function storeSaponifiedConfirmation(string $signature): void
     {
         Session::put($this->getSaponifiedConfirmationSessionKey(), $signature);
+    }
+
+    private function storeStatusTransitionConfirmation(string $signature): void
+    {
+        Session::put($this->getStatusTransitionConfirmationSessionKey(), $signature);
     }
 
     private function clearSaponifiedConfirmationState(): void
@@ -103,27 +169,92 @@ class EditProduction extends EditRecord
         Session::forget($this->getSaponifiedConfirmationSessionKey());
     }
 
+    private function clearStatusTransitionConfirmationState(): void
+    {
+        Session::forget($this->getStatusTransitionConfirmationSessionKey());
+    }
+
+    private function shouldConfirmStatusTransition(): bool
+    {
+        $currentStatus = $this->record->status instanceof ProductionStatus
+            ? $this->record->status
+            : ProductionStatus::tryFrom((string) ($this->record->status ?? ''));
+
+        $nextStatus = ProductionStatus::tryFrom((string) ($this->data['status'] ?? ''));
+
+        if (! $currentStatus || ! $nextStatus) {
+            return false;
+        }
+
+        return $currentStatus !== $nextStatus;
+    }
+
+    private function isTransitioningToFinished(): bool
+    {
+        $currentStatus = $this->record->status instanceof ProductionStatus
+            ? $this->record->status
+            : ProductionStatus::tryFrom((string) ($this->record->status ?? ''));
+
+        $nextStatus = ProductionStatus::tryFrom((string) ($this->data['status'] ?? ''));
+
+        if (! $nextStatus) {
+            return false;
+        }
+
+        return $nextStatus === ProductionStatus::Finished && $currentStatus !== ProductionStatus::Finished;
+    }
+
+    private function getStatusTransitionConfirmationSignature(): string
+    {
+        $currentStatus = $this->record->status instanceof ProductionStatus
+            ? $this->record->status
+            : ProductionStatus::tryFrom((string) ($this->record->status ?? ''));
+
+        $nextStatus = ProductionStatus::tryFrom((string) ($this->data['status'] ?? ''));
+
+        return implode('|', [
+            (string) ($this->record->getKey() ?? 'new'),
+            (string) ($currentStatus?->value ?? ''),
+            (string) ($nextStatus?->value ?? ''),
+        ]);
+    }
+
+    private function getStatusTransitionConfirmationMessage(): string
+    {
+        $currentStatus = $this->record->status instanceof ProductionStatus
+            ? $this->record->status
+            : ProductionStatus::tryFrom((string) ($this->record->status ?? ''));
+
+        $nextStatus = ProductionStatus::tryFrom((string) ($this->data['status'] ?? ''));
+
+        return sprintf(
+            'Vous allez passer de "%s" à "%s". Cliquez encore sur Enregistrer pour confirmer.',
+            $currentStatus?->getLabel() ?? '-',
+            $nextStatus?->getLabel() ?? '-',
+        );
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             Action::make('exportPdf')
                 ->label('Exporter PDF production')
-                ->icon('heroicon-o-document-arrow-down')
+                ->icon(Heroicon::OutlinedDocumentArrowDown)
                 ->url(fn (): string => route('productions.sheet-pdf', $this->record))
                 ->openUrlInNewTab(),
             Action::make('printSheet')
                 ->label('Imprimer fiche de production')
-                ->icon('heroicon-o-printer')
+                ->icon(Heroicon::OutlinedPrinter)
                 ->url(fn (): string => route('productions.print-sheet', $this->record))
                 ->openUrlInNewTab(),
             Action::make('followSheet')
                 ->label('Fiche de suivi')
-                ->icon('heroicon-o-document-text')
+                ->icon(Heroicon::OutlinedDocumentText)
                 ->url(fn (): string => route('productions.follow-sheet', $this->record))
                 ->openUrlInNewTab(),
             Action::make('applyMasterbatchTraceability')
                 ->label('Importer traçabilité MB')
-                ->icon('heroicon-o-arrow-down-tray')
+                ->icon(Heroicon::OutlinedArrowDownTray)
                 ->color('warning')
                 ->visible(fn (): bool => (bool) $this->record?->masterbatch_lot_id)
                 ->requiresConfirmation()
@@ -164,8 +295,10 @@ class EditProduction extends EditRecord
                     }
                 }),
             ViewAction::make(),
-            DeleteAction::make(),
-            ForceDeleteAction::make(),
+            DeleteAction::make()
+                ->visible(fn (): bool => $this->record->status !== ProductionStatus::Finished),
+            ForceDeleteAction::make()
+                ->visible(fn (): bool => $this->record->status !== ProductionStatus::Finished),
             RestoreAction::make(),
         ];
     }

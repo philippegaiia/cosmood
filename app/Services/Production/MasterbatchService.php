@@ -111,6 +111,8 @@ class MasterbatchService
             return collect();
         }
 
+        $mbFormula->loadMissing('formulaItems.ingredient');
+
         $expandedIngredients = collect();
 
         foreach ($mbFormula->formulaItems as $formulaItem) {
@@ -175,7 +177,7 @@ class MasterbatchService
             : (float) $production->productionItems()
                 ->where('phase', $replacedPhase)
                 ->get()
-                ->sum(fn ($item): float => $item->getCalculatedQuantityKg());
+                ->sum(fn ($item): float => $item->getCalculatedQuantityKg($production));
 
         if ($totalQuantity <= 0) {
             return null;
@@ -213,11 +215,11 @@ class MasterbatchService
             ->where('phase', $replacedPhase)
             ->sortBy('sort')
             ->values()
-            ->map(function ($item): array {
+            ->map(function ($item) use ($masterbatch): array {
                 return [
                     'ingredient_name' => $item->ingredient?->name,
                     'phase' => $item->phase,
-                    'quantity' => $item->getCalculatedQuantityKg(),
+                    'quantity' => $item->getCalculatedQuantityKg($masterbatch),
                     'supply_batch_number' => $item->supply_batch_number,
                     'supply_ref' => $item->supply?->order_ref,
                 ];

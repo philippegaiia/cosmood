@@ -9,6 +9,8 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\Str;
 
@@ -25,12 +27,12 @@ class ProductionWaveForm
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true)
-                            ->afterStateUpdated(fn ($state, callable $set) => $set('slug', Str::slug($state))),
+                            ->afterStateUpdated(fn ($state, Set $set) => $set('slug', Str::slug($state))),
                         TextInput::make('slug')
                             ->label('Slug')
                             ->required()
                             ->maxLength(255)
-                            ->unique(ignoreRecord: true),
+                            ->unique(),
                         Select::make('status')
                             ->label('Statut')
                             ->options(WaveStatus::class)
@@ -52,13 +54,13 @@ class ProductionWaveForm
                                     ->label('Date de début')
                                     ->native(false)
                                     ->weekStartsOnMonday()
-                                    ->required(fn (callable $get) => $get('status') !== WaveStatus::Draft->value),
+                                    ->required(fn (Get $get) => $get('status') !== WaveStatus::Draft->value),
                                 DatePicker::make('planned_end_date')
                                     ->label('Date de fin')
                                     ->native(false)
                                     ->weekStartsOnMonday()
                                     ->afterOrEqual('planned_start_date')
-                                    ->required(fn (callable $get) => $get('status') !== WaveStatus::Draft->value),
+                                    ->required(fn (Get $get) => $get('status') !== WaveStatus::Draft->value),
                             ])
                             ->columns(2),
                     ])

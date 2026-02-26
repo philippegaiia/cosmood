@@ -11,6 +11,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -118,7 +119,7 @@ class ProductionTasksRelationManager extends RelationManager
             ->headerActions([
                 CreateAction::make()
                     ->label('Ajouter tâche manuelle')
-                    ->form([
+                    ->schema([
                         TextInput::make('name')
                             ->label('Nom')
                             ->required(),
@@ -149,7 +150,7 @@ class ProductionTasksRelationManager extends RelationManager
                 Action::make('finish')
                     ->label('Terminer')
                     ->color('success')
-                    ->icon('heroicon-o-check-circle')
+                    ->icon(Heroicon::OutlinedCheckCircle)
                     ->visible(fn (ProductionTask $record): bool => ! $record->is_finished && ! $record->isCancelled() && ! app(TaskGenerationService::class)->isBlockedByDependencies($record))
                     ->action(function (ProductionTask $record): void {
                         try {
@@ -164,9 +165,9 @@ class ProductionTasksRelationManager extends RelationManager
                 Action::make('force_finish')
                     ->label('Forcer terminer')
                     ->color('warning')
-                    ->icon('heroicon-o-exclamation-triangle')
+                    ->icon(Heroicon::OutlinedExclamationTriangle)
                     ->visible(fn (ProductionTask $record): bool => ! $record->is_finished && ! $record->isCancelled() && app(TaskGenerationService::class)->isBlockedByDependencies($record))
-                    ->form([
+                    ->schema([
                         Textarea::make('reason')
                             ->label('Raison du bypass')
                             ->required()
@@ -190,9 +191,9 @@ class ProductionTasksRelationManager extends RelationManager
                     }),
                 Action::make('reschedule')
                     ->label('Planifier')
-                    ->icon('heroicon-o-calendar-days')
+                    ->icon(Heroicon::OutlinedCalendarDays)
                     ->visible(fn (ProductionTask $record): bool => ! $record->is_finished && ! $record->isCancelled())
-                    ->form([
+                    ->schema([
                         DatePicker::make('scheduled_date')
                             ->label('Nouvelle date')
                             ->native(false)
@@ -203,17 +204,17 @@ class ProductionTasksRelationManager extends RelationManager
                     }),
                 Action::make('reset_auto')
                     ->label('Retour auto')
-                    ->icon('heroicon-o-arrow-path')
+                    ->icon(Heroicon::OutlinedArrowPath)
                     ->visible(fn (ProductionTask $record): bool => $record->is_manual_schedule && ! $record->is_finished && ! $record->isCancelled())
                     ->action(function (ProductionTask $record): void {
                         app(TaskGenerationService::class)->resetToAutoSchedule($record);
                     }),
                 Action::make('cancel')
                     ->label('Annuler')
-                    ->icon('heroicon-o-x-circle')
+                    ->icon(Heroicon::OutlinedXCircle)
                     ->color('danger')
                     ->visible(fn (ProductionTask $record): bool => ! $record->isCancelled())
-                    ->form([
+                    ->schema([
                         Textarea::make('reason')
                             ->label('Raison')
                             ->required(),

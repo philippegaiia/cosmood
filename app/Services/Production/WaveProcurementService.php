@@ -3,6 +3,7 @@
 namespace App\Services\Production;
 
 use App\Enums\OrderStatus;
+use App\Enums\ProductionStatus;
 use App\Enums\RequirementStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionIngredientRequirement;
@@ -29,6 +30,7 @@ class WaveProcurementService
 
         $requirements = ProductionIngredientRequirement::query()
             ->where('production_wave_id', $wave->id)
+            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
             ->whereNull('fulfilled_by_masterbatch_id')
             ->whereIn('status', [RequirementStatus::NotOrdered, RequirementStatus::Ordered])
             ->with(['ingredient', 'supplierListing.supplier'])
@@ -60,6 +62,7 @@ class WaveProcurementService
 
         $requirements = ProductionIngredientRequirement::query()
             ->where('production_wave_id', $wave->id)
+            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
             ->whereNull('fulfilled_by_masterbatch_id')
             ->whereIn('status', [RequirementStatus::NotOrdered, RequirementStatus::Ordered])
             ->with('ingredient')
@@ -186,6 +189,7 @@ class WaveProcurementService
 
         $requirements = ProductionIngredientRequirement::query()
             ->where('production_wave_id', $wave->id)
+            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
             ->get();
 
         return [
@@ -214,8 +218,10 @@ class WaveProcurementService
     {
         $wave->loadMissing('productions');
 
-        $wave->productions->each(function (Production $production): void {
-            $this->productionRequirementsService->generateRequirements($production);
-        });
+        $wave->productions
+            ->filter(fn (Production $production): bool => $production->status !== ProductionStatus::Cancelled)
+            ->each(function (Production $production): void {
+                $this->productionRequirementsService->generateRequirements($production);
+            });
     }
 }

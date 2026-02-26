@@ -11,6 +11,8 @@ class CreateProduction extends CreateRecord
 {
     protected static string $resource = ProductionResource::class;
 
+    public static bool $formActionsAreSticky = true;
+
     public function getMaxContentWidth(): Width|string|null
     {
         return Width::Full;

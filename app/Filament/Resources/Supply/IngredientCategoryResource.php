@@ -20,6 +20,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
@@ -33,7 +34,7 @@ class IngredientCategoryResource extends Resource
 
     protected static ?string $navigationLabel = 'Catégories Ingrédients';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-tag';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedTag;
 
     protected static ?int $navigationSort = 4;
 
@@ -65,14 +66,14 @@ class IngredientCategoryResource extends Resource
                 TextInput::make('code')
                     ->required()
                     ->dehydrated()
-                    ->unique(IngredientCategory::class, 'code', ignoreRecord: true)
+                    ->unique(IngredientCategory::class, 'code')
                     ->maxLength(15),
 
                 TextInput::make('slug')
                     ->disabledOn('edit')
                     ->dehydrated()
                     ->required()
-                    ->unique(ignoreRecord: true)
+                    ->unique()
                     ->maxLength(255),
 
                 Toggle::make('is_visible')

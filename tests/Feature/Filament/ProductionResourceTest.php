@@ -287,9 +287,34 @@ describe('Production - Relationships', function () {
         ])
             ->set('data.status', ProductionStatus::Ongoing->value)
             ->call('save')
+            ->call('save')
             ->assertSet('data.permanent_batch_number', '00001');
 
         expect($production->fresh()->permanent_batch_number)->toBe('00001');
+    });
+
+    it('blocks transition to finished when required items have no selected lot', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->inProgress()->create();
+
+        $production->productionItems()->delete();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'supply_id' => null,
+            'supplier_listing_id' => null,
+            'supply_batch_number' => null,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->set('data.status', ProductionStatus::Finished->value)
+            ->call('save')
+            ->assertNotified('Lots supply manquants');
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Ongoing);
     });
 
     it('asks confirmation on save when soap production total saponified is not 100 percent', function () {
@@ -666,11 +691,11 @@ describe('Production list table actions', function () {
 
         expect($duplicate)->not->toBeNull()
             ->and($duplicate->status)->toBe(ProductionStatus::Planned)
-            ->and($duplicate->batch_number)->toContain('B5402-D')
+            ->and($duplicate->batch_number)->toMatch('/^T\d{5}$/')
             ->and($duplicate->batch_number)->not->toBe($production->batch_number);
     });
 
-    it('duplicates increment with D01 D02 pattern', function () {
+    it('duplicates increment with sequential planning references', function () {
         $this->actingAs($this->user);
 
         $production = Production::factory()->confirmed()->create([
@@ -682,14 +707,28 @@ describe('Production list table actions', function () {
 
         $list->callAction(TestAction::make('duplicate')->table($production))->assertHasNoErrors();
 
-        $firstDuplicate = Production::query()->where('batch_number', 'B7000-D01')->first();
+        $firstDuplicate = Production::query()
+            ->where('id', '!=', $production->id)
+            ->latest('id')
+            ->first();
+
         expect($firstDuplicate)->not->toBeNull();
 
         $list->callAction(TestAction::make('duplicate')->table($firstDuplicate))->assertHasNoErrors();
 
-        $secondDuplicate = Production::query()->where('batch_number', 'B7000-D02')->first();
+        $secondDuplicate = Production::query()
+            ->whereNotIn('id', [$production->id, $firstDuplicate->id])
+            ->latest('id')
+            ->first();
 
-        expect($secondDuplicate)->not->toBeNull();
+        expect($secondDuplicate)->not->toBeNull()
+            ->and($firstDuplicate->batch_number)->toMatch('/^T\d{5}$/')
+            ->and($secondDuplicate->batch_number)->toMatch('/^T\d{5}$/');
+
+        preg_match('/^T(\d{5})$/', $firstDuplicate->batch_number, $firstMatches);
+        preg_match('/^T(\d{5})$/', $secondDuplicate->batch_number, $secondMatches);
+
+        expect((int) ($secondMatches[1] ?? 0))->toBe((int) ($firstMatches[1] ?? 0) + 1);
     });
 });
 

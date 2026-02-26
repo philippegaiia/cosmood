@@ -10,20 +10,44 @@ use App\Services\InventoryMovementService;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Converts finished productions into stock outbound movements and quantity updates.
+ * Converts production lifecycle stages into stock outbound movements.
  */
 class ProductionConsumptionService
 {
+    public const REASON_ONGOING_CONSUMPTION = 'Consumed at production start';
+
+    public const REASON_FINISHED_PACKAGING_CONSUMPTION = 'Consumed at production finish (packaging)';
+
     public function __construct(
         private readonly InventoryMovementService $inventoryMovementService,
         private readonly MasterbatchService $masterbatchService,
     ) {}
 
     /**
-     * Consumes linked supplies for a finished production.
+     * Consumes non-packaging inputs when production starts.
      *
-     * For masterbatch-based productions, replaced-phase raw ingredients are skipped and
-     * the produced masterbatch lot is consumed instead.
+     * This method is idempotent: previous start consumptions are rolled back
+     * before recalculating from current production items.
+     */
+    public function consumeForOngoingProduction(Production $production): void
+    {
+        if (! in_array($production->status, [ProductionStatus::Ongoing, ProductionStatus::Finished], true)) {
+            return;
+        }
+
+        $this->consumeForProductionStage(
+            production: $production,
+            includePackaging: false,
+            includeNonPackaging: true,
+            movementReason: self::REASON_ONGOING_CONSUMPTION,
+        );
+    }
+
+    /**
+     * Consumes packaging inputs when production is finished.
+     *
+     * This method is idempotent: previous finish-packaging consumptions are rolled back
+     * before recalculating from current production items.
      */
     public function consumeForFinishedProduction(Production $production): void
     {
@@ -31,7 +55,47 @@ class ProductionConsumptionService
             return;
         }
 
+        $this->consumeForProductionStage(
+            production: $production,
+            includePackaging: true,
+            includeNonPackaging: false,
+            movementReason: self::REASON_FINISHED_PACKAGING_CONSUMPTION,
+        );
+    }
+
+    /**
+     * Reverts all computed production consumption movements for one batch.
+     */
+    public function rollbackAllComputedConsumption(Production $production): void
+    {
         DB::transaction(function () use ($production): void {
+            /** @var Production|null $lockedProduction */
+            $lockedProduction = Production::query()
+                ->lockForUpdate()
+                ->find($production->id);
+
+            if (! $lockedProduction) {
+                return;
+            }
+
+            $this->rollbackPreviousConsumption($lockedProduction, self::REASON_ONGOING_CONSUMPTION);
+            $this->rollbackPreviousConsumption($lockedProduction, self::REASON_FINISHED_PACKAGING_CONSUMPTION);
+        }, attempts: 5);
+    }
+
+    /**
+     * Applies one consumption stage according to phase inclusion rules.
+     *
+     * For masterbatch-based productions, replaced-phase raw ingredients are skipped and
+     * the produced masterbatch lot is consumed instead for non-packaging stage.
+     */
+    private function consumeForProductionStage(
+        Production $production,
+        bool $includePackaging,
+        bool $includeNonPackaging,
+        string $movementReason,
+    ): void {
+        DB::transaction(function () use ($production, $includePackaging, $includeNonPackaging, $movementReason): void {
             /** @var Production $lockedProduction */
             $lockedProduction = Production::query()
                 ->with([
@@ -41,11 +105,11 @@ class ProductionConsumptionService
                 ->lockForUpdate()
                 ->findOrFail($production->id);
 
-            if ($lockedProduction->status !== ProductionStatus::Finished) {
+            if (! in_array($lockedProduction->status, [ProductionStatus::Ongoing, ProductionStatus::Finished], true)) {
                 return;
             }
 
-            $this->rollbackPreviousConsumption($lockedProduction);
+            $this->rollbackPreviousConsumption($lockedProduction, $movementReason);
 
             $consumptionsBySupply = [];
 
@@ -61,11 +125,21 @@ class ProductionConsumptionService
                     continue;
                 }
 
+                $isPackagingPhase = $item->isPackagingPhase();
+
+                if ($isPackagingPhase && ! $includePackaging) {
+                    continue;
+                }
+
+                if (! $isPackagingPhase && ! $includeNonPackaging) {
+                    continue;
+                }
+
                 if ($replacedPhase !== null && (string) $item->phase === $replacedPhase) {
                     continue;
                 }
 
-                $quantity = $item->getCalculatedQuantityKg();
+                $quantity = $item->getCalculatedQuantityKg($lockedProduction);
 
                 if ($quantity <= 0) {
                     continue;
@@ -76,7 +150,7 @@ class ProductionConsumptionService
 
             $masterbatchLine = $this->masterbatchService->getMasterbatchLine($lockedProduction);
 
-            if ($masterbatchLine !== null) {
+            if ($includeNonPackaging && $masterbatchLine !== null) {
                 $masterbatchSupplyId = $masterbatch?->producedSupply?->id;
                 $masterbatchQuantity = (float) ($masterbatchLine['quantity'] ?? 0);
 
@@ -90,7 +164,12 @@ class ProductionConsumptionService
                     continue;
                 }
 
-                $this->consumeSupply($lockedProduction, (int) $supplyId, round((float) $quantity, 3));
+                $this->consumeSupply(
+                    production: $lockedProduction,
+                    supplyId: (int) $supplyId,
+                    quantityKg: round((float) $quantity, 3),
+                    movementReason: $movementReason,
+                );
             }
         }, attempts: 5);
     }
@@ -98,7 +177,7 @@ class ProductionConsumptionService
     /**
      * Applies one supply deduction only once for a production.
      */
-    private function consumeSupply(Production $production, int $supplyId, float $quantityKg): void
+    private function consumeSupply(Production $production, int $supplyId, float $quantityKg, string $movementReason): void
     {
         /** @var Supply $supply */
         $supply = Supply::query()
@@ -118,19 +197,19 @@ class ProductionConsumptionService
             supply: $supply,
             production: $production,
             quantityKg: $quantityKg,
-            reason: 'Consumed in finished production',
+            reason: $movementReason,
         );
     }
 
     /**
      * Reverts previous computed consumption movements before recalculating from current items.
      */
-    private function rollbackPreviousConsumption(Production $production): void
+    private function rollbackPreviousConsumption(Production $production, string $movementReason): void
     {
         $movements = SuppliesMovement::query()
             ->where('production_id', $production->id)
             ->where('movement_type', 'out')
-            ->where('reason', 'Consumed in finished production')
+            ->where('reason', $movementReason)
             ->lockForUpdate()
             ->get();
 

@@ -14,6 +14,7 @@ use Filament\Actions\ViewAction;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\RepeatableEntry\TableColumn;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
@@ -67,7 +68,7 @@ class ProductionWavesTable
             ->recordActions([
                 Action::make('approve')
                     ->label('Approuver')
-                    ->icon('heroicon-o-check-badge')
+                    ->icon(Heroicon::OutlinedCheckBadge)
                     ->color('info')
                     ->requiresConfirmation()
                     ->visible(fn (ProductionWave $record): bool => $record->isDraft())
@@ -89,7 +90,7 @@ class ProductionWavesTable
                     }),
                 Action::make('start')
                     ->label('Démarrer')
-                    ->icon('heroicon-o-play')
+                    ->icon(Heroicon::OutlinedPlay)
                     ->color('warning')
                     ->requiresConfirmation()
                     ->visible(fn (ProductionWave $record): bool => $record->isApproved())
@@ -98,7 +99,7 @@ class ProductionWavesTable
                     }),
                 Action::make('complete')
                     ->label('Terminer')
-                    ->icon('heroicon-o-check')
+                    ->icon(Heroicon::OutlinedCheck)
                     ->color('success')
                     ->requiresConfirmation()
                     ->visible(fn (ProductionWave $record): bool => $record->isInProgress())
@@ -107,7 +108,7 @@ class ProductionWavesTable
                     }),
                 Action::make('cancel')
                     ->label('Annuler')
-                    ->icon('heroicon-o-x-mark')
+                    ->icon(Heroicon::OutlinedXMark)
                     ->color('danger')
                     ->requiresConfirmation()
                     ->visible(fn (ProductionWave $record): bool => ! $record->isCancelled() && ! $record->isCompleted())
@@ -116,7 +117,7 @@ class ProductionWavesTable
                     }),
                 Action::make('procurementPlan')
                     ->label('Plan achats')
-                    ->icon('heroicon-o-clipboard-document-list')
+                    ->icon(Heroicon::OutlinedClipboardDocumentList)
                     ->color('gray')
                     ->modalHeading(fn (ProductionWave $record): string => 'Plan achats - '.$record->name)
                     ->modalSubmitAction(false)
@@ -163,7 +164,7 @@ class ProductionWavesTable
                     ]),
                 Action::make('printProcurementPlan')
                     ->label('Imprimer plan')
-                    ->icon('heroicon-o-printer')
+                    ->icon(Heroicon::OutlinedPrinter)
                     ->color('gray')
                     ->url(fn (ProductionWave $record): string => route('production-waves.procurement-plan.print', $record))
                     ->openUrlInNewTab(),

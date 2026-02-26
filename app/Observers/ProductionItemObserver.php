@@ -5,15 +5,15 @@ namespace App\Observers;
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
-use App\Services\Production\ProductionConsumptionService;
+use App\Services\Production\ProductionStockLifecycleService;
 
 /**
- * Keeps stock consumption synchronized when production items are edited after finish.
+ * Keeps reservations and staged stock consumption synchronized with edited production items.
  */
 class ProductionItemObserver
 {
     public function __construct(
-        private readonly ProductionConsumptionService $productionConsumptionService,
+        private readonly ProductionStockLifecycleService $productionStockLifecycleService,
     ) {}
 
     public function created(ProductionItem $productionItem): void
@@ -47,10 +47,10 @@ class ProductionItemObserver
 
         $production = Production::query()->find($productionId);
 
-        if (! $production || $production->status !== ProductionStatus::Finished) {
+        if (! $production || ! in_array($production->status, [ProductionStatus::Planned, ProductionStatus::Confirmed, ProductionStatus::Ongoing, ProductionStatus::Finished], true)) {
             return;
         }
 
-        $this->productionConsumptionService->consumeForFinishedProduction($production);
+        $this->productionStockLifecycleService->syncForStatus($production);
     }
 }

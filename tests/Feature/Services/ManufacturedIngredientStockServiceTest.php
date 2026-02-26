@@ -75,6 +75,12 @@ it('auto-creates internal stock lot when production status changes to finished',
         'permanent_batch_number' => null,
     ]);
 
+    $production->productionItems()->delete();
+
+    $production->update([
+        'status' => ProductionStatus::Ongoing,
+    ]);
+
     $production->update([
         'status' => ProductionStatus::Finished,
     ]);

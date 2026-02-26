@@ -2,6 +2,7 @@
 
 namespace App\Services\Production;
 
+use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionTask;
 use App\Models\Production\TaskTemplate;
@@ -220,7 +221,7 @@ class TaskGenerationService
         }
 
         if ($task->sequence_order === 1) {
-            $production = $task->production;
+            $production = $this->resolveProduction($task);
 
             if ($production) {
                 $production->update([
@@ -241,7 +242,8 @@ class TaskGenerationService
             return;
         }
 
-        $task->production->productionTasks()
+        ProductionTask::query()
+            ->where('production_id', $task->production_id)
             ->where('source', 'template')
             ->where('sequence_order', '>', $task->sequence_order)
             ->where('is_finished', false)
@@ -276,7 +278,13 @@ class TaskGenerationService
             'is_manual_schedule' => false,
         ]);
 
-        $this->rescheduleTasks($task->production, false);
+        $production = $this->resolveProduction($task);
+
+        if (! $production) {
+            return;
+        }
+
+        $this->rescheduleTasks($production, false);
     }
 
     /**
@@ -288,7 +296,8 @@ class TaskGenerationService
             return false;
         }
 
-        return $task->production->productionTasks()
+        return ProductionTask::query()
+            ->where('production_id', $task->production_id)
             ->where('source', 'template')
             ->where('sequence_order', '<', $task->sequence_order)
             ->where('is_finished', false)
@@ -300,7 +309,13 @@ class TaskGenerationService
      */
     public function getTaskTemplateForProduction(Production $production): ?TaskTemplate
     {
-        $productTypeId = $production->product_type_id ?? $production->product?->product_type_id;
+        $productTypeId = $production->product_type_id;
+
+        if (! $productTypeId && $production->product_id) {
+            $productTypeId = Product::query()
+                ->whereKey($production->product_id)
+                ->value('product_type_id');
+        }
 
         if (! $productTypeId) {
             return null;
@@ -317,6 +332,22 @@ class TaskGenerationService
         return TaskTemplate::whereNull('product_type_id')
             ->where('is_default', true)
             ->first();
+    }
+
+    /**
+     * Resolves the production for a task without triggering lazy loading.
+     */
+    private function resolveProduction(ProductionTask $task): ?Production
+    {
+        if ($task->relationLoaded('production')) {
+            return $task->production;
+        }
+
+        if (! $task->production_id) {
+            return null;
+        }
+
+        return Production::query()->find($task->production_id);
     }
 
     /**

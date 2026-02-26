@@ -32,6 +32,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TrashedFilter;
@@ -49,7 +50,7 @@ class SupplierOrderResource extends Resource
 
     protected static ?string $navigationLabel = 'Commandes fournisseurs';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-shopping-cart';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingCart;
 
     protected static ?int $navigationSort = 1;
 
@@ -97,7 +98,7 @@ class SupplierOrderResource extends Resource
                                 return $serie;
                             })
                             ->dehydrated()
-                            ->unique(SupplierOrder::class, ignoreRecord: true)
+                            ->unique(SupplierOrder::class)
                             ->required(fn (string $operation): bool => $operation === 'create'),
                         TextInput::make('order_ref')
                             ->maxLength(255)
@@ -199,7 +200,7 @@ class SupplierOrderResource extends Resource
                                 TextInput::make('batch_number')
                                     ->label('No. Lot')
                                     // ->live()
-                                    ->unique(SupplierOrderItem::class, ignoreRecord: true)
+                                    ->unique(SupplierOrderItem::class)
                                     ->columnSpan(2),
 
                                 DatePicker::make('expiry_date')
@@ -458,17 +459,17 @@ class SupplierOrderResource extends Resource
             ->recordActions([
                 Action::make('exportPdf')
                     ->label('PO PDF')
-                    ->icon('heroicon-o-document-arrow-down')
+                    ->icon(Heroicon::OutlinedDocumentArrowDown)
                     ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-pdf', $record))
                     ->openUrlInNewTab(),
                 Action::make('printPo')
                     ->label('Imprimer PO')
-                    ->icon('heroicon-o-printer')
+                    ->icon(Heroicon::OutlinedPrinter)
                     ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-print', $record))
                     ->openUrlInNewTab(),
                 Action::make('copyEmail')
                     ->label('Copier email')
-                    ->icon('heroicon-o-clipboard-document')
+                    ->icon(Heroicon::OutlinedClipboardDocument)
                     ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-email-copy', $record))
                     ->openUrlInNewTab(),
                 EditAction::make(),

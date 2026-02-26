@@ -36,6 +36,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Filters\TrashedFilter;
@@ -52,7 +53,7 @@ class FormulaResource extends Resource
 
     protected static ?string $navigationLabel = 'Formules';
 
-    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-beaker';
+    protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBeaker;
 
     public static function form(Schema $schema): Schema
     {
@@ -68,13 +69,13 @@ class FormulaResource extends Resource
                     ])
                     ->schema([
                         TextInput::make('name')
-                            ->unique(Formula::class, ignoreRecord: true)
+                            ->unique(Formula::class)
                             ->maxLength(255),
 
                         TextInput::make('code')
                             ->maxLength(20)
                             ->disabledOn('edit')
-                            ->unique(Formula::class, ignoreRecord: true)
+                            ->unique(Formula::class)
                             ->required(fn (string $operation): bool => $operation === 'create'),
 
                         Select::make('product_id')
@@ -428,7 +429,7 @@ class FormulaResource extends Resource
     {
         return Action::make('duplicate')
             ->label('Dupliquer')
-            ->icon('heroicon-o-document-duplicate')
+            ->icon(Heroicon::OutlinedDocumentDuplicate)
             ->color('gray')
             ->requiresConfirmation()
             ->action(function (Formula $record): void {
