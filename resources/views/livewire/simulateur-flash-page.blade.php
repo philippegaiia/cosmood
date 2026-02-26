@@ -39,7 +39,7 @@
         <flux:separator />
 
         <div class="overflow-x-auto">
-            <div class="min-w-[980px] space-y-3">
+            <div class="min-w-245 space-y-3">
                 @foreach ($this->lines as $index => $line)
                 <div wire:key="line-{{ $line['line_key'] ?? $index }}" class="flash-sim-grid">
                     <div class="flash-col-2">
