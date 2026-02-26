@@ -2,15 +2,17 @@
 
 namespace App\Livewire;
 
+use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Product;
 use App\Services\Production\FlashSimulationService;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 class SimulateurFlashPage extends Component
 {
     /**
-     * @var array<int, array{product_id: int|null, units: float|int|null}>
+     * @var array<int, array{line_key: string, product_id: int|null, product_search: string, desired_units: float|int|null, batch_size_preset_id: int|null}>
      */
     public array $lines = [];
 
@@ -18,6 +20,16 @@ class SimulateurFlashPage extends Component
      * @var array<int, string>
      */
     public array $productOptions = [];
+
+    /**
+     * @var array<int, array<int, string>>
+     */
+    public array $batchPresetOptionsByProduct = [];
+
+    /**
+     * @var array<int, int|null>
+     */
+    public array $defaultPresetIdByProduct = [];
 
     /**
      * @var array<int, array<string, mixed>>
@@ -40,42 +52,95 @@ class SimulateurFlashPage extends Component
     public array $totals = [
         'products_count' => 0,
         'total_units' => 0,
+        'total_desired_units' => 0,
+        'total_produced_units' => 0,
+        'total_extra_units' => 0,
+        'total_batches' => 0,
         'total_batch_kg' => 0,
         'total_estimated_cost' => 0,
     ];
 
     public function mount(): void
     {
-        $this->productOptions = Product::query()
-            ->where('is_active', 1)
+        $products = Product::query()
+            ->with(['productType.batchSizePresets'])
             ->orderBy('name')
             ->get()
+
+            ->each(function (Product $product): void {
+                $productType = $product->productType;
+
+                if (! $productType) {
+                    $this->batchPresetOptionsByProduct[$product->id] = [];
+                    $this->defaultPresetIdByProduct[$product->id] = null;
+
+                    return;
+                }
+
+                $productType->loadMissing('batchSizePresets');
+
+                $presetOptions = $productType->batchSizePresets
+                    ->sortBy(fn (BatchSizePreset $preset): string => sprintf(
+                        '%d-%s',
+                        $preset->is_default ? 0 : 1,
+                        strtolower($preset->name),
+                    ))
+                    ->mapWithKeys(fn (BatchSizePreset $preset): array => [
+                        $preset->id => sprintf(
+                            '%s - %s unites - %s kg',
+                            $preset->name,
+                            number_format((float) $preset->expected_units, 0, ',', ' '),
+                            number_format((float) $preset->batch_size, 3, ',', ' '),
+                        ),
+                    ])
+                    ->toArray();
+
+                $defaultPresetId = $productType->batchSizePresets
+                    ->first(fn (BatchSizePreset $preset): bool => (bool) $preset->is_default)?->id;
+
+                $this->batchPresetOptionsByProduct[$product->id] = $presetOptions;
+                $this->defaultPresetIdByProduct[$product->id] = $defaultPresetId;
+            });
+
+        $this->productOptions = $products
             ->mapWithKeys(fn (Product $product): array => [
-                $product->id => $product->name.' ('.number_format((float) $product->net_weight, 0, ',', ' ').' g)',
+                $product->id => $product->name,
             ])
             ->toArray();
 
-        $this->lines = [
-            [
-                'product_id' => null,
-                'units' => null,
-            ],
-        ];
+        $this->lines = [$this->makeLine()];
 
         $this->recalculate();
     }
 
-    public function updatedLines(): void
+    /**
+     * @param  float|int|string|null  $value
+     */
+    public function updatedLines($value, string $path): void
     {
+        [$index, $field] = explode('.', $path, 3) + [null, null];
+
+        if ($field === 'product_search') {
+            return;
+        }
+
+        if ($field === 'product_id' && is_numeric($index)) {
+            $lineIndex = (int) $index;
+            $productId = (int) ($this->lines[$lineIndex]['product_id'] ?? 0);
+
+            $this->lines[$lineIndex]['batch_size_preset_id'] = $productId > 0
+                ? ($this->defaultPresetIdByProduct[$productId] ?? null)
+                : null;
+
+            $this->lines[$lineIndex]['product_search'] = '';
+        }
+
         $this->recalculate();
     }
 
     public function addLine(): void
     {
-        $this->lines[] = [
-            'product_id' => null,
-            'units' => null,
-        ];
+        $this->lines[] = $this->makeLine();
     }
 
     public function removeLine(int $index): void
@@ -89,10 +154,7 @@ class SimulateurFlashPage extends Component
         $this->lines = array_values($this->lines);
 
         if ($this->lines === []) {
-            $this->lines[] = [
-                'product_id' => null,
-                'units' => null,
-            ];
+            $this->lines[] = $this->makeLine();
         }
 
         $this->recalculate();
@@ -108,8 +170,52 @@ class SimulateurFlashPage extends Component
         $this->totals = $result['totals'];
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function getBatchPresetOptionsForLine(int $lineIndex): array
+    {
+        $productId = (int) ($this->lines[$lineIndex]['product_id'] ?? 0);
+
+        if ($productId <= 0) {
+            return [];
+        }
+
+        return $this->batchPresetOptionsByProduct[$productId] ?? [];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getFilteredProductOptionsForLine(int $lineIndex): array
+    {
+        $search = strtolower(trim((string) ($this->lines[$lineIndex]['product_search'] ?? '')));
+
+        if ($search === '') {
+            return $this->productOptions;
+        }
+
+        return collect($this->productOptions)
+            ->filter(fn (string $label): bool => str_contains(strtolower($label), $search))
+            ->all();
+    }
+
     public function render(): View
     {
         return view('livewire.simulateur-flash-page');
+    }
+
+    /**
+     * @return array{line_key: string, product_id: int|null, product_search: string, desired_units: float|int|null, batch_size_preset_id: int|null}
+     */
+    private function makeLine(): array
+    {
+        return [
+            'line_key' => (string) Str::uuid(),
+            'product_id' => null,
+            'product_search' => '',
+            'desired_units' => null,
+            'batch_size_preset_id' => null,
+        ];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Pages;
 
 use BackedEnum;
 use Filament\Pages\Page;
+use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 
 class SimulateurFlash extends Page
@@ -21,4 +22,9 @@ class SimulateurFlash extends Page
     protected static string $routePath = '/simulateur-flash';
 
     protected string $view = 'filament.pages.simulateur-flash';
+
+    public function getMaxContentWidth(): Width|string|null
+    {
+        return Width::Full;
+    }
 }

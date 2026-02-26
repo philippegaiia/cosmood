@@ -715,6 +715,20 @@ class ProductionResource extends Resource
                             ->success()
                             ->send();
                     }),
+                BulkAction::make('printSelectedDocuments')
+                    ->label('Imprimer fiches sélectionnées')
+                    ->icon('heroicon-o-printer')
+                    ->url(function (Collection $selectedRecords): string {
+                        $ids = $selectedRecords
+                            ->pluck('id')
+                            ->map(fn ($id): int => (int) $id)
+                            ->implode(',');
+
+                        return route('productions.bulk-documents', [
+                            'ids' => $ids,
+                        ]);
+                    })
+                    ->openUrlInNewTab(),
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),

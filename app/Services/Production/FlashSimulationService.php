@@ -3,6 +3,7 @@
 namespace App\Services\Production;
 
 use App\Enums\Phases;
+use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
@@ -13,12 +14,12 @@ use App\Models\Production\Product;
 class FlashSimulationService
 {
     /**
-     * @param  array<int, array{product_id: int|string|null, units: int|float|string|null}>  $lines
+     * @param  array<int, array{product_id: int|string|null, desired_units?: int|float|string|null, units?: int|float|string|null, batch_size_preset_id?: int|string|null}>  $lines
      * @return array{
-     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, units: float, net_weight_g: float, multiplier: float, oils_kg: float, estimated_cost: float}>,
+     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_preset_name: string|null}>,
      *     ingredient_totals: \Illuminate\Support\Collection<int, array{ingredient_id: int, ingredient_name: string, required_kg: float, unit_price: float, estimated_cost: float}>,
      *     warnings: \Illuminate\Support\Collection<int, string>,
-     *     totals: array{products_count: int, total_units: float|int, total_batch_kg: float|int, total_estimated_cost: float|int}
+     *     totals: array{products_count: int, total_units: float|int, total_desired_units: float|int, total_produced_units: float|int, total_extra_units: float|int, total_batches: int, total_batch_kg: float|int, total_estimated_cost: float|int}
      * }
      */
     public function simulate(array $lines): array
@@ -26,9 +27,14 @@ class FlashSimulationService
         $normalizedLines = collect($lines)
             ->map(fn (array $line): array => [
                 'product_id' => isset($line['product_id']) ? (int) $line['product_id'] : null,
-                'units' => isset($line['units']) ? (float) $line['units'] : 0,
+                'desired_units' => isset($line['desired_units'])
+                    ? (float) $line['desired_units']
+                    : (isset($line['units']) ? (float) $line['units'] : 0),
+                'batch_size_preset_id' => isset($line['batch_size_preset_id']) && $line['batch_size_preset_id'] !== ''
+                    ? (int) $line['batch_size_preset_id']
+                    : null,
             ])
-            ->filter(fn (array $line): bool => $line['product_id'] !== null && $line['units'] > 0)
+            ->filter(fn (array $line): bool => $line['product_id'] !== null && $line['desired_units'] > 0)
             ->values();
 
         if ($normalizedLines->isEmpty()) {
@@ -39,6 +45,10 @@ class FlashSimulationService
                 'totals' => [
                     'products_count' => 0,
                     'total_units' => 0,
+                    'total_desired_units' => 0,
+                    'total_produced_units' => 0,
+                    'total_extra_units' => 0,
+                    'total_batches' => 0,
                     'total_batch_kg' => 0,
                     'total_estimated_cost' => 0,
                 ],
@@ -47,8 +57,8 @@ class FlashSimulationService
 
         $products = Product::query()
             ->with([
-                'productType:id,name,slug',
-                'productCategory:id,name',
+                'productType:id,name,slug,default_batch_size,expected_units_output',
+                'productType.batchSizePresets',
                 'formulas' => fn ($query) => $query
                     ->where('is_active', true)
                     ->with(['formulaItems.ingredient'])
@@ -80,12 +90,25 @@ class FlashSimulationService
                 continue;
             }
 
-            $multiplier = $this->getProductMultiplier($product);
-            $oilsWeightKg = round(((float) $line['units'] * (float) $product->net_weight / 1000) * $multiplier, 3);
+            $batchConfiguration = $this->resolveBatchConfiguration($product, $line['batch_size_preset_id']);
+            $unitsPerBatch = $batchConfiguration['units_per_batch'];
+            $batchSizeKg = $batchConfiguration['batch_size_kg'];
 
-            if ($oilsWeightKg <= 0) {
+            if ($unitsPerBatch <= 0 || $batchSizeKg <= 0) {
+                $warnings->push('Config batch manquante pour '.$product->name.' (type produit incomplet).');
+
                 continue;
             }
+
+            $batchesRequired = (int) ceil((float) $line['desired_units'] / $unitsPerBatch);
+
+            if ($batchesRequired <= 0) {
+                continue;
+            }
+
+            $producedUnits = (float) ($batchesRequired * $unitsPerBatch);
+            $extraUnits = max(0, $producedUnits - (float) $line['desired_units']);
+            $oilsWeightKg = round($batchesRequired * $batchSizeKg, 3);
 
             $lineEstimatedCost = 0.0;
             $formula->loadMissing('formulaItems.ingredient');
@@ -137,11 +160,16 @@ class FlashSimulationService
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'formula_name' => $formula->name,
-                'units' => (float) $line['units'],
-                'net_weight_g' => (float) $product->net_weight,
-                'multiplier' => $multiplier,
+                'desired_units' => (float) $line['desired_units'],
+                'units' => (float) $line['desired_units'],
+                'units_per_batch' => $unitsPerBatch,
+                'batches_required' => $batchesRequired,
+                'produced_units' => $producedUnits,
+                'extra_units' => $extraUnits,
+                'batch_size_kg' => $batchSizeKg,
                 'oils_kg' => $oilsWeightKg,
                 'estimated_cost' => round($lineEstimatedCost, 2),
+                'batch_preset_name' => $batchConfiguration['batch_preset_name'],
             ]);
         }
 
@@ -156,7 +184,11 @@ class FlashSimulationService
             'warnings' => $warnings,
             'totals' => [
                 'products_count' => $productLines->count(),
-                'total_units' => (float) $productLines->sum('units'),
+                'total_units' => (float) $productLines->sum('desired_units'),
+                'total_desired_units' => (float) $productLines->sum('desired_units'),
+                'total_produced_units' => (float) $productLines->sum('produced_units'),
+                'total_extra_units' => (float) $productLines->sum('extra_units'),
+                'total_batches' => (int) $productLines->sum('batches_required'),
                 'total_batch_kg' => round((float) $productLines->sum('oils_kg'), 3),
                 'total_estimated_cost' => round((float) $ingredientTotals->sum('estimated_cost'), 2),
             ],
@@ -184,28 +216,45 @@ class FlashSimulationService
     }
 
     /**
-     * Applies soap curing multiplier when the product is detected as soap.
+     * Resolves units-per-batch and oils-per-batch from selected preset or product type defaults.
+     *
+     * @return array{units_per_batch: float, batch_size_kg: float, batch_preset_name: string|null}
      */
-    private function getProductMultiplier(Product $product): float
+    private function resolveBatchConfiguration(Product $product, ?int $batchSizePresetId): array
     {
-        $productName = strtolower((string) $product->name);
-        $typeSlug = strtolower((string) ($product->productType?->slug ?? ''));
-        $typeName = strtolower((string) ($product->productType?->name ?? ''));
-        $categoryName = strtolower((string) ($product->productCategory?->name ?? ''));
+        $productType = $product->productType;
 
-        $isSoap =
-            $typeSlug === 'soap-bars'
-            || str_contains($typeName, 'soap')
-            || str_contains($typeName, 'savon')
-            || str_contains($categoryName, 'soap')
-            || str_contains($categoryName, 'savon')
-            || str_contains($productName, 'soap')
-            || str_contains($productName, 'savon');
-
-        if ($isSoap) {
-            return 1.15;
+        if (! $productType) {
+            return [
+                'units_per_batch' => 0,
+                'batch_size_kg' => 0,
+                'batch_preset_name' => null,
+            ];
         }
 
-        return 1.0;
+        $productType->loadMissing('batchSizePresets');
+
+        /** @var BatchSizePreset|null $preset */
+        $preset = null;
+
+        if ($batchSizePresetId) {
+            $preset = $productType->batchSizePresets
+                ->first(fn (BatchSizePreset $candidate): bool => $candidate->id === $batchSizePresetId);
+        }
+
+        if (! $preset) {
+            $preset = $productType->batchSizePresets
+                ->first(fn (BatchSizePreset $candidate): bool => (bool) $candidate->is_default);
+        }
+
+        if (! $preset) {
+            $preset = $productType->batchSizePresets->sortByDesc('expected_units')->first();
+        }
+
+        return [
+            'units_per_batch' => (float) ($preset?->expected_units ?? $productType->expected_units_output ?? 0),
+            'batch_size_kg' => (float) ($preset?->batch_size ?? $productType->default_batch_size ?? 0),
+            'batch_preset_name' => $preset?->name,
+        ];
     }
 }

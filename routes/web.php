@@ -6,6 +6,7 @@ use App\Models\Supply\SupplierOrder;
 use App\Services\Production\MasterbatchService;
 use App\Services\Production\WaveProcurementService;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -68,6 +69,25 @@ Route::get('/productions/{production}/follow-sheet', function (Production $produ
         'production' => $production,
     ]);
 })->middleware('auth')->name('productions.follow-sheet');
+
+Route::get('/productions/bulk-documents', function (Request $request) {
+    $ids = collect(explode(',', (string) $request->query('ids', '')))
+        ->map(fn (string $id): int => (int) trim($id))
+        ->filter(fn (int $id): bool => $id > 0)
+        ->unique()
+        ->values();
+
+    $productions = Production::query()
+        ->with('product')
+        ->whereIn('id', $ids->all())
+        ->orderBy('production_date')
+        ->orderBy('id')
+        ->get();
+
+    return view('production.productions.production-bulk-documents', [
+        'productions' => $productions,
+    ]);
+})->middleware('auth')->name('productions.bulk-documents');
 
 Route::get('/productions/{production}/sheet-pdf', function (Production $production) {
     $production->load([

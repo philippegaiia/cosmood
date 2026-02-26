@@ -1,6 +1,25 @@
 <laravel-boost-guidelines>
 === foundation rules ===
 
+# Project Memory (Read First Each Session)
+
+Before making changes, read these project docs to restore business context:
+
+- `docs/spec-production-workflows.md`
+- `docs/spec-flash-simulator.md`
+- `docs/seeding-strategy.md`
+
+When a change modifies these workflows, update the matching doc in the same branch.
+
+Code commenting expectations for critical logic:
+
+- Add/maintain concise PHPDoc in core service logic and observers, especially in:
+  - `app/Services/Production/FlashSimulationService.php`
+  - `app/Services/Production/ProductionQcGenerationService.php`
+  - `app/Services/Production/PermanentBatchNumberService.php`
+  - `app/Observers/ProductionObserver.php`
+- Avoid noisy inline comments; document intent and invariants where a future developer could break business rules.
+
 # Laravel Boost Guidelines
 
 The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.
@@ -9,11 +28,12 @@ The Laravel Boost guidelines are specifically curated by Laravel maintainers for
 
 This application is a Laravel application and its main Laravel ecosystems package & versions are below. You are an expert with them all. Ensure you abide by these specific packages & versions.
 
-- php - 8.4.17
+- php - 8.5.2
 - filament/filament (FILAMENT) - v5
 - laravel/framework (LARAVEL) - v12
 - laravel/prompts (PROMPTS) - v0
 - livewire/livewire (LIVEWIRE) - v4
+- laravel/boost (BOOST) - v2
 - laravel/mcp (MCP) - v0
 - laravel/pint (PINT) - v1
 - laravel/sail (SAIL) - v1
@@ -130,6 +150,13 @@ protected function isAccessible(User $user, ?string $path = null): bool
 
 - Add useful array shape type definitions when appropriate.
 
+=== tests rules ===
+
+# Test Enforcement
+
+- Every change must be programmatically tested. Write a new test or update an existing test, then run the affected tests to make sure they pass.
+- Run the minimum number of tests needed to ensure code quality and speed. Use `php artisan test --compact` with a specific filename or filter.
+
 === laravel/core rules ===
 
 # Do Things the Laravel Way
@@ -214,7 +241,7 @@ protected function isAccessible(User $user, ?string $path = null): bool
 
 # Laravel Pint Code Formatter
 
-- You must run `vendor/bin/pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
+- If you have modified any PHP files, you must run `vendor/bin/pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
 - Do not run `vendor/bin/pint --test --format agent`, simply run `vendor/bin/pint --format agent` to fix any formatting issues.
 
 === pest/core rules ===
@@ -231,7 +258,7 @@ protected function isAccessible(User $user, ?string $path = null): bool
 
 ## Filament
 
-- Filament versiopn 5 is used by this application. Follow existing conventions for how and where it's implemented.
+- Filament is used by this application. Follow existing conventions for how and where it's implemented.
 - Filament is a Server-Driven UI (SDUI) framework for Laravel that lets you define user interfaces in PHP using structured configuration objects. Built on Livewire, Alpine.js, and Tailwind CSS.
 - Use the `search-docs` tool for official documentation on Artisan commands, code examples, testing, relationships, and idiomatic practices.
 
@@ -361,4 +388,5 @@ Authenticate before testing panel functionality. Filament uses Livewire, so use 
 **Recent breaking changes to Filament:**
 - File visibility is `private` by default. Use `->visibility('public')` for public access.
 - `Grid`, `Section`, and `Fieldset` no longer span all columns by default.
+
 </laravel-boost-guidelines>

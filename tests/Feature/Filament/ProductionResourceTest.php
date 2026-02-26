@@ -561,6 +561,38 @@ describe('Production sheet print route', function () {
         expect(substr_count($content, 'Baume Mains - 00111'))->toBeGreaterThanOrEqual(7);
     });
 
+    it('renders bulk document launcher for selected productions', function () {
+        $this->actingAs($this->user);
+
+        $product = Product::factory()->create([
+            'name' => 'Savon Atelier',
+        ]);
+
+        $firstProduction = Production::factory()->create([
+            'product_id' => $product->id,
+            'batch_number' => 'T20001',
+            'permanent_batch_number' => '00201',
+        ]);
+
+        $secondProduction = Production::factory()->create([
+            'product_id' => $product->id,
+            'batch_number' => 'T20002',
+            'permanent_batch_number' => '00202',
+        ]);
+
+        $response = $this->get(route('productions.bulk-documents', [
+            'ids' => $firstProduction->id.','.$secondProduction->id,
+        ]));
+
+        $response
+            ->assertOk()
+            ->assertSee('Impression groupée - Productions')
+            ->assertSee('00201')
+            ->assertSee('00202')
+            ->assertSee('Fiche production')
+            ->assertSee('Fiche suivi');
+    });
+
     it('shows collapsed masterbatch line and traceability details in production sheet', function () {
         $this->actingAs($this->user);
 
