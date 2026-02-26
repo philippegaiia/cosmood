@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Supply;
 
+use App\Enums\IngredientBaseUnit;
 use App\Enums\Packaging;
 use App\Filament\Resources\Supply\SupplierListingResource\Pages\CreateSupplierListing;
 use App\Filament\Resources\Supply\SupplierListingResource\Pages\EditSupplierListing;
@@ -23,6 +24,8 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\FontWeight;
 use Filament\Tables\Columns\IconColumn;
@@ -59,6 +62,25 @@ class SupplierListingResource extends Resource
                     ->options(Ingredient::all()->pluck('name', 'id'))
                     ->preload()
                     ->searchable()
+                    ->live()
+                    ->afterStateUpdated(function (Get $get, Set $set, ?string $state): void {
+                        if (! $state) {
+                            return;
+                        }
+
+                        $ingredient = Ingredient::query()->find((int) $state);
+
+                        if (! $ingredient) {
+                            return;
+                        }
+
+                        $set(
+                            'unit_of_measure',
+                            ($ingredient->base_unit?->value ?? IngredientBaseUnit::Kg->value) === IngredientBaseUnit::Unit->value
+                                ? 'Unit'
+                                : 'kg'
+                        );
+                    })
                     ->required(),
                 TextInput::make('name')
                     ->required()
@@ -79,7 +101,7 @@ class SupplierListingResource extends Resource
                         'Meter' => 'Mètre',
                         'Litre' => 'Litre',
                     ])
-                    ->default('Kilo.'),
+                    ->default('kg'),
                 TextInput::make('price')
                     ->numeric()
                     ->prefix('€'),

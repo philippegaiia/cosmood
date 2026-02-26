@@ -2,6 +2,7 @@
 
 namespace App\Models\Production;
 
+use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Models\Supply\Ingredient;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -16,6 +17,7 @@ class FormulaItem extends Model
 
     protected $casts = [
         'phase' => Phases::class,
+        'calculation_mode' => FormulaItemCalculationMode::class,
     ];
 
     public function formula(): BelongsTo

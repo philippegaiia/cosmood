@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
@@ -179,6 +180,7 @@ it('consumes packaging lot using expected units coefficient', function () {
         'supplier_listing_id' => $packagingSupply->supplier_listing_id,
         'ingredient_id' => $packagingSupply->supplierListing->ingredient_id,
         'phase' => Phases::Packaging->value,
+        'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
         'percentage_of_oils' => 1,
     ]);
 

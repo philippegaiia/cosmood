@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Supply;
 
+use App\Enums\IngredientBaseUnit;
 use App\Filament\Resources\Supply\IngredientResource\Pages\CreateIngredient;
 use App\Filament\Resources\Supply\IngredientResource\Pages\EditIngredient;
 use App\Filament\Resources\Supply\IngredientResource\Pages\ListIngredients;
@@ -48,6 +49,12 @@ class IngredientResource extends Resource
                 TextInput::make('code')
                     ->required()
                     ->maxLength(255),
+                Select::make('base_unit')
+                    ->label('Unité de base')
+                    ->options(IngredientBaseUnit::class)
+                    ->default(IngredientBaseUnit::Kg)
+                    ->native(false)
+                    ->required(),
                 TextInput::make('price')
                     ->label('Dernier prix (EUR/kg)')
                     ->numeric()
@@ -96,6 +103,10 @@ class IngredientResource extends Resource
                     ->searchable(),
                 TextColumn::make('code')
                     ->searchable(),
+                TextColumn::make('base_unit')
+                    ->label('Unité')
+                    ->badge()
+                    ->sortable(),
                 TextColumn::make('price')
                     ->label('Dernier prix')
                     ->money('EUR')

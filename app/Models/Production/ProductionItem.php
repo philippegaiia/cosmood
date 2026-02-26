@@ -2,6 +2,8 @@
 
 namespace App\Models\Production;
 
+use App\Enums\FormulaItemCalculationMode;
+use App\Enums\IngredientBaseUnit;
 use App\Enums\Phases;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
@@ -21,6 +23,7 @@ class ProductionItem extends Model
     protected $casts = [
         'organic' => 'boolean',
         'is_supplied' => 'boolean',
+        'calculation_mode' => FormulaItemCalculationMode::class,
     ];
 
     protected static function booted(): void
@@ -65,8 +68,9 @@ class ProductionItem extends Model
     public function getCalculatedQuantityKg(): float
     {
         $coefficient = (float) ($this->percentage_of_oils ?? 0);
+        $calculationMode = $this->resolveCalculationMode();
 
-        if ($this->isPackagingPhase()) {
+        if ($calculationMode === FormulaItemCalculationMode::QuantityPerUnit) {
             $expectedUnits = (float) ($this->production?->expected_units ?? 0);
 
             return round($expectedUnits * $coefficient, 3);
@@ -80,6 +84,29 @@ class ProductionItem extends Model
     public function isPackagingPhase(): bool
     {
         return (string) $this->phase === Phases::Packaging->value;
+    }
+
+    public function resolveCalculationMode(): FormulaItemCalculationMode
+    {
+        if ($this->isPackagingPhase()) {
+            return FormulaItemCalculationMode::QuantityPerUnit;
+        }
+
+        if (($this->ingredient?->base_unit?->value ?? null) === IngredientBaseUnit::Unit->value) {
+            return FormulaItemCalculationMode::QuantityPerUnit;
+        }
+
+        if ($this->calculation_mode instanceof FormulaItemCalculationMode) {
+            return $this->calculation_mode;
+        }
+
+        $mode = FormulaItemCalculationMode::tryFrom((string) ($this->calculation_mode ?? ''));
+
+        if ($mode) {
+            return $mode;
+        }
+
+        return FormulaItemCalculationMode::PercentOfOils;
     }
 
     public function getReferenceUnitPrice(): ?float

@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Enums\RequirementStatus;
 use App\Models\Production\Formula;
@@ -120,6 +121,7 @@ describe('ProductionRequirementsService', function () {
                 ->withIngredient($packagingIngredient)
                 ->state([
                     'phase' => Phases::Packaging->value,
+                    'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
                     'percentage_of_oils' => 1,
                 ])
                 ->create();
@@ -137,6 +139,33 @@ describe('ProductionRequirementsService', function () {
             expect($requirement)->not->toBeNull()
                 ->and($requirement->phase)->toBe(Phases::Packaging->value)
                 ->and((float) $requirement->required_quantity)->toBe(288.0);
+        });
+
+        it('calculates unit-based requirements independently from phase when mode is qty per unit', function () {
+            $formula = Formula::factory()->create();
+            $ingredient = Ingredient::factory()->create();
+
+            FormulaItem::factory()->forFormula($formula)
+                ->withIngredient($ingredient)
+                ->state([
+                    'phase' => Phases::Additives->value,
+                    'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
+                    'percentage_of_oils' => 0.5,
+                ])
+                ->create();
+
+            $production = Production::factory()->create([
+                'formula_id' => $formula->id,
+                'planned_quantity' => 26.0,
+                'expected_units' => 288,
+            ]);
+
+            $this->service->generateRequirements($production);
+
+            $requirement = $production->fresh()->ingredientRequirements->first();
+
+            expect($requirement)->not->toBeNull()
+                ->and((float) $requirement->required_quantity)->toBe(144.0);
         });
 
         it('links requirements to wave if production has wave', function () {

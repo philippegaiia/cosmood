@@ -2,6 +2,7 @@
 
 namespace Database\Factories\Supply;
 
+use App\Enums\IngredientBaseUnit;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\IngredientCategory;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -28,6 +29,7 @@ class IngredientFactory extends Factory
             'cas_einecs' => null,
             'einecs' => null,
             'is_active' => true,
+            'base_unit' => IngredientBaseUnit::Kg->value,
             'is_manufactured' => false,
             'description' => $this->faker->sentence(),
             'price' => $this->faker->randomFloat(2, 2, 40),
@@ -54,6 +56,13 @@ class IngredientFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_manufactured' => true,
+        ]);
+    }
+
+    public function unitBased(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'base_unit' => IngredientBaseUnit::Unit->value,
         ]);
     }
 }

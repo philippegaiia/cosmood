@@ -36,6 +36,7 @@ class ProductionItemGenerationService
                     'supply_batch_number' => null,
                     'percentage_of_oils' => $formulaItem->percentage_of_oils,
                     'phase' => $formulaItem->phase->value,
+                    'calculation_mode' => $formulaItem->calculation_mode?->value ?? $formulaItem->calculation_mode,
                     'organic' => $formulaItem->organic,
                     'is_supplied' => false,
                     'sort' => $formulaItem->sort,

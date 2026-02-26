@@ -29,6 +29,22 @@ This document describes the current production-side business rules implemented i
 - This control is intentionally independent from name/slug heuristics.
 - Production inherits this behavior through linked formula (`is_soap`).
 
+## Quantity Calculation Model
+
+- Formula and production lines support two calculation modes:
+  - `percent_of_oils` (legacy): quantity = `%` of planned oils kg.
+  - `qty_per_unit`: quantity = coefficient per expected unit.
+- Packaging phase defaults to `qty_per_unit` and remains operator-visible as packaging semantics.
+- Unit-based ingredients (`base_unit = u`) also default to `qty_per_unit`, even outside packaging phase.
+- Phase is still kept for process/masterbatch replacement behavior and document grouping.
+
+## Planned Quantity Semantics
+
+- `planned_quantity` is interpreted according to product type sizing mode:
+  - `oil_weight`: oils kg basis.
+  - `final_mass`: final batch mass kg basis.
+- Unit-based lines always derive quantity from `expected_units`, independent from these kg semantics.
+
 ## Production Form UX Rules
 
 - "Flux de production" section stays visible (not collapsed).

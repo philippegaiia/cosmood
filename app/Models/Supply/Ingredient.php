@@ -2,6 +2,7 @@
 
 namespace App\Models\Supply;
 
+use App\Enums\IngredientBaseUnit;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -27,6 +28,7 @@ class Ingredient extends Model
         'cas_einecs',
         'einecs',
         'is_active',
+        'base_unit',
         'is_manufactured',
         'description',
         'price',
@@ -41,6 +43,7 @@ class Ingredient extends Model
         return [
             'price' => 'decimal:2',
             'stock_min' => 'decimal:3',
+            'base_unit' => IngredientBaseUnit::class,
             'is_manufactured' => 'boolean',
         ];
     }

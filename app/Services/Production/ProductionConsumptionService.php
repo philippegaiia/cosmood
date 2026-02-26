@@ -35,7 +35,7 @@ class ProductionConsumptionService
             /** @var Production $lockedProduction */
             $lockedProduction = Production::query()
                 ->with([
-                    'productionItems',
+                    'productionItems.ingredient',
                     'masterbatchLot.producedSupply',
                 ])
                 ->lockForUpdate()

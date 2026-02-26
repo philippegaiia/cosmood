@@ -34,7 +34,8 @@ Example:
 
 - Active formula is resolved for selected product.
 - Ingredient totals aggregate formula item requirements against computed oils kg.
-- Packaging phase lines are excluded from ingredient requirement totals.
+- Unit-based lines (`qty_per_unit`) are excluded from ingredient kg requirement totals.
+- Compatibility fallback: packaging phase and unit-base ingredients are treated as unit-based even when old rows still miss explicit mode.
 
 ## Outputs
 

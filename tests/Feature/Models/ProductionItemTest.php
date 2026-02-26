@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
@@ -209,11 +210,35 @@ describe('ProductionItem Model', function () {
             'supplier_listing_id' => $listing->id,
             'supply_id' => null,
             'phase' => Phases::Packaging->value,
+            'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
             'percentage_of_oils' => 1,
         ]);
 
         expect($item->isPackagingPhase())->toBeTrue()
             ->and($item->getCalculatedQuantityKg())->toBe(288.0)
             ->and($item->getEstimatedCost())->toBe(144.0);
+    });
+
+    it('calculates quantity per unit when calculation mode is unit-based even outside packaging phase', function () {
+        $production = Production::factory()->create([
+            'planned_quantity' => 26,
+            'expected_units' => 288,
+        ]);
+        $ingredient = Ingredient::factory()->create([
+            'price' => 0.45,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => null,
+            'supply_id' => null,
+            'phase' => Phases::Additives->value,
+            'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
+            'percentage_of_oils' => 1,
+        ]);
+
+        expect($item->getCalculatedQuantityKg())->toBe(288.0)
+            ->and($item->getEstimatedCost())->toBe(129.6);
     });
 });

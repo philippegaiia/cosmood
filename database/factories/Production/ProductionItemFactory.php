@@ -2,6 +2,7 @@
 
 namespace Database\Factories\Production;
 
+use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
@@ -34,6 +35,7 @@ class ProductionItemFactory extends Factory
                 Phases::Saponification->value,
                 Phases::Additives->value,
             ]),
+            'calculation_mode' => FormulaItemCalculationMode::PercentOfOils->value,
             'organic' => true,
             'is_supplied' => false,
             'sort' => $this->faker->numberBetween(1, 20),

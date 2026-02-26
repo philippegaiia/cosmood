@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Production;
 
+use App\Enums\FormulaItemCalculationMode;
+use App\Enums\IngredientBaseUnit;
 use App\Enums\Phases;
 use App\Filament\Resources\Production\FormulaResource\Pages\CreateFormula;
 use App\Filament\Resources\Production\FormulaResource\Pages\EditFormula;
@@ -175,23 +177,68 @@ class FormulaResource extends Resource
                                             ->required()
                                             ->disableOptionsWhenSelectedInSiblingRepeaterItems()
                                             ->native(false)
+                                            ->afterStateUpdated(function (Set $set, ?string $state): void {
+                                                if (! $state) {
+                                                    return;
+                                                }
+
+                                                $ingredient = Ingredient::query()->find((int) $state);
+
+                                                if (! $ingredient) {
+                                                    return;
+                                                }
+
+                                                $set(
+                                                    'calculation_mode',
+                                                    ($ingredient->base_unit?->value ?? IngredientBaseUnit::Kg->value) === IngredientBaseUnit::Unit->value
+                                                        ? FormulaItemCalculationMode::QuantityPerUnit->value
+                                                        : FormulaItemCalculationMode::PercentOfOils->value,
+                                                );
+                                            })
                                             ->columnSpan([
                                                 'default' => 1,
                                                 'xl' => 5,
+                                            ]),
+
+                                        Select::make('calculation_mode')
+                                            ->label('Mode calcul')
+                                            ->options(FormulaItemCalculationMode::class)
+                                            ->default(FormulaItemCalculationMode::PercentOfOils)
+                                            ->native(false)
+                                            ->required()
+                                            ->columnSpan([
+                                                'default' => 1,
+                                                'xl' => 2,
                                             ]),
 
                                         TextInput::make('percentage_of_oils')
                                             ->label(function (Get $get): string {
                                                 $phaseState = $get('phase');
                                                 $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
+                                                $modeState = $get('calculation_mode');
+                                                $mode = $modeState instanceof FormulaItemCalculationMode
+                                                    ? $modeState
+                                                    : FormulaItemCalculationMode::tryFrom((string) ($modeState ?? ''))
+                                                    ?? ($phase === Phases::Packaging->value
+                                                        ? FormulaItemCalculationMode::QuantityPerUnit
+                                                        : FormulaItemCalculationMode::PercentOfOils);
 
-                                                return $phase === Phases::Packaging->value ? 'Qté / unité' : '% d\'huiles';
+                                                return $mode === FormulaItemCalculationMode::QuantityPerUnit
+                                                    ? 'Qté / unité'
+                                                    : '% d\'huiles';
                                             })
                                             ->postfix(function (Get $get): string {
                                                 $phaseState = $get('phase');
                                                 $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
+                                                $modeState = $get('calculation_mode');
+                                                $mode = $modeState instanceof FormulaItemCalculationMode
+                                                    ? $modeState
+                                                    : FormulaItemCalculationMode::tryFrom((string) ($modeState ?? ''))
+                                                    ?? ($phase === Phases::Packaging->value
+                                                        ? FormulaItemCalculationMode::QuantityPerUnit
+                                                        : FormulaItemCalculationMode::PercentOfOils);
 
-                                                return $phase === Phases::Packaging->value ? 'u' : '%';
+                                                return $mode === FormulaItemCalculationMode::QuantityPerUnit ? 'u' : '%';
                                             })
                                             ->numeric()
                                             ->live()
@@ -202,17 +249,25 @@ class FormulaResource extends Resource
                                             ->default(1)
                                             ->columnSpan([
                                                 'default' => 1,
-                                                'xl' => 2,
+                                                'xl' => 1,
                                             ]),
 
                                         Select::make('phase')
                                             ->label('Phase')
                                             ->options(Phases::class)
                                             ->default(Phases::Saponification)
+                                            ->live()
+                                            ->afterStateUpdated(function (Set $set, $state): void {
+                                                $phase = $state instanceof Phases ? $state->value : (string) ($state ?? '');
+
+                                                if ($phase === Phases::Packaging->value) {
+                                                    $set('calculation_mode', FormulaItemCalculationMode::QuantityPerUnit->value);
+                                                }
+                                            })
                                             ->native(false)
                                             ->columnSpan([
                                                 'default' => 1,
-                                                'xl' => 3,
+                                                'xl' => 2,
                                             ]),
 
                                         Toggle::make('organic')

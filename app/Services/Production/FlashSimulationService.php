@@ -2,6 +2,8 @@
 
 namespace App\Services\Production;
 
+use App\Enums\FormulaItemCalculationMode;
+use App\Enums\IngredientBaseUnit;
 use App\Enums\Phases;
 use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
@@ -121,11 +123,24 @@ class FlashSimulationService
                     continue;
                 }
 
+                $calculationMode = $formulaItem->calculation_mode;
                 $phaseValue = $formulaItem->phase instanceof Phases
                     ? $formulaItem->phase->value
                     : (string) $formulaItem->phase;
+                $baseUnit = $ingredient->base_unit instanceof IngredientBaseUnit
+                    ? $ingredient->base_unit
+                    : IngredientBaseUnit::tryFrom((string) ($ingredient->base_unit ?? ''));
 
-                if ($phaseValue === Phases::Packaging->value) {
+                if ($phaseValue === Phases::Packaging->value || $baseUnit === IngredientBaseUnit::Unit) {
+                    $mode = FormulaItemCalculationMode::QuantityPerUnit;
+                } elseif ($calculationMode instanceof FormulaItemCalculationMode) {
+                    $mode = $calculationMode;
+                } else {
+                    $mode = FormulaItemCalculationMode::tryFrom((string) ($calculationMode ?? ''))
+                        ?? FormulaItemCalculationMode::PercentOfOils;
+                }
+
+                if ($mode === FormulaItemCalculationMode::QuantityPerUnit) {
                     continue;
                 }
 

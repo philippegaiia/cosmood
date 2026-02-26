@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Production;
 
+use App\Enums\FormulaItemCalculationMode;
+use App\Enums\IngredientBaseUnit;
 use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
@@ -493,7 +495,22 @@ class ProductionResource extends Resource
                                         $set('supply_id', null);
                                         $set('supply_batch_number', null);
                                         $set('supplier_listing_id', null);
+
+                                        $ingredient = Ingredient::query()->find((int) ($state ?? 0));
+
+                                        if (! $ingredient) {
+                                            return;
+                                        }
+
+                                        $set(
+                                            'calculation_mode',
+                                            ($ingredient->base_unit?->value ?? IngredientBaseUnit::Kg->value) === IngredientBaseUnit::Unit->value
+                                                ? FormulaItemCalculationMode::QuantityPerUnit->value
+                                                : FormulaItemCalculationMode::PercentOfOils->value,
+                                        );
                                     }),
+                                Hidden::make('calculation_mode')
+                                    ->default(FormulaItemCalculationMode::PercentOfOils->value),
                                 Hidden::make('supplier_listing_id'),
                                 Select::make('supply_id')
                                     ->label('Supply sélectionné')
@@ -557,12 +574,19 @@ class ProductionResource extends Resource
                                         $percentage = (float) ($get('percentage_of_oils') ?? 0);
                                         $phaseState = $get('phase');
                                         $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
+                                        $modeState = $get('calculation_mode');
+                                        $mode = $modeState instanceof FormulaItemCalculationMode
+                                            ? $modeState
+                                            : FormulaItemCalculationMode::tryFrom((string) ($modeState ?? ''))
+                                            ?? ($phase === Phases::Packaging->value
+                                                ? FormulaItemCalculationMode::QuantityPerUnit
+                                                : FormulaItemCalculationMode::PercentOfOils);
 
-                                        $calculatedQuantity = $phase === Phases::Packaging->value
+                                        $calculatedQuantity = $mode === FormulaItemCalculationMode::QuantityPerUnit
                                             ? round($expectedUnits * $percentage, 3)
                                             : round(($plannedQuantity * $percentage) / 100, 3);
 
-                                        $suffix = $phase === Phases::Packaging->value ? ' u' : ' kg';
+                                        $suffix = $mode === FormulaItemCalculationMode::QuantityPerUnit ? ' u' : ' kg';
 
                                         return number_format($calculatedQuantity, 3, '.', ' ').$suffix;
                                     }),
@@ -570,15 +594,30 @@ class ProductionResource extends Resource
                                     ->label('Phase')
                                     ->options(Phases::class)
                                     ->columnSpan(1)
+                                    ->live()
+                                    ->afterStateUpdated(function (Set $set, $state): void {
+                                        $phase = $state instanceof Phases ? $state->value : (string) ($state ?? '');
+
+                                        if ($phase === Phases::Packaging->value) {
+                                            $set('calculation_mode', FormulaItemCalculationMode::QuantityPerUnit->value);
+                                        }
+                                    })
                                     ->required(),
                                 TextInput::make('percentage_of_oils')
                                     ->label(function (Get $get): string {
                                         $phaseState = $get('phase');
                                         $phase = $phaseState instanceof Phases ? $phaseState->value : (string) ($phaseState ?? '');
+                                        $modeState = $get('calculation_mode');
+                                        $mode = $modeState instanceof FormulaItemCalculationMode
+                                            ? $modeState
+                                            : FormulaItemCalculationMode::tryFrom((string) ($modeState ?? ''))
+                                            ?? ($phase === Phases::Packaging->value
+                                                ? FormulaItemCalculationMode::QuantityPerUnit
+                                                : FormulaItemCalculationMode::PercentOfOils);
 
-                                        return $phase === Phases::Packaging->value ? 'Qté / unité' : '% d\'huiles';
+                                        return $mode === FormulaItemCalculationMode::QuantityPerUnit ? 'Qté / unité' : '% d\'huiles';
                                     })
-                                    ->helperText('Pour le packaging, saisir la quantité par unité (ex: 1 boîte / unité).')
+                                    ->helperText('Mode unitaire: saisir la quantité par unité. Sinon, saisir le % d\'huiles.')
                                     ->numeric()
                                     ->columnSpan(1)
                                     ->live()

@@ -2,6 +2,7 @@
 
 namespace Database\Factories\Production;
 
+use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
@@ -19,6 +20,7 @@ class FormulaItemFactory extends Factory
             'ingredient_id' => Ingredient::factory(),
             'percentage_of_oils' => $this->faker->randomFloat(2, 1, 50),
             'phase' => Phases::Saponification->value,
+            'calculation_mode' => FormulaItemCalculationMode::PercentOfOils->value,
             'organic' => true,
             'sort' => 0,
         ];
@@ -49,6 +51,7 @@ class FormulaItemFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'phase' => Phases::Packaging->value,
+            'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
         ]);
     }
 
