@@ -1,12 +1,12 @@
 [mcp_servers.laravel-boost]
 command = "php"
 args = ["artisan", "boost:mcp"]
-cwd = "/Users/philippe/Herd/cosmaker-1"
+cwd = "/Users/philippe/Herd/cosmood"
 
 [mcp_servers.herd]
 command = "php"
 args = ["/Applications/Herd.app/Contents/Resources/herd-mcp.phar"]
-cwd = "/Users/philippe/Herd/cosmaker-1"
+cwd = "/Users/philippe/Herd/cosmood"
 
 [mcp_servers.herd.env]
-SITE_PATH = "/Users/philippe/Herd/cosmaker-1"
+SITE_PATH = "/Users/philippe/Herd/cosmood"
