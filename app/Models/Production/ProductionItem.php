@@ -3,12 +3,12 @@
 namespace App\Models\Production;
 
 use App\Enums\FormulaItemCalculationMode;
-use App\Enums\IngredientBaseUnit;
 use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\Supply;
+use App\Services\Production\IngredientQuantityCalculator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -77,6 +77,14 @@ class ProductionItem extends Model
         return Phases::tryFrom((string) $this->phase)?->getLabel() ?? (string) $this->phase;
     }
 
+    /**
+     * Calculates the required quantity for this item based on its coefficient and calculation mode.
+     *
+     * Delegates to IngredientQuantityCalculator. The coefficient (percentage_of_oils) is interpreted
+     * as either a percentage of batch weight or quantity per unit, depending on the resolved mode.
+     *
+     * @see IngredientQuantityCalculator::calculate()
+     */
     public function getCalculatedQuantityKg(?Production $production = null): float
     {
         $production ??= $this->relationLoaded('production')
@@ -88,15 +96,14 @@ class ProductionItem extends Model
         $coefficient = (float) ($this->percentage_of_oils ?? 0);
         $calculationMode = $this->resolveCalculationMode();
 
-        if ($calculationMode === FormulaItemCalculationMode::QuantityPerUnit) {
-            $expectedUnits = (float) ($production?->expected_units ?? 0);
+        $calculator = app(IngredientQuantityCalculator::class);
 
-            return round($expectedUnits * $coefficient, 3);
-        }
-
-        $plannedQuantity = (float) ($production?->planned_quantity ?? 0);
-
-        return round(($plannedQuantity * $coefficient) / 100, 3);
+        return $calculator->calculate(
+            coefficient: $coefficient,
+            batchSizeKg: (float) ($production?->planned_quantity ?? 0),
+            expectedUnits: $production?->expected_units,
+            calculationMode: $calculationMode,
+        );
     }
 
     public function isPackagingPhase(): bool
@@ -104,12 +111,16 @@ class ProductionItem extends Model
         return (string) $this->phase === Phases::Packaging->value;
     }
 
+    /**
+     * Resolves the calculation mode for this item.
+     *
+     * Priority: ingredient base_unit (unit) > explicit calculation_mode > default (percent_of_oils).
+     * Phase is NOT considered - mode is determined solely by ingredient type or explicit setting.
+     *
+     * @see IngredientQuantityCalculator::resolveCalculationMode()
+     */
     public function resolveCalculationMode(): FormulaItemCalculationMode
     {
-        if ($this->isPackagingPhase()) {
-            return FormulaItemCalculationMode::QuantityPerUnit;
-        }
-
         $ingredient = $this->relationLoaded('ingredient')
             ? $this->ingredient
             : ($this->ingredient_id
@@ -117,25 +128,13 @@ class ProductionItem extends Model
                 : null);
 
         $ingredientBaseUnit = $ingredient?->base_unit;
-        $isUnitBasedIngredient = $ingredientBaseUnit instanceof IngredientBaseUnit
-            ? $ingredientBaseUnit === IngredientBaseUnit::Unit
-            : (string) $ingredientBaseUnit === IngredientBaseUnit::Unit->value;
 
-        if ($isUnitBasedIngredient) {
-            return FormulaItemCalculationMode::QuantityPerUnit;
-        }
+        $calculator = app(IngredientQuantityCalculator::class);
 
-        if ($this->calculation_mode instanceof FormulaItemCalculationMode) {
-            return $this->calculation_mode;
-        }
-
-        $mode = FormulaItemCalculationMode::tryFrom((string) ($this->calculation_mode ?? ''));
-
-        if ($mode) {
-            return $mode;
-        }
-
-        return FormulaItemCalculationMode::PercentOfOils;
+        return $calculator->resolveCalculationMode(
+            ingredientBaseUnit: $ingredientBaseUnit,
+            storedMode: $this->calculation_mode,
+        );
     }
 
     public function getReferenceUnitPrice(): ?float

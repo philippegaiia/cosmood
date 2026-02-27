@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
@@ -63,6 +64,7 @@ it('consumes non-packaging on ongoing and keeps packaging reserved', function ()
         'supplier_listing_id' => $packagingSupply->supplier_listing_id,
         'ingredient_id' => $packagingSupply->supplierListing->ingredient_id,
         'phase' => Phases::Packaging->value,
+        'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
         'percentage_of_oils' => 1,
     ]);
 
@@ -135,6 +137,7 @@ it('rolls back reservations and staged consumptions when deleting an ongoing pro
         'supplier_listing_id' => $packagingSupply->supplier_listing_id,
         'ingredient_id' => $packagingSupply->supplierListing->ingredient_id,
         'phase' => Phases::Packaging->value,
+        'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
         'percentage_of_oils' => 1,
     ]);
 

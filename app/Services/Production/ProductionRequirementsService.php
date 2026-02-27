@@ -16,6 +16,10 @@ use Illuminate\Support\Facades\DB;
  */
 class ProductionRequirementsService
 {
+    public function __construct(
+        private readonly IngredientQuantityCalculator $calculator,
+    ) {}
+
     /**
      * Creates requirements when none exist for the production.
      */
@@ -65,7 +69,6 @@ class ProductionRequirementsService
         $requiredQuantity = $this->calculateQuantity(
             $formulaItem->percentage_of_oils,
             $batchSize,
-            $formulaItem->phase,
             $formulaItem->calculation_mode?->value ?? $formulaItem->calculation_mode,
             $formulaItem->ingredient?->base_unit?->value,
             $production->expected_units,
@@ -88,58 +91,27 @@ class ProductionRequirementsService
     }
 
     /**
-     * Converts formula percentages into required quantities for the production batch.
+     * Converts formula coefficients into required quantities for the production batch.
+     *
+     * Delegates to IngredientQuantityCalculator. The percentage (coefficient) is interpreted
+     * as either a percentage of batch weight or quantity per unit, depending on the resolved mode.
+     *
+     * @see IngredientQuantityCalculator::resolveAndCalculate()
      */
     public function calculateQuantity(
         float $percentage,
         float $batchSize,
-        Phases|string $phase,
         FormulaItemCalculationMode|string|null $calculationMode = null,
         IngredientBaseUnit|string|null $ingredientBaseUnit = null,
         ?int $expectedUnits = null,
     ): float {
-        $phaseValue = $phase instanceof Phases ? $phase->value : $phase;
-        $mode = $this->resolveCalculationMode($calculationMode, $phaseValue, $ingredientBaseUnit);
-
-        if ($mode === FormulaItemCalculationMode::QuantityPerUnit) {
-            return round(((float) ($expectedUnits ?? 0)) * $percentage, 3);
-        }
-
-        return round(($percentage / 100) * $batchSize, 3);
-    }
-
-    /**
-     * Returns the base quantity used for non-saponification phase calculations.
-     */
-    protected function getOilsPhasePercentage(float $batchSize): float
-    {
-        return $batchSize;
-    }
-
-    private function resolveCalculationMode(
-        FormulaItemCalculationMode|string|null $calculationMode,
-        string $phaseValue,
-        IngredientBaseUnit|string|null $ingredientBaseUnit = null,
-    ): FormulaItemCalculationMode {
-        $baseUnit = $ingredientBaseUnit instanceof IngredientBaseUnit
-            ? $ingredientBaseUnit
-            : IngredientBaseUnit::tryFrom((string) ($ingredientBaseUnit ?? ''));
-
-        if ($phaseValue === Phases::Packaging->value || $baseUnit === IngredientBaseUnit::Unit) {
-            return FormulaItemCalculationMode::QuantityPerUnit;
-        }
-
-        if ($calculationMode instanceof FormulaItemCalculationMode) {
-            return $calculationMode;
-        }
-
-        $mode = FormulaItemCalculationMode::tryFrom((string) ($calculationMode ?? ''));
-
-        if ($mode) {
-            return $mode;
-        }
-
-        return FormulaItemCalculationMode::PercentOfOils;
+        return $this->calculator->resolveAndCalculate(
+            coefficient: $percentage,
+            batchSizeKg: $batchSize,
+            expectedUnits: $expectedUnits,
+            ingredientBaseUnit: $ingredientBaseUnit,
+            storedMode: $calculationMode,
+        );
     }
 
     /**
