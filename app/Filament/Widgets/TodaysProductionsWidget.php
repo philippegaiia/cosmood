@@ -2,22 +2,17 @@
 
 namespace App\Filament\Widgets;
 
-use App\Enums\ProductionStatus;
 use App\Filament\Resources\Production\ProductionResource;
-use App\Models\Production\Production;
-use Filament\Actions\Action;
-use Filament\Support\Icons\Heroicon;
+use App\Models\Production\ProductionTask;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
 
 /**
- * Today's Productions Widget.
+ * Today's Productions Widget - Task View.
  *
- * Shows all productions scheduled for today regardless of status.
- * Color-coded by status for quick visual identification.
- *
- * Quick action to view production details.
+ * Shows production tasks scheduled for today (first task of each production).
+ * Displays batch numbers, product, and quantities.
  */
 class TodaysProductionsWidget extends BaseWidget
 {
@@ -33,54 +28,54 @@ class TodaysProductionsWidget extends BaseWidget
     {
         return $table
             ->query(
-                Production::query()
-                    ->with(['product', 'wave'])
-                    ->whereDate('production_date', today())
-                    ->orderBy('created_at')
+                ProductionTask::query()
+                    ->with(['production.product'])
+                    ->where('name', 'Production') // First task of each production
+                    ->whereDate('scheduled_date', today())
+                    ->whereNull('cancelled_at')
+                    ->orderBy('sequence_order')
             )
             ->columns([
-                TextColumn::make('batch_number')
-                    ->label('Lot')
-                    ->searchable()
-                    ->sortable(),
+                TextColumn::make('production.lot_display')
+                    ->label('N° Lot')
+                    ->state(fn ($record) => $record->production?->getLotDisplayLabel())
+                    ->searchable(query: fn ($query, $search) => $query
+                        ->whereHas('production', fn ($q) => $q
+                            ->where('batch_number', 'like', "%{$search}%")
+                            ->orWhere('permanent_batch_number', 'like', "%{$search}%")))
+                    ->sortable(query: fn ($query, $direction) => $query
+                        ->join('productions', 'production_tasks.production_id', '=', 'productions.id')
+                        ->orderBy('productions.permanent_batch_number', $direction)
+                        ->orderBy('productions.batch_number', $direction)),
 
-                TextColumn::make('product.name')
+                TextColumn::make('production.product.name')
                     ->label('Produit')
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('status')
+                TextColumn::make('production.expected_units')
+                    ->label('Qté (unités)')
+                    ->numeric()
+                    ->placeholder('-')
+                    ->sortable(),
+
+                TextColumn::make('production.planned_quantity')
+                    ->label('Qté attendue (kg)')
+                    ->numeric(decimalPlaces: 2)
+                    ->suffix(' kg')
+                    ->placeholder('-')
+                    ->sortable(),
+
+                TextColumn::make('production.status')
                     ->label('Statut')
                     ->badge()
                     ->sortable(),
-
-                TextColumn::make('planned_quantity')
-                    ->label('Qté planifiée')
-                    ->numeric()
-                    ->suffix(' kg')
-                    ->sortable(),
-
-                TextColumn::make('wave.name')
-                    ->label('Vague')
-                    ->placeholder('-')
-                    ->sortable(),
             ])
-            ->actions([
-                Action::make('view')
-                    ->label('Voir')
-                    ->icon(Heroicon::Eye)
-                    ->color('gray')
-                    ->url(fn (Production $record): string => ProductionResource::getUrl('view', ['record' => $record])),
-
-                Action::make('edit')
-                    ->label('Modifier')
-                    ->icon(Heroicon::Pencil)
-                    ->color('primary')
-                    ->url(fn (Production $record): string => ProductionResource::getUrl('edit', ['record' => $record]))
-                    ->visible(fn (Production $record): bool => $record->status !== ProductionStatus::Finished),
-            ])
+            ->recordUrl(fn ($record) => $record->production_id
+                ? ProductionResource::getUrl('view', ['record' => $record->production_id])
+                : null)
             ->emptyStateHeading('Aucune production aujourd\'hui')
-            ->emptyStateDescription('Aucune production n\'est planifiée pour aujourd\'hui.')
+            ->emptyStateDescription('Aucune tâche de production n\'est planifiée pour aujourd\'hui.')
             ->paginated(false);
     }
 
