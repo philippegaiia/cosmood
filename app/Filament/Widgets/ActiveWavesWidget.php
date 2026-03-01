@@ -95,7 +95,7 @@ class ActiveWavesWidget extends BaseWidget
                     ->label('Voir')
                     ->icon(Heroicon::Eye)
                     ->color('gray')
-                    ->url(fn (ProductionWave $record): string => ProductionWaveResource::getUrl('view', ['record' => $record])),
+                    ->url(fn (ProductionWave $record): string => ProductionWaveResource::getUrl('edit', ['record' => $record])),
             ])
             ->emptyStateHeading('Aucune vague active')
             ->emptyStateDescription('Créez une vague de production pour commencer.')
