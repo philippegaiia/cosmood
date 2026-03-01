@@ -60,7 +60,7 @@ class ListSupplies extends ListRecords
             \Filament\Actions\Action::make('movements')
                 ->label('Voir mouvements')
                 ->icon('heroicon-o-arrows-right-left')
-                ->url(route('filament.admin.resources.supply-movements.index'))
+                ->url(\App\Filament\Resources\Supply\SupplyMovementResource::getUrl('index'))
                 ->openUrlInNewTab(),
         ];
     }
