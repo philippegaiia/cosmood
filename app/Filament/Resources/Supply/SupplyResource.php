@@ -59,7 +59,11 @@ class SupplyResource extends Resource
                     ->schema([
                         Select::make('supplier_listing_id')
                             ->label('Ingrédient')
-                            ->relationship('supplierListing', 'name')
+                            ->relationship(
+                                name: 'supplierListing',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn (Builder $query): Builder => $query->with('supplier'),
+                            )
                             ->getOptionLabelFromRecordUsing(fn (Model $record) => trim("{$record->name} ({$record->unit_weight} {$record->unit_of_measure}) - {$record->supplier->name}"))
                             ->native(false)
                             ->searchable()
@@ -151,70 +155,23 @@ class SupplyResource extends Resource
                         : ($record->order_ref ?? '-'))
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                TextColumn::make('quantity_in')
-                    ->label('Qté reçue')
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(),
-
-                TextColumn::make('quantity_out')
-                    ->label('Qté consommée')
-                    ->description('Sortie réelle (prod terminées)')
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(),
-
-                TextColumn::make('physical_stock')
-                    ->label('Stock physique')
-                    ->state(fn (Supply $record): float => round($record->getTotalQuantity(), 3))
-                    ->description('Reçue - consommée')
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0)) '.$direction)),
-
-                TextColumn::make('allocated_quantity')
-                    ->label('Qté allouée')
-                    ->description('Réservée non consommée')
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(),
-
-                TextColumn::make('available_quantity')
-                    ->label('Disponible à allouer')
-                    ->state(fn (Supply $record): float => round($record->getAvailableQuantity(), 3))
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) '.$direction))
-                    ->description('Stock physique - allouée')
-                    ->color(function (Supply $record): string {
+                \Filament\Tables\Columns\ViewColumn::make('stock_availability')
+                    ->label('Stock disponible')
+                    ->view('components.stock-meter')
+                    ->getStateUsing(function (Supply $record): array {
                         $available = $record->getAvailableQuantity();
+                        $total = $record->getTotalQuantity();
+                        $allocated = $record->allocated_quantity ?? 0;
 
-                        if ($available <= 0) {
-                            return 'danger';
-                        }
-
-                        $ingredient = $record->supplierListing?->ingredient;
-
-                        if (! $ingredient) {
-                            return 'success';
-                        }
-
-                        $ingredientId = (int) $ingredient->id;
-
-                        static $ingredientTotals = [];
-
-                        if (! array_key_exists($ingredientId, $ingredientTotals)) {
-                            $ingredientTotals[$ingredientId] = $ingredient->getTotalAvailableStock();
-                        }
-
-                        $stockMin = (float) ($ingredient->stock_min ?? 0);
-
-                        if ($stockMin > 0 && (float) $ingredientTotals[$ingredientId] <= $stockMin) {
-                            return 'danger';
-                        }
-
-                        return 'success';
-                    }),
-
-                TextColumn::make('supplierListing.unit_of_measure')
-                    ->label('Unité')
-                    ->state(fn (Supply $record): string => $record->getUnitOfMeasure())
-                    ->sortable(),
+                        return [
+                            'available' => $available,
+                            'allocated' => $allocated,
+                            'total' => $total,
+                            'unit' => $record->getUnitOfMeasure(),
+                        ];
+                    })
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) '.$direction)),
 
                 TextColumn::make('unit_price')
                     ->label('Prix unitaire')
