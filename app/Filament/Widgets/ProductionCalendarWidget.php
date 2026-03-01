@@ -28,7 +28,7 @@ class ProductionCalendarWidget extends CalendarWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected CalendarViewType $calendarView = CalendarViewType::DayGridWeek;
+    protected CalendarViewType $calendarView = CalendarViewType::TimeGridWeek;
 
     protected ?string $locale = 'fr';
 
