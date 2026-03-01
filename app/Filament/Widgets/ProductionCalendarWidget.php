@@ -7,8 +7,10 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionTask;
 use Guava\Calendar\Enums\CalendarViewType;
 use Guava\Calendar\Filament\CalendarWidget;
+use Guava\Calendar\ValueObjects\EventDropInfo;
 use Guava\Calendar\ValueObjects\FetchInfo;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
 
@@ -20,6 +22,7 @@ use Illuminate\Support\HtmlString;
  * - Tasks: All tasks with color from task type
  *
  * Default view: Week
+ * Drag & Drop: Enabled for both productions and tasks
  */
 class ProductionCalendarWidget extends CalendarWidget
 {
@@ -30,6 +33,9 @@ class ProductionCalendarWidget extends CalendarWidget
     protected CalendarViewType $calendarView = CalendarViewType::TimeGridWeek;
 
     protected ?string $locale = 'fr';
+
+    /** Enable drag & drop for calendar events */
+    protected bool $eventDragEnabled = true;
 
     /**
      * Get events for the calendar.
@@ -51,5 +57,34 @@ class ProductionCalendarWidget extends CalendarWidget
 
         // Combine both collections
         return $productions->merge($tasks);
+    }
+
+    /**
+     * Handle event drop (drag & drop).
+     * Updates the date when an event is dragged to a new date.
+     */
+    protected function onEventDrop(EventDropInfo $info, Model $record): bool
+    {
+        $newDate = $info->event->getStart();
+
+        // Update based on model type
+        if ($record instanceof Production) {
+            // Only allow dragging for Planned/Confirmed productions
+            if (! in_array($record->status, [ProductionStatus::Planned, ProductionStatus::Confirmed])) {
+                return false;
+            }
+
+            $record->update(['production_date' => $newDate]);
+
+            return true;
+        }
+
+        if ($record instanceof ProductionTask) {
+            $record->update(['scheduled_date' => $newDate]);
+
+            return true;
+        }
+
+        return false;
     }
 }
