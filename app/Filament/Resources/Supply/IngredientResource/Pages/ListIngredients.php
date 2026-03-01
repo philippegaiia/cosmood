@@ -43,9 +43,6 @@ class ListIngredients extends ListRecords
      */
     public function updatedActiveTab(): void
     {
-        // Reset table to force reconfiguration with new tab's settings
-        $this->table = null;
-
         // Reset pagination and filters when switching tabs
         $this->resetTable();
     }
