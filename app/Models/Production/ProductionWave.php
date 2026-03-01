@@ -35,11 +35,6 @@ class ProductionWave extends Model
         return $this->hasMany(Production::class, 'production_wave_id');
     }
 
-    public function ingredientRequirements(): HasMany
-    {
-        return $this->hasMany(ProductionIngredientRequirement::class);
-    }
-
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');

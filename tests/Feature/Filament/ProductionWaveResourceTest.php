@@ -1,8 +1,9 @@
 <?php
 
+use App\Enums\ProcurementStatus;
 use App\Enums\WaveStatus;
 use App\Models\Production\Production;
-use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
@@ -209,11 +210,11 @@ describe('ProductionWaveResource - table actions', function () {
             'supplier_id' => $supplier->id,
         ]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
@@ -237,11 +238,11 @@ describe('Procurement plan print route', function () {
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
         $ingredient = Ingredient::factory()->create(['name' => 'Huile de Coco']);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 22.5,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $response = $this->get(route('production-waves.procurement-plan.print', $wave));

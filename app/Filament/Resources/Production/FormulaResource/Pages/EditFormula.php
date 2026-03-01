@@ -8,11 +8,8 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
-use Filament\Support\Exceptions\Halt;
-use Illuminate\Support\Facades\Session;
 
 class EditFormula extends EditRecord
 {
@@ -36,60 +33,24 @@ class EditFormula extends EditRecord
         ];
     }
 
-    protected function beforeSave(): void
+    protected function getFormActions(): array
     {
-        if (! $this->shouldConfirmSaponifiedTotalMismatch()) {
-            $this->clearSaponifiedConfirmationState();
-
-            return;
-        }
-
-        $signature = $this->getSaponifiedConfirmationSignature();
-
-        if ($this->hasSaponifiedConfirmation($signature)) {
-            $this->clearSaponifiedConfirmationState();
-
-            return;
-        }
-
-        $this->storeSaponifiedConfirmation($signature);
-
-        Notification::make()
-            ->warning()
-            ->title('Total saponifie different de 100%')
-            ->body('Le total saponifie est a '.number_format($this->getSaponifiedTotalFromState(), 2, '.', ' ').' %. Cliquez encore sur Enregistrer pour confirmer.')
-            ->send();
-
-        throw new Halt;
+        return [
+            $this->getSaveFormAction()
+                ->requiresConfirmation(fn (): bool => $this->shouldConfirmSaponifiedTotalMismatch())
+                ->modalHeading(__('formula.confirm_saponified_total'))
+                ->modalDescription(fn (): string => $this->getSaponifiedConfirmationDescription())
+                ->modalSubmitActionLabel(__('filament::components/modal.actions.confirm'))
+                ->modalCancelActionLabel(__('filament::components/modal.actions.cancel')),
+            $this->getCancelFormAction(),
+        ];
     }
 
-    private function getSaponifiedConfirmationSessionKey(): string
+    private function getSaponifiedConfirmationDescription(): string
     {
-        return sprintf('formula:saponified-confirm:%s', $this->record->getKey());
-    }
+        $total = number_format($this->getSaponifiedTotalFromState(), 2);
 
-    private function getSaponifiedConfirmationSignature(): string
-    {
-        return implode('|', [
-            (string) ($this->record->getKey() ?? 'new'),
-            (string) ((int) ($this->data['is_soap'] ?? $this->record->is_soap ?? false)),
-            number_format($this->getSaponifiedTotalFromState(), 4, '.', ''),
-        ]);
-    }
-
-    private function hasSaponifiedConfirmation(string $signature): bool
-    {
-        return Session::get($this->getSaponifiedConfirmationSessionKey()) === $signature;
-    }
-
-    private function storeSaponifiedConfirmation(string $signature): void
-    {
-        Session::put($this->getSaponifiedConfirmationSessionKey(), $signature);
-    }
-
-    private function clearSaponifiedConfirmationState(): void
-    {
-        Session::forget($this->getSaponifiedConfirmationSessionKey());
+        return __('formula.saponified_total_mismatch_body', ['total' => $total])."\n\n".__('formula.saponified_total_mismatch_hint')."\n\n".__('formula.confirm_continue');
     }
 
     private function shouldConfirmSaponifiedTotalMismatch(): bool

@@ -1,6 +1,6 @@
 <?php
 
-use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\ProductionItemAllocation;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\Supply;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -23,11 +23,11 @@ describe('Supply Model', function () {
         expect($supply->supplierListing->id)->toBe($listing->id);
     });
 
-    it('has many ingredient requirements', function () {
+    it('has many allocations', function () {
         $supply = Supply::factory()->create();
-        ProductionIngredientRequirement::factory()->count(2)->create(['allocated_from_supply_id' => $supply->id]);
+        ProductionItemAllocation::factory()->count(2)->create(['supply_id' => $supply->id]);
 
-        expect($supply->ingredientRequirements)->toHaveCount(2);
+        expect($supply->allocations)->toHaveCount(2);
     });
 
     it('calculates available quantity', function () {

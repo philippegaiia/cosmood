@@ -3,10 +3,11 @@
 namespace App\Services\Production;
 
 use App\Enums\OrderStatus;
+use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
-use App\Enums\RequirementStatus;
 use App\Models\Production\Production;
-use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
@@ -14,60 +15,32 @@ use App\Models\Supply\Supply;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Builds procurement views and purchase-order suggestions for production waves.
- */
 class WaveProcurementService
 {
-    public function __construct(private readonly ProductionRequirementsService $productionRequirementsService) {}
-
-    /**
-     * Aggregates remaining requirements by ingredient and supplier listing.
-     */
     public function aggregateRequirements(ProductionWave $wave): Collection
     {
-        $this->ensureWaveRequirements($wave);
+        $items = $this->getWaveProductionItems($wave);
 
-        $requirements = ProductionIngredientRequirement::query()
-            ->where('production_wave_id', $wave->id)
-            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
-            ->whereNull('fulfilled_by_masterbatch_id')
-            ->whereIn('status', [RequirementStatus::NotOrdered, RequirementStatus::Ordered])
-            ->with(['ingredient', 'supplierListing.supplier'])
-            ->get();
-
-        return $requirements
-            ->filter(fn ($r) => $r->getRemainingQuantity() > 0)
-            ->groupBy(fn ($r) => $r->ingredient_id.'-'.$r->supplier_listing_id)
-            ->map(function ($group) {
+        return $items
+            ->filter(fn (ProductionItem $item): bool => $this->getRemainingQuantity($item) > 0)
+            ->groupBy(fn (ProductionItem $item): string => $item->ingredient_id.'-'.$item->supplier_listing_id)
+            ->map(function (Collection $group): object {
                 $first = $group->first();
 
                 return (object) [
                     'ingredient_id' => $first->ingredient_id,
                     'supplier_listing_id' => $first->supplier_listing_id,
                     'supplier_listing' => $first->supplierListing,
-                    'total_quantity' => $group->sum(fn ($r) => $r->getRemainingQuantity()),
-                    'requirements' => $group,
+                    'total_quantity' => $group->sum(fn (ProductionItem $item): float => $this->getRemainingQuantity($item)),
+                    'items' => $group,
                 ];
             })
             ->values();
     }
 
-    /**
-     * Builds advisory planning data with shortages and estimated cost.
-     */
     public function getPlanningList(ProductionWave $wave): Collection
     {
-        $this->ensureWaveRequirements($wave);
-
-        $requirements = ProductionIngredientRequirement::query()
-            ->where('production_wave_id', $wave->id)
-            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
-            ->whereNull('fulfilled_by_masterbatch_id')
-            ->whereIn('status', [RequirementStatus::NotOrdered, RequirementStatus::Ordered])
-            ->with('ingredient')
-            ->get()
-            ->filter(fn (ProductionIngredientRequirement $requirement): bool => $requirement->getRemainingQuantity() > 0);
+        $items = $this->getWaveProductionItems($wave);
 
         $stockByIngredient = Supply::query()
             ->where('is_in_stock', true)
@@ -76,15 +49,15 @@ class WaveProcurementService
             ->groupBy(fn (Supply $supply): ?int => $supply->supplierListing?->ingredient_id)
             ->map(fn (Collection $supplies): float => (float) $supplies->sum(fn (Supply $supply): float => $supply->getAvailableQuantity()));
 
-        return $requirements
+        return $items
             ->groupBy('ingredient_id')
             ->map(function (Collection $group, int|string $ingredientId) use ($stockByIngredient): object {
-                $notOrderedRequirements = $group->where('status', RequirementStatus::NotOrdered);
-                $orderedRequirements = $group->where('status', RequirementStatus::Ordered);
+                $notOrderedItems = $group->where('procurement_status', ProcurementStatus::NotOrdered);
+                $orderedItems = $group->whereIn('procurement_status', [ProcurementStatus::Ordered, ProcurementStatus::Confirmed]);
 
                 $ingredient = $group->first()?->ingredient;
-                $notOrderedQuantity = (float) $notOrderedRequirements->sum(fn ($requirement): float => $requirement->getRemainingQuantity());
-                $orderedQuantity = (float) $orderedRequirements->sum(fn ($requirement): float => $requirement->getRemainingQuantity());
+                $notOrderedQuantity = (float) $notOrderedItems->sum(fn (ProductionItem $item): float => $this->getRemainingQuantity($item));
+                $orderedQuantity = (float) $orderedItems->sum(fn (ProductionItem $item): float => $this->getRemainingQuantity($item));
                 $ingredientPrice = (float) ($ingredient?->price ?? 0);
                 $stockAdvisory = (float) ($stockByIngredient->get((int) $ingredientId) ?? 0);
 
@@ -98,32 +71,27 @@ class WaveProcurementService
                     'estimated_cost' => $ingredientPrice > 0 ? round($notOrderedQuantity * $ingredientPrice, 2) : null,
                     'stock_advisory' => $stockAdvisory,
                     'advisory_shortage' => max(0, $notOrderedQuantity - $stockAdvisory),
-                    'requirements' => $group,
+                    'items' => $group,
                 ];
             })
             ->sortByDesc('to_order_quantity')
             ->values();
     }
 
-    /**
-     * Generates draft supplier orders from not-ordered wave requirements.
-     */
     public function generatePurchaseOrders(ProductionWave $wave): Collection
     {
         if (! $wave->isApproved()) {
             throw new \InvalidArgumentException('Wave must be approved to generate purchase orders');
         }
 
-        $this->ensureWaveRequirements($wave);
-
         $aggregated = $this->aggregateRequirements($wave)
             ->map(function (object $item): object {
-                $notOrderedRequirements = $item->requirements->where('status', RequirementStatus::NotOrdered);
+                $notOrderedItems = $item->items->where('procurement_status', ProcurementStatus::NotOrdered);
 
-                $item->to_order_quantity = (float) $notOrderedRequirements
-                    ->sum(fn ($requirement): float => $requirement->getRemainingQuantity());
+                $item->to_order_quantity = (float) $notOrderedItems
+                    ->sum(fn (ProductionItem $item): float => $this->getRemainingQuantity($item));
 
-                $item->not_ordered_requirement_ids = $notOrderedRequirements->pluck('id')->values();
+                $item->not_ordered_item_ids = $notOrderedItems->pluck('id')->values();
 
                 return $item;
             })
@@ -136,7 +104,7 @@ class WaveProcurementService
 
         $orders = collect();
 
-        DB::transaction(function () use ($aggregated, &$orders) {
+        DB::transaction(function () use ($aggregated, &$orders): void {
             $bySupplier = $aggregated
                 ->filter(fn ($item) => $item->supplier_listing_id !== null && $item->supplier_listing !== null)
                 ->groupBy(fn ($item) => $item->supplier_listing->supplier_id);
@@ -165,10 +133,10 @@ class WaveProcurementService
                         'is_in_supplies' => false,
                     ]);
 
-                    ProductionIngredientRequirement::query()
-                        ->whereIn('id', $item->not_ordered_requirement_ids)
-                        ->where('status', RequirementStatus::NotOrdered)
-                        ->update(['status' => RequirementStatus::Ordered]);
+                    ProductionItem::query()
+                        ->whereIn('id', $item->not_ordered_item_ids)
+                        ->where('procurement_status', ProcurementStatus::NotOrdered)
+                        ->update(['procurement_status' => ProcurementStatus::Ordered]);
                 }
 
                 $orders->push($order->load('supplier_order_items'));
@@ -178,32 +146,18 @@ class WaveProcurementService
         return $orders;
     }
 
-    /**
-     * Returns requirement status counters for wave procurement.
-     *
-     * @return array{not_ordered: int, ordered: int, received: int, allocated: int, total: int}
-     */
     public function getProcurementSummary(ProductionWave $wave): array
     {
-        $this->ensureWaveRequirements($wave);
-
-        $requirements = ProductionIngredientRequirement::query()
-            ->where('production_wave_id', $wave->id)
-            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
-            ->get();
+        $items = $this->getWaveProductionItems($wave);
 
         return [
-            'not_ordered' => $requirements->where('status', RequirementStatus::NotOrdered)->count(),
-            'ordered' => $requirements->where('status', RequirementStatus::Ordered)->count(),
-            'received' => $requirements->where('status', RequirementStatus::Received)->count(),
-            'allocated' => $requirements->where('status', RequirementStatus::Allocated)->count(),
-            'total' => $requirements->count(),
+            'not_ordered' => $items->where('procurement_status', ProcurementStatus::NotOrdered)->count(),
+            'ordered' => $items->whereIn('procurement_status', [ProcurementStatus::Ordered, ProcurementStatus::Confirmed])->count(),
+            'received' => $items->where('procurement_status', ProcurementStatus::Received)->count(),
+            'total' => $items->count(),
         ];
     }
 
-    /**
-     * Computes next supplier order serial number.
-     */
     protected function getNextSerialNumber(): int
     {
         $lastOrder = SupplierOrder::orderBy('id', 'desc')->first();
@@ -211,17 +165,52 @@ class WaveProcurementService
         return $lastOrder ? $lastOrder->serial_number + 1 : 1001;
     }
 
-    /**
-     * Ensures each production in the wave has generated ingredient requirements.
-     */
-    private function ensureWaveRequirements(ProductionWave $wave): void
+    private function getWaveProductionItems(ProductionWave $wave): Collection
     {
-        $wave->loadMissing('productions');
+        $wave->loadMissing([
+            'productions.productionItems.ingredient',
+            'productions.productionItems.supplierListing.supplier',
+            'productions.masterbatchLot',
+        ]);
 
-        $wave->productions
-            ->filter(fn (Production $production): bool => $production->status !== ProductionStatus::Cancelled)
-            ->each(function (Production $production): void {
-                $this->productionRequirementsService->generateRequirements($production);
-            });
+        $activeProductions = $wave->productions
+            ->filter(fn (Production $production): bool => $production->status !== ProductionStatus::Cancelled);
+
+        $items = collect();
+
+        foreach ($activeProductions as $production) {
+            $replacedPhase = $production->masterbatch_lot_id
+                ? $this->normalizePhase($production->masterbatchLot?->replaces_phase)
+                : null;
+
+            $productionItems = $production->productionItems
+                ->when($replacedPhase !== null, fn ($items) => $items->where('phase', '!=', $replacedPhase));
+
+            $items = $items->merge($productionItems);
+        }
+
+        return $items;
+    }
+
+    private function normalizePhase(?string $phase): ?string
+    {
+        if ($phase === null) {
+            return null;
+        }
+
+        return match ($phase) {
+            'saponified_oils' => Phases::Saponification->value,
+            'lye' => Phases::Lye->value,
+            'additives' => Phases::Additives->value,
+            default => $phase,
+        };
+    }
+
+    private function getRemainingQuantity(ProductionItem $item): float
+    {
+        $required = (float) ($item->required_quantity > 0 ? $item->required_quantity : $item->getCalculatedQuantityKg());
+        $allocated = $item->getTotalAllocatedQuantity();
+
+        return max(0, $required - $allocated);
     }
 }

@@ -1,10 +1,10 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
-use App\Enums\RequirementStatus;
 use App\Models\Production\Production;
-use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
@@ -23,7 +23,7 @@ function waveRequirementStatusService(): WaveRequirementStatusService
     return app(WaveRequirementStatusService::class);
 }
 
-it('marks requirements as ordered from wave referenced supplier orders', function () {
+it('marks items as ordered from wave referenced supplier orders', function () {
     $wave = ProductionWave::factory()->create();
     $production = Production::factory()->forWave($wave)->create();
     $ingredient = Ingredient::factory()->create();
@@ -34,12 +34,11 @@ it('marks requirements as ordered from wave referenced supplier orders', functio
         'unit_weight' => 25,
     ]);
 
-    $requirement = ProductionIngredientRequirement::factory()->create([
+    $item = ProductionItem::factory()->create([
         'production_id' => $production->id,
-        'production_wave_id' => $wave->id,
         'ingredient_id' => $ingredient->id,
         'required_quantity' => 25,
-        'status' => RequirementStatus::NotOrdered,
+        'procurement_status' => ProcurementStatus::NotOrdered,
     ]);
 
     $order = SupplierOrder::factory()->create([
@@ -57,10 +56,10 @@ it('marks requirements as ordered from wave referenced supplier orders', functio
 
     waveRequirementStatusService()->syncForWave($wave);
 
-    expect($requirement->fresh()->status)->toBe(RequirementStatus::Ordered);
+    expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
 });
 
-it('marks requirements as received when wave referenced order item is moved to stock', function () {
+it('marks items as received when wave referenced order item is moved to stock', function () {
     $wave = ProductionWave::factory()->create();
     $production = Production::factory()->forWave($wave)->create();
     $ingredient = Ingredient::factory()->create();
@@ -72,12 +71,11 @@ it('marks requirements as received when wave referenced order item is moved to s
         'unit_weight' => 10,
     ]);
 
-    $requirement = ProductionIngredientRequirement::factory()->create([
+    $item = ProductionItem::factory()->create([
         'production_id' => $production->id,
-        'production_wave_id' => $wave->id,
         'ingredient_id' => $ingredient->id,
         'required_quantity' => 20,
-        'status' => RequirementStatus::NotOrdered,
+        'procurement_status' => ProcurementStatus::NotOrdered,
     ]);
 
     $order = SupplierOrder::factory()->create([
@@ -103,10 +101,10 @@ it('marks requirements as received when wave referenced order item is moved to s
         $user,
     );
 
-    expect($requirement->fresh()->status)->toBe(RequirementStatus::Received);
+    expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::Received);
 });
 
-it('does not mark requirements as ordered from draft orders', function () {
+it('does not mark items as ordered from draft orders', function () {
     $wave = ProductionWave::factory()->create();
     $production = Production::factory()->forWave($wave)->create();
     $ingredient = Ingredient::factory()->create();
@@ -117,12 +115,11 @@ it('does not mark requirements as ordered from draft orders', function () {
         'unit_weight' => 25,
     ]);
 
-    $requirement = ProductionIngredientRequirement::factory()->create([
+    $item = ProductionItem::factory()->create([
         'production_id' => $production->id,
-        'production_wave_id' => $wave->id,
         'ingredient_id' => $ingredient->id,
         'required_quantity' => 25,
-        'status' => RequirementStatus::NotOrdered,
+        'procurement_status' => ProcurementStatus::NotOrdered,
     ]);
 
     $order = SupplierOrder::factory()->create([
@@ -140,10 +137,10 @@ it('does not mark requirements as ordered from draft orders', function () {
 
     waveRequirementStatusService()->syncForWave($wave);
 
-    expect($requirement->fresh()->status)->toBe(RequirementStatus::NotOrdered);
+    expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
 });
 
-it('does not update requirements belonging to cancelled productions', function () {
+it('does not update items belonging to cancelled productions', function () {
     $wave = ProductionWave::factory()->create();
     $production = Production::factory()->forWave($wave)->create([
         'status' => ProductionStatus::Cancelled,
@@ -156,12 +153,11 @@ it('does not update requirements belonging to cancelled productions', function (
         'unit_weight' => 25,
     ]);
 
-    $requirement = ProductionIngredientRequirement::factory()->create([
+    $item = ProductionItem::factory()->create([
         'production_id' => $production->id,
-        'production_wave_id' => $wave->id,
         'ingredient_id' => $ingredient->id,
         'required_quantity' => 25,
-        'status' => RequirementStatus::NotOrdered,
+        'procurement_status' => ProcurementStatus::NotOrdered,
     ]);
 
     $order = SupplierOrder::factory()->create([
@@ -179,5 +175,5 @@ it('does not update requirements belonging to cancelled productions', function (
 
     waveRequirementStatusService()->syncForWave($wave);
 
-    expect($requirement->fresh()->status)->toBe(RequirementStatus::NotOrdered);
+    expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
 });

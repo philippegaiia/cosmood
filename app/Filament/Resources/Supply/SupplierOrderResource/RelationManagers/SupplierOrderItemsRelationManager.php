@@ -83,10 +83,32 @@ class SupplierOrderItemsRelationManager extends RelationManager
                     ->columnSpan(1),
 
                 TextInput::make('unit_price')
-                    ->label('Prix')
-                    // ->dehydrated()
+                    ->label('Prix unitaire')
                     ->numeric()
-                    ->columns(1),
+                    ->live()
+                    ->columnSpan(1),
+
+                TextEntry::make('total_quantity')
+                    ->label('Quantité totale')
+                    ->live()
+                    ->state(function (Get $get): string {
+                        $quantity = (float) ($get('quantity') ?? 0);
+                        $unitWeight = (float) ($get('unit_weight') ?? 0);
+
+                        return number_format($quantity * $unitWeight, 3, '.', ' ');
+                    })
+                    ->columnSpan(1),
+
+                TextEntry::make('total_price')
+                    ->label('Prix total (EUR)')
+                    ->live()
+                    ->state(function (Get $get): string {
+                        $quantity = (float) ($get('quantity') ?? 0);
+                        $unitPrice = (float) ($get('unit_price') ?? 0);
+
+                        return number_format($quantity * $unitPrice, 2, '.', ' ');
+                    })
+                    ->columnSpan(1),
 
                 TextInput::make('batch_number')
                     ->label('No. Lot')
@@ -94,16 +116,9 @@ class SupplierOrderItemsRelationManager extends RelationManager
 
                 DatePicker::make('expiry_date')
                     ->label('DLUO')
-                    // ->format('d/m/Y')
                     ->native(false)
                     ->closeOnDateSelection()
                     ->columnSpan(1),
-
-                TextEntry::make('total_quantity')
-                    ->label('Quantité Totale')
-                    ->state(function ($get) {
-                        return $get('quantity') * $get('unit_weight');
-                    })->columnSpan(1),
 
                 Checkbox::make('is_in_supplies')
                     ->disabled()

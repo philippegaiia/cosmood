@@ -187,8 +187,8 @@
                 <thead>
                     <tr class="border-b border-zinc-200 text-left">
                         <th class="py-2 pr-4">Ingredient</th>
-                        <th class="py-2 pr-4">Quantite (kg)</th>
-                        <th class="py-2 pr-4">Prix indicatif (EUR/kg)</th>
+                        <th class="py-2 pr-4">Quantite</th>
+                        <th class="py-2 pr-4">Prix indicatif (EUR)</th>
                         <th class="py-2">Cout estime (EUR)</th>
                     </tr>
                 </thead>
@@ -196,7 +196,7 @@
                     @forelse ($this->ingredientTotals as $ingredient)
                         <tr class="border-b border-zinc-100">
                             <td class="py-2 pr-4">{{ $ingredient['ingredient_name'] }}</td>
-                            <td class="py-2 pr-4">{{ number_format((float) $ingredient['required_kg'], 3, ',', ' ') }}</td>
+                            <td class="py-2 pr-4">{{ number_format((float) $ingredient['required_quantity'], 3, ',', ' ') }} {{ $ingredient['base_unit'] }}</td>
                             <td class="py-2 pr-4">{{ number_format((float) $ingredient['unit_price'], 2, ',', ' ') }}</td>
                             <td class="py-2 font-semibold">{{ number_format((float) $ingredient['estimated_cost'], 2, ',', ' ') }}</td>
                         </tr>

@@ -1,12 +1,11 @@
 <?php
 
+use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
-use App\Enums\RequirementStatus;
 use App\Enums\WaveStatus;
-use App\Models\Production\Formula;
-use App\Models\Production\FormulaItem;
 use App\Models\Production\Production;
-use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
@@ -25,24 +24,25 @@ describe('aggregateRequirements', function () {
     it('aggregates requirements by ingredient across wave productions', function () {
         $wave = ProductionWave::factory()->create();
         $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create(['ingredient_id' => $ingredient->id]);
 
         $production1 = Production::factory()->create(['production_wave_id' => $wave->id]);
         $production2 = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production1->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
             'required_quantity' => 10.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production2->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
             'required_quantity' => 15.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $aggregated = waveProcurementService()->aggregateRequirements($wave);
@@ -63,13 +63,12 @@ describe('aggregateRequirements', function () {
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
             'required_quantity' => 20.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $aggregated = waveProcurementService()->aggregateRequirements($wave);
@@ -77,64 +76,32 @@ describe('aggregateRequirements', function () {
         expect($aggregated->first()->supplier_listing_id)->toBe($listing->id);
     });
 
-    it('excludes requirements fulfilled by masterbatch', function () {
+    it('excludes items from masterbatch-replaced phases', function () {
         $wave = ProductionWave::factory()->create();
         $ingredient = Ingredient::factory()->create();
-        $masterbatch = Production::factory()->create();
-
-        $production = Production::factory()->create(['production_wave_id' => $wave->id]);
-
-        ProductionIngredientRequirement::factory()->create([
-            'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
-            'ingredient_id' => $ingredient->id,
-            'required_quantity' => 10.0,
-            'status' => RequirementStatus::NotOrdered,
+        $masterbatch = Production::factory()->masterbatch()->create([
+            'replaces_phase' => Phases::Saponification->value,
         ]);
 
-        ProductionIngredientRequirement::factory()
-            ->fulfilledByMasterbatch($masterbatch)
-            ->create([
-                'production_id' => $production->id,
-                'production_wave_id' => $wave->id,
-                'ingredient_id' => $ingredient->id,
-                'required_quantity' => 15.0,
-            ]);
-
-        $aggregated = waveProcurementService()->aggregateRequirements($wave);
-
-        expect($aggregated)->toHaveCount(1)
-            ->and((float) $aggregated->first()->total_quantity)->toBe(10.0);
-    });
-
-    it('excludes already allocated requirements', function () {
-        $wave = ProductionWave::factory()->create();
-        $ingredient = Ingredient::factory()->create();
-
-        $production = Production::factory()->create(['production_wave_id' => $wave->id]);
-
-        ProductionIngredientRequirement::factory()->create([
-            'production_id' => $production->id,
+        $production = Production::factory()->create([
             'production_wave_id' => $wave->id,
-            'ingredient_id' => $ingredient->id,
-            'required_quantity' => 10.0,
-            'status' => RequirementStatus::NotOrdered,
+            'masterbatch_lot_id' => $masterbatch->id,
         ]);
 
-        ProductionIngredientRequirement::factory()->allocated()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
-            'required_quantity' => 15.0,
+            'phase' => Phases::Saponification->value,
+            'required_quantity' => 10.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $aggregated = waveProcurementService()->aggregateRequirements($wave);
 
-        expect($aggregated)->toHaveCount(1)
-            ->and((float) $aggregated->first()->total_quantity)->toBe(10.0);
+        expect($aggregated)->toHaveCount(0);
     });
 
-    it('ignores requirements from cancelled productions', function () {
+    it('ignores items from cancelled productions', function () {
         $wave = ProductionWave::factory()->create();
         $ingredient = Ingredient::factory()->create();
 
@@ -148,20 +115,18 @@ describe('aggregateRequirements', function () {
             'status' => ProductionStatus::Cancelled,
         ]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $activeProduction->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 10.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $cancelledProduction->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 15.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $aggregated = waveProcurementService()->aggregateRequirements($wave);
@@ -196,22 +161,20 @@ describe('generatePurchaseOrders', function () {
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient1->id,
             'supplier_listing_id' => $listing1->id,
             'required_quantity' => 50.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient2->id,
             'supplier_listing_id' => $listing2->id,
             'required_quantity' => 30.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $orders = waveProcurementService()->generatePurchaseOrders($wave);
@@ -227,7 +190,7 @@ describe('generatePurchaseOrders', function () {
             ->and($order2->supplier_order_items)->toHaveCount(1);
     });
 
-    it('marks requirements as ordered', function () {
+    it('marks items as ordered', function () {
         $wave = ProductionWave::factory()->create(['status' => WaveStatus::Approved]);
         $supplier = Supplier::factory()->create();
         $ingredient = Ingredient::factory()->create();
@@ -238,18 +201,17 @@ describe('generatePurchaseOrders', function () {
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        $requirement = ProductionIngredientRequirement::factory()->create([
+        $item = ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
             'required_quantity' => 50.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         waveProcurementService()->generatePurchaseOrders($wave);
 
-        expect($requirement->fresh()->status)->toBe(RequirementStatus::Ordered);
+        expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
     });
 
     it('throws when wave is not approved', function () {
@@ -258,19 +220,18 @@ describe('generatePurchaseOrders', function () {
         waveProcurementService()->generatePurchaseOrders($wave);
     })->throws(\InvalidArgumentException::class, 'Wave must be approved to generate purchase orders');
 
-    it('skips requirements without supplier listing', function () {
+    it('skips items without supplier listing', function () {
         $wave = ProductionWave::factory()->create(['status' => WaveStatus::Approved]);
         $ingredient = Ingredient::factory()->create();
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => null,
             'required_quantity' => 50.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $orders = waveProcurementService()->generatePurchaseOrders($wave);
@@ -278,7 +239,7 @@ describe('generatePurchaseOrders', function () {
         expect($orders)->toBeEmpty();
     });
 
-    it('orders only not ordered quantities when some requirements are already ordered', function () {
+    it('orders only not ordered quantities when some items are already ordered', function () {
         $wave = ProductionWave::factory()->create(['status' => WaveStatus::Approved]);
         $supplier = Supplier::factory()->create();
         $ingredient = Ingredient::factory()->create();
@@ -291,22 +252,20 @@ describe('generatePurchaseOrders', function () {
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
             'required_quantity' => 40.0,
-            'status' => RequirementStatus::Ordered,
+            'procurement_status' => ProcurementStatus::Ordered,
         ]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
             'required_quantity' => 10.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         $orders = waveProcurementService()->generatePurchaseOrders($wave);
@@ -326,13 +285,12 @@ describe('generatePurchaseOrders', function () {
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
             'required_quantity' => 15.0,
-            'status' => RequirementStatus::Ordered,
+            'procurement_status' => ProcurementStatus::Ordered,
         ]);
 
         $orders = waveProcurementService()->generatePurchaseOrders($wave);
@@ -342,33 +300,6 @@ describe('generatePurchaseOrders', function () {
 });
 
 describe('getPlanningList', function () {
-    it('generates missing wave requirements from productions before building plan', function () {
-        $wave = ProductionWave::factory()->create();
-        $ingredient = Ingredient::factory()->create([
-            'price' => 7.5,
-        ]);
-        $formula = Formula::factory()->create();
-
-        FormulaItem::factory()->forFormula($formula)
-            ->withIngredient($ingredient)
-            ->percentage(50)
-            ->create();
-
-        $production = Production::factory()->create([
-            'production_wave_id' => $wave->id,
-            'formula_id' => $formula->id,
-            'planned_quantity' => 20,
-        ]);
-
-        expect($production->ingredientRequirements()->count())->toBe(0);
-
-        $line = waveProcurementService()->getPlanningList($wave)->first();
-
-        expect($line)->not->toBeNull()
-            ->and($line->ingredient_id)->toBe($ingredient->id)
-            ->and((float) $line->to_order_quantity)->toBe(10.0);
-    });
-
     it('returns advisory planning quantities for a wave', function () {
         $wave = ProductionWave::factory()->create();
         $supplier = Supplier::factory()->create(['name' => 'Aroma Supply']);
@@ -385,22 +316,20 @@ describe('getPlanningList', function () {
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
             'required_quantity' => 30.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
             'required_quantity' => 10.0,
-            'status' => RequirementStatus::Ordered,
+            'procurement_status' => ProcurementStatus::Ordered,
         ]);
 
         $listing->supplies()->create([
@@ -430,48 +359,46 @@ describe('getPlanningList', function () {
 });
 
 describe('getProcurementSummary', function () {
-    it('returns summary of requirements by status', function () {
+    it('returns summary of items by status', function () {
         $wave = ProductionWave::factory()->create();
         $ingredient = Ingredient::factory()->create();
 
         $production = Production::factory()->create(['production_wave_id' => $wave->id]);
 
-        ProductionIngredientRequirement::factory()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 10.0,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        ProductionIngredientRequirement::factory()->ordered()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 15.0,
+            'procurement_status' => ProcurementStatus::Ordered,
         ]);
 
-        ProductionIngredientRequirement::factory()->received()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 20.0,
+            'procurement_status' => ProcurementStatus::Received,
         ]);
 
-        ProductionIngredientRequirement::factory()->allocated()->create([
+        ProductionItem::factory()->create([
             'production_id' => $production->id,
-            'production_wave_id' => $wave->id,
             'ingredient_id' => $ingredient->id,
             'required_quantity' => 25.0,
+            'procurement_status' => ProcurementStatus::Confirmed,
         ]);
 
         $summary = waveProcurementService()->getProcurementSummary($wave);
 
         expect($summary)
             ->toHaveKey('not_ordered', 1)
-            ->toHaveKey('ordered', 1)
+            ->toHaveKey('ordered', 2)
             ->toHaveKey('received', 1)
-            ->toHaveKey('allocated', 1)
             ->toHaveKey('total', 4);
     });
 });

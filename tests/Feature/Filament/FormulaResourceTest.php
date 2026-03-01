@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Phases;
 use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
@@ -53,6 +54,30 @@ describe('FormulaResource Create', function () {
             'code' => 'FML-001',
         ]);
     });
+
+    it('creates formula without confirmation when saponified total is 100 percent', function () {
+        $product = Product::factory()->create();
+
+        Livewire::test(\App\Filament\Resources\Production\FormulaResource\Pages\CreateFormula::class)
+            ->fillForm([
+                'name' => 'Soap Formula',
+                'code' => 'FML-SOAP',
+                'product_id' => $product->id,
+                'is_soap' => true,
+                'is_active' => true,
+                'formulaItems' => [
+                    ['phase' => Phases::Saponification->value, 'percentage_of_oils' => 60],
+                    ['phase' => Phases::Saponification->value, 'percentage_of_oils' => 40],
+                ],
+            ])
+            ->call('create')
+            ->assertHasNoFormErrors();
+
+        $this->assertDatabaseHas(Formula::class, [
+            'name' => 'Soap Formula',
+            'code' => 'FML-SOAP',
+        ]);
+    });
 });
 
 describe('FormulaResource Edit', function () {
@@ -69,82 +94,76 @@ describe('FormulaResource Edit', function () {
         expect($formula->fresh()->name)->toBe('Updated Formula');
     });
 
-    it('asks confirmation on save when saponified total is not 100 percent', function () {
-        $soapProduct = Product::factory()->create();
+    it('saves without confirmation when saponified total is 100 percent', function () {
         $formula = Formula::factory()->create([
-            'product_id' => $soapProduct->id,
             'is_soap' => true,
         ]);
 
-        FormulaItem::factory()->forFormula($formula)->percentage(40)->create();
-        FormulaItem::factory()->forFormula($formula)->percentage(30)->create();
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(60)->create();
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(40)->create();
 
         Livewire::test(\App\Filament\Resources\Production\FormulaResource\Pages\EditFormula::class, ['record' => $formula->id])
             ->fillForm([
-                'name' => 'Formula pending confirmation',
+                'name' => 'Formula 100 percent',
             ])
-            ->call('save')
-            ->assertNotified('Total saponifie different de 100%');
-
-        expect($formula->fresh()->name)->not->toBe('Formula pending confirmation');
-
-        Livewire::test(\App\Filament\Resources\Production\FormulaResource\Pages\EditFormula::class, ['record' => $formula->id])
-            ->fillForm([
-                'name' => 'Formula pending confirmation',
-            ])
-            ->call('save')
             ->call('save')
             ->assertHasNoFormErrors();
 
-        expect($formula->fresh()->name)->toBe('Formula pending confirmation');
+        expect($formula->fresh()->name)->toBe('Formula 100 percent');
     });
 
     it('does not ask confirmation when control is disabled, even with saponification lines', function () {
-        $balmProduct = Product::factory()->create();
         $formula = Formula::factory()->create([
-            'product_id' => $balmProduct->id,
             'is_soap' => false,
         ]);
 
-        FormulaItem::factory()->forFormula($formula)->percentage(40)->create();
-        FormulaItem::factory()->forFormula($formula)->percentage(30)->create();
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(40)->create();
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(30)->create();
 
         Livewire::test(\App\Filament\Resources\Production\FormulaResource\Pages\EditFormula::class, ['record' => $formula->id])
             ->fillForm([
                 'name' => 'Formula no confirmation',
             ])
             ->call('save')
-            ->assertNotNotified('Total saponifie different de 100%')
             ->assertHasNoFormErrors();
 
         expect($formula->fresh()->name)->toBe('Formula no confirmation');
     });
 
-    it('asks confirmation when manual soap control is enabled on formula', function () {
+    it('shows confirmation modal when saponified total is not 100 percent', function () {
         $formula = Formula::factory()->create([
             'is_soap' => true,
         ]);
 
-        FormulaItem::factory()->forFormula($formula)->packaging()->percentage(1)->create();
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(40)->create();
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(30)->create();
 
         Livewire::test(\App\Filament\Resources\Production\FormulaResource\Pages\EditFormula::class, ['record' => $formula->id])
             ->fillForm([
-                'name' => 'Formula manual control',
+                'name' => 'Formula pending confirmation',
             ])
-            ->call('save')
-            ->assertNotified('Total saponifie different de 100%');
+            ->call('save');
 
-        expect($formula->fresh()->name)->not->toBe('Formula manual control');
+        expect($formula->fresh()->name)->not->toBe('Formula pending confirmation');
+    });
+
+    it('saves after confirming when saponified total is not 100 percent', function () {
+        $formula = Formula::factory()->create([
+            'is_soap' => true,
+        ]);
+
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(40)->create();
+        FormulaItem::factory()->forFormula($formula)->saponified()->percentage(30)->create();
 
         Livewire::test(\App\Filament\Resources\Production\FormulaResource\Pages\EditFormula::class, ['record' => $formula->id])
             ->fillForm([
-                'name' => 'Formula manual control',
+                'name' => 'Formula confirmed',
             ])
             ->call('save')
             ->call('save')
             ->assertHasNoFormErrors();
 
-        expect($formula->fresh()->name)->toBe('Formula manual control');
+        expect($formula->fresh()->name)->toBe('Formula confirmed');
     });
 });
 

@@ -55,6 +55,7 @@ class AdminPanelProvider extends PanelProvider
                 'Produits Finis',
                 'Gestion Utilisateurs',
             ])
+            ->unsavedChangesAlerts()
             ->renderHook(
                 PanelsRenderHook::BODY_END,
                 fn (): string => Blade::render('@fluxScripts'),

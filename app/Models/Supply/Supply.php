@@ -3,7 +3,7 @@
 namespace App\Models\Supply;
 
 use App\Models\Production\Production;
-use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\ProductionItemAllocation;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -46,9 +46,9 @@ class Supply extends Model
         return $this->belongsTo(Production::class, 'source_production_id');
     }
 
-    public function ingredientRequirements(): HasMany
+    public function allocations(): HasMany
     {
-        return $this->hasMany(ProductionIngredientRequirement::class, 'allocated_from_supply_id');
+        return $this->hasMany(ProductionItemAllocation::class);
     }
 
     public function movements(): HasMany

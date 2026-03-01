@@ -2,26 +2,28 @@
 
 namespace App\Services\Production;
 
-use App\Enums\FormulaItemCalculationMode;
 use App\Enums\IngredientBaseUnit;
-use App\Enums\Phases;
 use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
-use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
+use App\Models\Production\TaskTemplate;
 
 /**
  * Computes a non-persistent procurement and cost estimate from product/unit inputs.
  */
 class FlashSimulationService
 {
+    public function __construct(
+        private readonly IngredientQuantityCalculator $calculator,
+    ) {}
+
     /**
      * @param  array<int, array{product_id: int|string|null, desired_units?: int|float|string|null, units?: int|float|string|null, batch_size_preset_id?: int|string|null}>  $lines
      * @return array{
-     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_preset_name: string|null}>,
-     *     ingredient_totals: \Illuminate\Support\Collection<int, array{ingredient_id: int, ingredient_name: string, required_kg: float, unit_price: float, estimated_cost: float}>,
+     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_preset_name: string|null, duration_per_batch_minutes: int, total_duration_minutes: int}>,
+     *     ingredient_totals: \Illuminate\Support\Collection<int, array{ingredient_id: int, ingredient_name: string, required_quantity: float, base_unit: string, unit_price: float, estimated_cost: float}>,
      *     warnings: \Illuminate\Support\Collection<int, string>,
-     *     totals: array{products_count: int, total_units: float|int, total_desired_units: float|int, total_produced_units: float|int, total_extra_units: float|int, total_batches: int, total_batch_kg: float|int, total_estimated_cost: float|int}
+     *     totals: array{products_count: int, total_units: float|int, total_desired_units: float|int, total_produced_units: float|int, total_extra_units: float|int, total_batches: int, total_batch_kg: float|int, total_estimated_cost: float|int, total_duration_minutes: int}
      * }
      */
     public function simulate(array $lines): array
@@ -40,27 +42,14 @@ class FlashSimulationService
             ->values();
 
         if ($normalizedLines->isEmpty()) {
-            return [
-                'product_lines' => collect(),
-                'ingredient_totals' => collect(),
-                'warnings' => collect(),
-                'totals' => [
-                    'products_count' => 0,
-                    'total_units' => 0,
-                    'total_desired_units' => 0,
-                    'total_produced_units' => 0,
-                    'total_extra_units' => 0,
-                    'total_batches' => 0,
-                    'total_batch_kg' => 0,
-                    'total_estimated_cost' => 0,
-                ],
-            ];
+            return $this->emptyResult();
         }
 
         $products = Product::query()
             ->with([
                 'productType:id,name,slug,default_batch_size,expected_units_output',
                 'productType.batchSizePresets',
+                'productType.taskTemplate.items',
                 'formulas' => fn ($query) => $query
                     ->where('is_active', true)
                     ->with(['formulaItems.ingredient'])
@@ -112,10 +101,12 @@ class FlashSimulationService
             $extraUnits = max(0, $producedUnits - (float) $line['desired_units']);
             $oilsWeightKg = round($batchesRequired * $batchSizeKg, 3);
 
+            $durationPerBatch = $this->resolveDurationPerBatch($product->productType?->taskTemplate);
+            $totalDuration = $durationPerBatch * $batchesRequired;
+
             $lineEstimatedCost = 0.0;
             $formula->loadMissing('formulaItems.ingredient');
 
-            /** @var FormulaItem $formulaItem */
             foreach ($formula->formulaItems as $formulaItem) {
                 $ingredient = $formulaItem->ingredient;
 
@@ -123,30 +114,20 @@ class FlashSimulationService
                     continue;
                 }
 
-                $calculationMode = $formulaItem->calculation_mode;
-                $phaseValue = $formulaItem->phase instanceof Phases
-                    ? $formulaItem->phase->value
-                    : (string) $formulaItem->phase;
+                $requiredQuantity = $this->calculator->resolveAndCalculate(
+                    coefficient: (float) ($formulaItem->percentage_of_oils ?? 0),
+                    batchSizeKg: $oilsWeightKg,
+                    expectedUnits: $producedUnits,
+                    ingredientBaseUnit: $ingredient->base_unit?->value ?? $ingredient->base_unit,
+                    storedMode: $formulaItem->calculation_mode?->value ?? $formulaItem->calculation_mode,
+                );
+
                 $baseUnit = $ingredient->base_unit instanceof IngredientBaseUnit
-                    ? $ingredient->base_unit
-                    : IngredientBaseUnit::tryFrom((string) ($ingredient->base_unit ?? ''));
+                    ? $ingredient->base_unit->value
+                    : (string) ($ingredient->base_unit ?? 'kg');
 
-                if ($phaseValue === Phases::Packaging->value || $baseUnit === IngredientBaseUnit::Unit) {
-                    $mode = FormulaItemCalculationMode::QuantityPerUnit;
-                } elseif ($calculationMode instanceof FormulaItemCalculationMode) {
-                    $mode = $calculationMode;
-                } else {
-                    $mode = FormulaItemCalculationMode::tryFrom((string) ($calculationMode ?? ''))
-                        ?? FormulaItemCalculationMode::PercentOfOils;
-                }
-
-                if ($mode === FormulaItemCalculationMode::QuantityPerUnit) {
-                    continue;
-                }
-
-                $requiredKg = round(((float) $formulaItem->percentage_of_oils / 100) * $oilsWeightKg, 3);
                 $unitPrice = (float) ($ingredient->price ?? 0);
-                $estimatedCost = round($requiredKg * $unitPrice, 2);
+                $estimatedCost = round($requiredQuantity * $unitPrice, 2);
 
                 $lineEstimatedCost += $estimatedCost;
 
@@ -154,14 +135,15 @@ class FlashSimulationService
                     $ingredientTotals->put($ingredient->id, [
                         'ingredient_id' => $ingredient->id,
                         'ingredient_name' => $ingredient->name,
-                        'required_kg' => 0.0,
+                        'required_quantity' => 0.0,
+                        'base_unit' => $baseUnit,
                         'unit_price' => $unitPrice,
                         'estimated_cost' => 0.0,
                     ]);
                 }
 
                 $current = $ingredientTotals->get($ingredient->id);
-                $current['required_kg'] = round((float) $current['required_kg'] + $requiredKg, 3);
+                $current['required_quantity'] = round((float) $current['required_quantity'] + $requiredQuantity, 3);
                 $current['estimated_cost'] = round((float) $current['estimated_cost'] + $estimatedCost, 2);
 
                 if ((float) $current['unit_price'] <= 0 && $unitPrice > 0) {
@@ -185,12 +167,14 @@ class FlashSimulationService
                 'oils_kg' => $oilsWeightKg,
                 'estimated_cost' => round($lineEstimatedCost, 2),
                 'batch_preset_name' => $batchConfiguration['batch_preset_name'],
+                'duration_per_batch_minutes' => $durationPerBatch,
+                'total_duration_minutes' => $totalDuration,
             ]);
         }
 
         $ingredientTotals = $ingredientTotals
             ->values()
-            ->sortByDesc('required_kg')
+            ->sortByDesc('required_quantity')
             ->values();
 
         return [
@@ -206,6 +190,7 @@ class FlashSimulationService
                 'total_batches' => (int) $productLines->sum('batches_required'),
                 'total_batch_kg' => round((float) $productLines->sum('oils_kg'), 3),
                 'total_estimated_cost' => round((float) $ingredientTotals->sum('estimated_cost'), 2),
+                'total_duration_minutes' => (int) $productLines->sum('total_duration_minutes'),
             ],
         ];
     }
@@ -270,6 +255,41 @@ class FlashSimulationService
             'units_per_batch' => (float) ($preset?->expected_units ?? $productType->expected_units_output ?? 0),
             'batch_size_kg' => (float) ($preset?->batch_size ?? $productType->default_batch_size ?? 0),
             'batch_preset_name' => $preset?->name,
+        ];
+    }
+
+    /**
+     * Resolves total duration per batch from task template.
+     */
+    private function resolveDurationPerBatch(?TaskTemplate $taskTemplate): int
+    {
+        if (! $taskTemplate) {
+            return 0;
+        }
+
+        return (int) $taskTemplate->items()->sum('duration_minutes');
+    }
+
+    /**
+     * @return array{product_lines: \Illuminate\Support\Collection, ingredient_totals: \Illuminate\Support\Collection, warnings: \Illuminate\Support\Collection, totals: array}
+     */
+    private function emptyResult(): array
+    {
+        return [
+            'product_lines' => collect(),
+            'ingredient_totals' => collect(),
+            'warnings' => collect(),
+            'totals' => [
+                'products_count' => 0,
+                'total_units' => 0,
+                'total_desired_units' => 0,
+                'total_produced_units' => 0,
+                'total_extra_units' => 0,
+                'total_batches' => 0,
+                'total_batch_kg' => 0,
+                'total_estimated_cost' => 0,
+                'total_duration_minutes' => 0,
+            ],
         ];
     }
 }

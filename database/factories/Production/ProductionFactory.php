@@ -103,6 +103,13 @@ class ProductionFactory extends Factory
         ]);
     }
 
+    public function cancelled(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => ProductionStatus::Cancelled,
+        ]);
+    }
+
     public function withProductType(ProductType $productType): static
     {
         return $this->state(fn (array $attributes) => [

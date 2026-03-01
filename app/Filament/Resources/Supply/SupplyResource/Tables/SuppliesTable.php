@@ -3,6 +3,14 @@
 namespace App\Filament\Resources\Supply\SupplyResource\Tables;
 
 use App\Models\Supply\Supply;
+use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreBulkAction;
+use Filament\Actions\ViewAction;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ViewColumn;
@@ -11,18 +19,22 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 /**
- * Detail table showing individual supply lots.
+ * Supplies table configuration.
  *
- * This table shows detailed information for each supply lot:
- * - Individual lot quantities
- * - Allocation details
- * - Pricing and dates
- * - Can be filtered by ingredient
+ * This class encapsulates all table-related configuration for the Supply resource,
+ * following Filament v5 best practices of extracting table definitions from resources.
  */
-class SupplyDetailTable
+class SuppliesTable
 {
+    /**
+     * Configure the supplies table.
+     *
+     * @param  Table  $table  The table instance to configure
+     * @return Table The configured table
+     */
     public static function configure(Table $table): Table
     {
         return $table
@@ -35,7 +47,9 @@ class SupplyDetailTable
                 TextColumn::make('supplierListing.ingredient.name')
                     ->label('Ingrédient')
                     ->searchable()
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: false)
+                    ->icon(fn (Supply $record): ?Heroicon => self::getIngredientAlertIcon($record)),
 
                 TextColumn::make('batch_number')
                     ->label('Lot')
@@ -54,31 +68,11 @@ class SupplyDetailTable
                     ->label('Réf source')
                     ->state(fn (Supply $record): string => $record->source_production_id !== null
                         ? ($record->sourceProduction?->getLotDisplayLabel() ?? '-')
-                        : ($record->order_ref ?? '-')),
-
-                TextColumn::make('quantity_in')
-                    ->label('Qté reçue')
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(),
-
-                TextColumn::make('quantity_out')
-                    ->label('Qté consommée')
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(),
-
-                TextColumn::make('physical_stock')
-                    ->label('Stock physique')
-                    ->state(fn (Supply $record): float => round($record->getTotalQuantity(), 3))
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0)) '.$direction)),
-
-                TextColumn::make('allocated_quantity')
-                    ->label('Qté allouée')
-                    ->numeric(decimalPlaces: 3)
-                    ->sortable(),
+                        : ($record->order_ref ?? '-'))
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 ViewColumn::make('stock_availability')
-                    ->label('Disponible')
+                    ->label('Stock disponible')
                     ->view('components.stock-meter')
                     ->getStateUsing(function (Supply $record): array {
                         $available = $record->getAvailableQuantity();
@@ -100,15 +94,11 @@ class SupplyDetailTable
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query
                         ->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) '.$direction)),
 
-                TextColumn::make('supplierListing.unit_of_measure')
-                    ->label('Unité')
-                    ->state(fn (Supply $record): string => $record->getUnitOfMeasure())
-                    ->sortable(),
-
                 TextColumn::make('unit_price')
                     ->label('Prix unitaire')
                     ->numeric(decimalPlaces: 2)
-                    ->sortable(),
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('delivery_date')
                     ->label('Entrée')
@@ -125,17 +115,35 @@ class SupplyDetailTable
 
                 TextColumn::make('supplierListing.supplier.name')
                     ->label('Fournisseur')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('supplierListing.name')
                     ->label('Réf fournisseur')
-                    ->searchable(),
+                    ->searchable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 IconColumn::make('is_in_stock')
                     ->label('En stock')
                     ->boolean(),
+
+                TextColumn::make('deleted_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('created_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('updated_at')
+                    ->dateTime()
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
+                TrashedFilter::make(),
                 SelectFilter::make('ingredient')
                     ->label('Ingrédient')
                     ->relationship('supplierListing.ingredient', 'name')
@@ -156,8 +164,50 @@ class SupplyDetailTable
                     }),
                 TernaryFilter::make('is_in_stock')
                     ->label('En stock'),
-                TrashedFilter::make(),
             ])
-            ->defaultSort('delivery_date', 'desc');
+            ->recordActions([
+                ActionGroup::make([
+                    ViewAction::make(),
+                    EditAction::make(),
+                ]),
+            ])
+            ->toolbarActions([
+                BulkActionGroup::make([
+                    DeleteBulkAction::make(),
+                    ForceDeleteBulkAction::make(),
+                    RestoreBulkAction::make(),
+                ]),
+            ])
+            ->defaultSort('created_at', 'desc');
+    }
+
+    /**
+     * Get alert icon if ingredient's consolidated stock is below minimum.
+     */
+    private static function getIngredientAlertIcon(Supply $record): ?Heroicon
+    {
+        $ingredient = $record->supplierListing?->ingredient;
+
+        if (! $ingredient || ! $ingredient->stock_min || $ingredient->stock_min <= 0) {
+            return null;
+        }
+
+        $consolidatedAvailable = $ingredient->getTotalAvailableStock();
+
+        if ($consolidatedAvailable < $ingredient->stock_min) {
+            return Heroicon::ExclamationTriangle;
+        }
+
+        return null;
+    }
+
+    /**
+     * Get the Eloquent query without soft deleting scope.
+     */
+    public static function getEloquentQuery(Builder $query): Builder
+    {
+        return $query->withoutGlobalScopes([
+            SoftDeletingScope::class,
+        ]);
     }
 }

@@ -5,14 +5,8 @@ namespace App\Filament\Resources\Supply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
+use App\Filament\Resources\Supply\SupplyResource\Tables\SuppliesTable;
 use App\Models\Supply\Supply;
-use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
-use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
-use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -20,17 +14,19 @@ use Filament\Forms\Components\ToggleButtons;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
-use Filament\Tables\Columns\IconColumn;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TernaryFilter;
-use Filament\Tables\Filters\TrashedFilter;
-use Filament\Tables\Grouping\Group as TableGroup;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
 
+/**
+ * Supply Resource.
+ *
+ * Manages inventory/supply records with:
+ * - Visual stock meters with consolidated ingredient-level alerts
+ * - Tab-based filtering (all, in stock, alerts)
+ * - Delegated table configuration via SuppliesTable
+ */
 class SupplyResource extends Resource
 {
     protected static ?string $model = Supply::class;
@@ -46,6 +42,12 @@ class SupplyResource extends Resource
         return false;
     }
 
+    /**
+     * Configure the supply form schema.
+     *
+     * @param  Schema  $schema  The schema instance to configure
+     * @return Schema The configured schema
+     */
     public static function form(Schema $schema): Schema
     {
         return $schema
@@ -120,160 +122,17 @@ class SupplyResource extends Resource
             ]);
     }
 
+    /**
+     * Configure the supplies table.
+     *
+     * Delegates to SuppliesTable for all table configuration.
+     *
+     * @param  Table  $table  The table instance to configure
+     * @return Table The configured table
+     */
     public static function table(Table $table): Table
     {
-        return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
-                'supplierListing.ingredient',
-                'supplierListing.supplier',
-                'sourceProduction.product',
-            ]))
-            ->columns([
-                TextColumn::make('supplierListing.ingredient.name')
-                    ->label('Ingrédient')
-                    ->searchable()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: false)
-                    ->icon(fn (Supply $record): ?string => self::getIngredientAlertIcon($record)),
-
-                TextColumn::make('supplier_listing_count')
-                    ->label('Lots')
-                    ->counts('supplierListing')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: false),
-
-                TextColumn::make('batch_number')
-                    ->label('Lot')
-                    ->searchable()
-                    ->sortable()
-                    ->placeholder('-'),
-
-                TextColumn::make('source')
-                    ->label('Source')
-                    ->state(fn (Supply $record): string => $record->source_production_id !== null ? 'Interne' : 'Achat')
-                    ->badge()
-                    ->color(fn (Supply $record): string => $record->source_production_id !== null ? 'info' : 'gray')
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('CASE WHEN source_production_id IS NULL THEN 0 ELSE 1 END '.$direction)),
-
-                TextColumn::make('source_reference')
-                    ->label('Réf source')
-                    ->state(fn (Supply $record): string => $record->source_production_id !== null
-                        ? ($record->sourceProduction?->getLotDisplayLabel() ?? '-')
-                        : ($record->order_ref ?? '-'))
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                \Filament\Tables\Columns\ViewColumn::make('stock_availability')
-                    ->label('Stock disponible')
-                    ->view('components.stock-meter')
-                    ->getStateUsing(function (Supply $record): array {
-                        $available = $record->getAvailableQuantity();
-                        $total = $record->getTotalQuantity();
-                        $allocated = $record->allocated_quantity ?? 0;
-                        $ingredient = $record->supplierListing?->ingredient;
-                        $minStock = $ingredient?->stock_min ?? null;
-                        $isBelowMin = $minStock !== null && $minStock > 0 && $available < $minStock;
-
-                        return [
-                            'available' => $available,
-                            'allocated' => $allocated,
-                            'total' => $total,
-                            'unit' => $record->getUnitOfMeasure(),
-                            'min_stock' => $minStock,
-                            'is_below_min' => $isBelowMin,
-                        ];
-                    })
-                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
-                        ->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) '.$direction)),
-
-                TextColumn::make('unit_price')
-                    ->label('Prix unitaire')
-                    ->numeric(decimalPlaces: 2)
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('delivery_date')
-                    ->label('Entrée')
-                    ->date('d/m/Y')
-                    ->sortable(),
-
-                TextColumn::make('expiry_date')
-                    ->label('DLUO')
-                    ->date()
-                    ->sortable()
-                    ->color(fn (Supply $record): ?string => $record->expiry_date === null
-                        ? null
-                        : ($record->expiry_date->isPast() ? 'danger' : ($record->expiry_date->lte(now()->addDays(45)) ? 'warning' : 'success'))),
-
-                TextColumn::make('supplierListing.supplier.name')
-                    ->label('Fournisseur')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('supplierListing.name')
-                    ->label('Réf fournisseur')
-                    ->searchable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                IconColumn::make('is_in_stock')
-                    ->label('En stock')
-                    ->boolean(),
-
-                TextColumn::make('deleted_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->groups([
-                TableGroup::make('supplierListing.ingredient.name')
-                    ->label('Par ingrédient')
-                    ->collapsible(),
-            ])
-            ->filters([
-                SelectFilter::make('ingredient')
-                    ->label('Ingrédient')
-                    ->relationship('supplierListing.ingredient', 'name')
-                    ->searchable()
-                    ->preload(),
-                SelectFilter::make('source')
-                    ->label('Source')
-                    ->options([
-                        'purchase' => 'Achat',
-                        'internal' => 'Interne',
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return match ($data['value'] ?? null) {
-                            'purchase' => $query->whereNull('source_production_id'),
-                            'internal' => $query->whereNotNull('source_production_id'),
-                            default => $query,
-                        };
-                    }),
-                TernaryFilter::make('is_in_stock')
-                    ->label('En stock'),
-                TrashedFilter::make(),
-            ])
-            ->recordActions([
-                ActionGroup::make([
-                    ViewAction::make(),
-                    EditAction::make(),
-                ]),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-                ]),
-            ]);
+        return SuppliesTable::configure($table);
     }
 
     public static function getRelations(): array
@@ -298,26 +157,5 @@ class SupplyResource extends Resource
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
-    }
-
-    /**
-     * Get alert icon if ingredient's consolidated stock is below minimum.
-     */
-    private static function getIngredientAlertIcon(Supply $record): ?string
-    {
-        $ingredient = $record->supplierListing?->ingredient;
-
-        if (! $ingredient || ! $ingredient->stock_min || $ingredient->stock_min <= 0) {
-            return null;
-        }
-
-        // Check if consolidated stock is below minimum
-        $consolidatedAvailable = $ingredient->getTotalAvailableStock();
-
-        if ($consolidatedAvailable < $ingredient->stock_min) {
-            return 'heroicon-s-exclamation-triangle';
-        }
-
-        return null;
     }
 }

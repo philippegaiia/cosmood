@@ -2,8 +2,8 @@
 
 namespace App\Models\Production;
 
+use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
-use App\Enums\RequirementStatus;
 use App\Enums\SizingMode;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
@@ -165,11 +165,6 @@ class Production extends Model
         return $this->hasMany(ProductionQcCheck::class);
     }
 
-    public function ingredientRequirements(): HasMany
-    {
-        return $this->hasMany(ProductionIngredientRequirement::class);
-    }
-
     public function isOrphan(): bool
     {
         return $this->production_wave_id === null;
@@ -201,28 +196,34 @@ class Production extends Model
 
     public function getSupplyCoverageState(): string
     {
-        $requirements = $this->ingredientRequirements;
+        $this->loadMissing('productionItems');
 
-        if ($requirements->isEmpty()) {
+        $items = $this->productionItems;
+
+        if ($items->isEmpty()) {
             return 'missing';
         }
 
-        foreach ($requirements as $requirement) {
-            if ($requirement->isFulfilledByMasterbatch()) {
+        $replacedPhase = $this->masterbatch_lot_id
+            ? self::resolveMasterbatchReplacedPhase($this)
+            : null;
+
+        foreach ($items as $item) {
+            if ($replacedPhase !== null && $item->phase === $replacedPhase) {
                 continue;
             }
 
-            if ($requirement->status === RequirementStatus::NotOrdered) {
+            if ($item->procurement_status === ProcurementStatus::NotOrdered) {
                 return 'missing';
             }
         }
 
-        foreach ($requirements as $requirement) {
-            if ($requirement->isFulfilledByMasterbatch()) {
+        foreach ($items as $item) {
+            if ($replacedPhase !== null && $item->phase === $replacedPhase) {
                 continue;
             }
 
-            if (in_array($requirement->status, [RequirementStatus::Ordered, RequirementStatus::Confirmed], true)) {
+            if (in_array($item->procurement_status, [ProcurementStatus::Ordered, ProcurementStatus::Confirmed], true)) {
                 return 'ordered';
             }
         }

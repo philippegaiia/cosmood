@@ -44,7 +44,7 @@ class ProductionCalendarWidget extends FullCalendarWidget
 
         $productionEvents = Production::query()
             ->with('product:id,name')
-            ->whereBetween('production_date', [$start->toDateString(), $end->toDateString()])
+            ->whereBetween('production_date', [$start, $end])
             ->get()
             ->map(function (Production $production): array {
                 $title = trim('B '.$production->getLotIdentifier().' '.($production->product?->name ? '- '.$production->product->name : ''));
@@ -69,7 +69,7 @@ class ProductionCalendarWidget extends FullCalendarWidget
 
         $taskEvents = ProductionTask::query()
             ->with('production:id,batch_number,permanent_batch_number')
-            ->whereBetween('scheduled_date', [$start->toDateString(), $end->toDateString()])
+            ->whereBetween('scheduled_date', [$start, $end])
             ->get()
             ->map(function (ProductionTask $task): array {
                 $title = trim('T '.($task->name ?? 'Sans nom').' - '.($task->production?->getLotIdentifier() ?? 'n/a'));

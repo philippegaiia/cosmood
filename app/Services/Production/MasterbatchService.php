@@ -7,41 +7,20 @@ use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use Illuminate\Support\Collection;
 
-/**
- * Encapsulates masterbatch selection, phase collapsing, and traceability helpers.
- */
 class MasterbatchService
 {
-    /**
-     * Assigns a finished compatible masterbatch to a production.
-     */
     public function selectMasterbatch(Production $production, Production $masterbatch): void
     {
         $this->validateMasterbatch($production, $masterbatch);
 
         $production->update(['masterbatch_lot_id' => $masterbatch->id]);
-
-        $this->collapsePhaseRequirements($production, $masterbatch);
     }
 
-    /**
-     * Removes masterbatch assignment and re-expands collapsed requirements.
-     */
     public function removeMasterbatch(Production $production): void
     {
         $production->update(['masterbatch_lot_id' => null]);
-
-        $production->ingredientRequirements()
-            ->whereNotNull('fulfilled_by_masterbatch_id')
-            ->update([
-                'fulfilled_by_masterbatch_id' => null,
-                'is_collapsed_in_ui' => false,
-            ]);
     }
 
-    /**
-     * Validates masterbatch eligibility before assignment.
-     */
     protected function validateMasterbatch(Production $production, Production $masterbatch): void
     {
         if (! $masterbatch->is_masterbatch) {
@@ -57,28 +36,6 @@ class MasterbatchService
         }
     }
 
-    /**
-     * Marks requirements in the replaced phase as fulfilled by masterbatch.
-     */
-    protected function collapsePhaseRequirements(Production $production, Production $masterbatch): void
-    {
-        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
-
-        if (! $replacedPhase) {
-            return;
-        }
-
-        $production->ingredientRequirements()
-            ->where('phase', $replacedPhase)
-            ->update([
-                'fulfilled_by_masterbatch_id' => $masterbatch->id,
-                'is_collapsed_in_ui' => true,
-            ]);
-    }
-
-    /**
-     * Checks whether the target production contains the phase replaced by the masterbatch.
-     */
     public function isMasterbatchCompatible(Production $production, Production $masterbatch): bool
     {
         $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
@@ -87,16 +44,13 @@ class MasterbatchService
             return false;
         }
 
-        $hasPhase = $production->ingredientRequirements()
+        $hasPhase = $production->productionItems()
             ->where('phase', $replacedPhase)
             ->exists();
 
         return $hasPhase;
     }
 
-    /**
-     * Returns the expanded ingredient composition of the linked masterbatch formula.
-     */
     public function getExpandedIngredients(Production $production): Collection
     {
         $masterbatch = $production->masterbatchLot;
@@ -129,32 +83,45 @@ class MasterbatchService
         return $expandedIngredients;
     }
 
-    /**
-     * Returns requirements currently collapsed by masterbatch replacement.
-     */
     public function getCollapsedRequirements(Production $production): Collection
     {
-        return $production->ingredientRequirements()
-            ->where('is_collapsed_in_ui', true)
-            ->whereNotNull('fulfilled_by_masterbatch_id')
-            ->get();
+        $masterbatch = $production->masterbatchLot;
+
+        if (! $masterbatch) {
+            return collect();
+        }
+
+        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
+
+        if (! $replacedPhase) {
+            return collect();
+        }
+
+        return $production->productionItems()
+            ->where('phase', $replacedPhase)
+            ->with('ingredient')
+            ->get()
+            ->map(fn ($item): object => (object) [
+                'ingredient_id' => $item->ingredient_id,
+                'ingredient' => $item->ingredient,
+                'phase' => $item->phase,
+                'required_quantity' => $item->required_quantity > 0
+                    ? $item->required_quantity
+                    : $item->getCalculatedQuantityKg($production),
+            ]);
     }
 
-    /**
-     * Returns requirements that remain visible in standard planning views.
-     */
     public function getVisibleRequirements(Production $production): Collection
     {
-        return $production->ingredientRequirements()
-            ->where('is_collapsed_in_ui', false)
+        $masterbatch = $production->masterbatchLot;
+        $replacedPhase = $masterbatch ? $this->normalizePhase($masterbatch->replaces_phase) : null;
+
+        return $production->productionItems()
+            ->when($replacedPhase, fn ($q) => $q->where('phase', '!=', $replacedPhase))
+            ->with('ingredient')
             ->get();
     }
 
-    /**
-     * Builds the synthetic "masterbatch line" used in production sheet outputs.
-     *
-     * @return array{masterbatch_id: int, masterbatch_batch_number: string|null, phase: string, quantity: float, ingredients: Collection<int, array<string, mixed>>}|null
-     */
     public function getMasterbatchLine(Production $production): ?array
     {
         $masterbatch = $production->masterbatchLot;
@@ -169,15 +136,12 @@ class MasterbatchService
             return null;
         }
 
-        $collapsedReqs = $this->getCollapsedRequirements($production)
-            ->where('phase', $replacedPhase);
-
-        $totalQuantity = $collapsedReqs->isNotEmpty()
-            ? (float) $collapsedReqs->sum('required_quantity')
-            : (float) $production->productionItems()
-                ->where('phase', $replacedPhase)
-                ->get()
-                ->sum(fn ($item): float => $item->getCalculatedQuantityKg($production));
+        $totalQuantity = $production->productionItems()
+            ->where('phase', $replacedPhase)
+            ->get()
+            ->sum(fn ($item): float => $item->required_quantity > 0
+                ? (float) $item->required_quantity
+                : $item->getCalculatedQuantityKg($production));
 
         if ($totalQuantity <= 0) {
             return null;
@@ -192,9 +156,6 @@ class MasterbatchService
         ];
     }
 
-    /**
-     * Returns traceability lines based on the consumed masterbatch source items.
-     */
     public function getMasterbatchTraceabilityLines(Production $production): Collection
     {
         $masterbatch = $production->masterbatchLot;
@@ -209,26 +170,27 @@ class MasterbatchService
             return collect();
         }
 
-        $masterbatch->loadMissing('productionItems.ingredient', 'productionItems.supply');
+        $masterbatch->loadMissing('productionItems.ingredient', 'productionItems.allocations.supply');
 
         return $masterbatch->productionItems
             ->where('phase', $replacedPhase)
             ->sortBy('sort')
             ->values()
             ->map(function ($item) use ($masterbatch): array {
+                $allocation = $item->allocations->first();
+
                 return [
                     'ingredient_name' => $item->ingredient?->name,
                     'phase' => $item->phase,
-                    'quantity' => $item->getCalculatedQuantityKg($masterbatch),
-                    'supply_batch_number' => $item->supply_batch_number,
-                    'supply_ref' => $item->supply?->order_ref,
+                    'quantity' => $item->required_quantity > 0
+                        ? (float) $item->required_quantity
+                        : $item->getCalculatedQuantityKg($masterbatch),
+                    'supply_batch_number' => $allocation?->supply?->batch_number,
+                    'supply_ref' => $allocation?->supply?->order_ref,
                 ];
             });
     }
 
-    /**
-     * Copies source traceability from masterbatch items into target production items.
-     */
     public function applyTraceabilityToProductionItems(Production $production): int
     {
         $masterbatch = $production->masterbatchLot;
@@ -243,8 +205,8 @@ class MasterbatchService
             return 0;
         }
 
-        $masterbatch->loadMissing('productionItems');
-        $production->loadMissing('productionItems');
+        $masterbatch->loadMissing('productionItems.allocations');
+        $production->loadMissing('productionItems.allocations');
 
         $sourceByIngredient = $masterbatch->productionItems
             ->where('phase', $replacedPhase)
@@ -259,48 +221,30 @@ class MasterbatchService
                 continue;
             }
 
-            $changes = [];
+            $sourceAllocation = $source->allocations->first();
 
-            if ($source->supplier_listing_id !== null) {
-                $changes['supplier_listing_id'] = $source->supplier_listing_id;
-            }
-
-            if ($source->supply_id !== null) {
-                $changes['supply_id'] = $source->supply_id;
-            }
-
-            if (filled($source->supply_batch_number)) {
-                $changes['supply_batch_number'] = $source->supply_batch_number;
-            }
-
-            if ($changes === []) {
+            if (! $sourceAllocation) {
                 continue;
             }
 
-            $changes['is_supplied'] = true;
+            $item->allocations()->create([
+                'supply_id' => $sourceAllocation->supply_id,
+                'quantity' => $sourceAllocation->quantity,
+                'status' => 'reserved',
+                'reserved_at' => now(),
+            ]);
 
-            $hasChanges = ! $item->is_supplied;
+            $item->update([
+                'supplier_listing_id' => $source->supplier_listing_id,
+            ]);
 
-            foreach ($changes as $column => $value) {
-                if ((string) ($item->{$column} ?? '') !== (string) ($value ?? '')) {
-                    $hasChanges = true;
-
-                    break;
-                }
-            }
-
-            if ($hasChanges) {
-                $item->update($changes);
-                $updated++;
-            }
+            $item->updateAllocationStatus();
+            $updated++;
         }
 
         return $updated;
     }
 
-    /**
-     * Compares formula percentages with selected masterbatch percentages by ingredient.
-     */
     public function getPercentageMismatches(Production $production): Collection
     {
         $masterbatch = $production->masterbatchLot;
@@ -349,9 +293,6 @@ class MasterbatchService
             ->values();
     }
 
-    /**
-     * Normalizes legacy phase aliases into internal phase enum values.
-     */
     private function normalizePhase(Phases|string|null $phase): ?string
     {
         if ($phase === null) {

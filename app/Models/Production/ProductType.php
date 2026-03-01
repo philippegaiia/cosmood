@@ -52,6 +52,11 @@ class ProductType extends Model
         return $this->belongsTo(QcTemplate::class);
     }
 
+    public function taskTemplate(): BelongsTo
+    {
+        return $this->belongsTo(TaskTemplate::class);
+    }
+
     public function defaultPreset(): ?BatchSizePreset
     {
         return $this->batchSizePresets()->where('is_default', true)->first();

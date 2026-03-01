@@ -15,20 +15,13 @@ class ProductionDatabaseSeeder extends Seeder
         User::query()->updateOrCreate(
             ['email' => 'admin@admin.com'],
             [
-                'name' => 'Test Admin',
-                'password' => bcrypt('password'),
-            ]
-        );
-
-        User::query()->updateOrCreate(
-            ['email' => 'user@user.com'],
-            [
-                'name' => 'Test Utilisateur',
+                'name' => 'Admin',
                 'password' => bcrypt('password'),
             ]
         );
 
         $this->call(SupplierSeeder::class);
+        $this->call(SupplierContactSeeder::class);
 
         $this->call(IngredientCategorySeeder::class);
         $this->call(IngredientSeeder::class);
@@ -38,6 +31,8 @@ class ProductionDatabaseSeeder extends Seeder
         $this->call(ProductTypeSeeder::class);
         $this->call(QcTemplateSeeder::class);
         $this->call(BatchSizePresetSeeder::class);
+
+        $this->call(ProductionTaskTypeSeeder::class);
         $this->call(TaskTemplateSeeder::class);
 
         $this->call(FormulasTableSeeder::class);

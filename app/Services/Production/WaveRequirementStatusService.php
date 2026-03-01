@@ -3,22 +3,18 @@
 namespace App\Services\Production;
 
 use App\Enums\OrderStatus;
+use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
-use App\Enums\RequirementStatus;
-use App\Models\Production\ProductionIngredientRequirement;
+use App\Models\Production\Production;
+use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Supply\SupplierOrderItem;
 use App\Models\Supply\Supply;
 use Illuminate\Support\Collection;
 
-/**
- * Synchronizes wave requirement statuses from linked supplier orders and receipts.
- */
 class WaveRequirementStatusService
 {
-    /**
-     * @var array<int, OrderStatus>
-     */
     private const ORDER_PLACED_STATUSES = [
         OrderStatus::Passed,
         OrderStatus::Confirmed,
@@ -26,52 +22,43 @@ class WaveRequirementStatusService
         OrderStatus::Checked,
     ];
 
-    /**
-     * Reconciles requirement statuses by ingredient across ordered and received quantities.
-     */
     public function syncForWave(ProductionWave $wave): void
     {
-        $requirements = $this->getWaveRequirements($wave);
+        $items = $this->getWaveProductionItems($wave);
 
-        if ($requirements->isEmpty()) {
+        if ($items->isEmpty()) {
             return;
         }
 
         $orderedByIngredient = $this->getOrderedQuantitiesByIngredient($wave);
         $receivedByIngredient = $this->getReceivedQuantitiesByIngredient($wave);
 
-        $requirements
+        $items
             ->groupBy('ingredient_id')
-            ->each(function (Collection $ingredientRequirements, int|string $ingredientId) use ($orderedByIngredient, $receivedByIngredient): void {
+            ->each(function (Collection $ingredientItems, int|string $ingredientId) use ($orderedByIngredient, $receivedByIngredient): void {
                 $remainingOrdered = (float) ($orderedByIngredient->get((int) $ingredientId) ?? 0);
                 $remainingReceived = (float) ($receivedByIngredient->get((int) $ingredientId) ?? 0);
 
-                foreach ($ingredientRequirements as $requirement) {
-                    $requiredQuantity = (float) $requirement->required_quantity;
+                foreach ($ingredientItems as $item) {
+                    $requiredQuantity = (float) ($item->required_quantity > 0 ? $item->required_quantity : $item->getCalculatedQuantityKg());
 
-                    if ($requirement->isFulfilledByMasterbatch()) {
-                        continue;
-                    }
-
-                    if ($requirement->status === RequirementStatus::Allocated) {
+                    if ($item->isFullyAllocated()) {
                         $remainingOrdered = max(0, $remainingOrdered - $requiredQuantity);
                         $remainingReceived = max(0, $remainingReceived - $requiredQuantity);
 
                         continue;
                     }
 
-                    $nextStatus = RequirementStatus::NotOrdered;
+                    $nextStatus = ProcurementStatus::NotOrdered;
 
                     if ($remainingReceived >= $requiredQuantity) {
-                        $nextStatus = RequirementStatus::Received;
+                        $nextStatus = ProcurementStatus::Received;
                     } elseif ($remainingOrdered >= $requiredQuantity) {
-                        $nextStatus = RequirementStatus::Ordered;
+                        $nextStatus = ProcurementStatus::Ordered;
                     }
 
-                    if ($requirement->status !== $nextStatus) {
-                        $requirement->update([
-                            'status' => $nextStatus,
-                        ]);
+                    if ($item->procurement_status !== $nextStatus) {
+                        $item->update(['procurement_status' => $nextStatus]);
                     }
 
                     $remainingOrdered = max(0, $remainingOrdered - $requiredQuantity);
@@ -80,28 +67,47 @@ class WaveRequirementStatusService
             });
     }
 
-    /**
-     * Loads sortable wave requirements excluding masterbatch-fulfilled rows.
-     *
-     * @return Collection<int, ProductionIngredientRequirement>
-     */
-    private function getWaveRequirements(ProductionWave $wave): Collection
+    private function getWaveProductionItems(ProductionWave $wave): Collection
     {
-        return ProductionIngredientRequirement::query()
-            ->where('production_wave_id', $wave->id)
-            ->whereHas('production', fn ($query) => $query->where('status', '!=', ProductionStatus::Cancelled->value))
-            ->whereNull('fulfilled_by_masterbatch_id')
-            ->with('production:id,production_date')
-            ->get()
-            ->sortBy(fn (ProductionIngredientRequirement $requirement): string => ($requirement->production?->production_date?->format('Y-m-d') ?? '9999-12-31').'-'.str_pad((string) $requirement->id, 10, '0', STR_PAD_LEFT))
-            ->values();
+        $wave->loadMissing([
+            'productions.productionItems.ingredient',
+            'productions.productionItems.allocations',
+            'productions.masterbatchLot',
+        ]);
+
+        $activeProductions = $wave->productions
+            ->filter(fn (Production $production): bool => $production->status !== ProductionStatus::Cancelled);
+
+        $items = collect();
+
+        foreach ($activeProductions as $production) {
+            $replacedPhase = $production->masterbatch_lot_id
+                ? $this->normalizePhase($production->masterbatchLot?->replaces_phase)
+                : null;
+
+            $productionItems = $production->productionItems
+                ->when($replacedPhase !== null, fn ($items) => $items->where('phase', '!=', $replacedPhase));
+
+            $items = $items->merge($productionItems);
+        }
+
+        return $items->sortBy(fn (ProductionItem $item): string => ($item->production?->production_date?->format('Y-m-d') ?? '9999-12-31').'-'.str_pad((string) $item->id, 10, '0', STR_PAD_LEFT))->values();
     }
 
-    /**
-     * Returns ordered quantities keyed by ingredient id for the wave.
-     *
-     * @return Collection<int, float>
-     */
+    private function normalizePhase(?string $phase): ?string
+    {
+        if ($phase === null) {
+            return null;
+        }
+
+        return match ($phase) {
+            'saponified_oils' => Phases::Saponification->value,
+            'lye' => Phases::Lye->value,
+            'additives' => Phases::Additives->value,
+            default => $phase,
+        };
+    }
+
     private function getOrderedQuantitiesByIngredient(ProductionWave $wave): Collection
     {
         return SupplierOrderItem::query()
@@ -118,11 +124,6 @@ class WaveRequirementStatusService
             ->mapWithKeys(fn (float $quantity, $ingredientId): array => [(int) $ingredientId => $quantity]);
     }
 
-    /**
-     * Returns received quantities keyed by ingredient id for the wave.
-     *
-     * @return Collection<int, float>
-     */
     private function getReceivedQuantitiesByIngredient(ProductionWave $wave): Collection
     {
         return Supply::query()

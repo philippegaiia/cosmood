@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Filament\Resources\Supply\SupplyResource\Tables;
+namespace App\Filament\Resources\Supply\SupplyMovementResource\Tables;
 
 use App\Models\Supply\SuppliesMovement;
 use Filament\Tables\Columns\TextColumn;
@@ -11,16 +11,22 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 /**
- * Movements table showing supply history.
+ * Supply Movements table configuration.
  *
- * This table shows all stock movements:
- * - Entries (receptions)
- * - Allocations (reservations)
- * - Consumptions (production usage)
+ * Shows supply movement history with:
  * - Default filter: last 3 months
+ * - Type-based color coding
+ * - Links to production records
+ * - Date range filtering
  */
-class SupplyMovementsTable
+class SuppliesMovementsTable
 {
+    /**
+     * Configure the supply movements table.
+     *
+     * @param  Table  $table  The table instance to configure
+     * @return Table The configured table
+     */
     public static function configure(Table $table): Table
     {
         return $table
@@ -63,15 +69,14 @@ class SupplyMovementsTable
                     ->color(fn (SuppliesMovement $record): string => $record->quantity < 0 ? 'danger' : 'success')
                     ->sortable(),
 
-                TextColumn::make('unit')
-                    ->label('Unité')
-                    ->state(fn (SuppliesMovement $record): string => $record->supply?->getUnitOfMeasure() ?? 'kg'),
+                TextColumn::make('supply.supplierListing.ingredient.base_unit')
+                    ->label('Unité'),
 
                 TextColumn::make('production.batch_number')
                     ->label('Production')
                     ->placeholder('-')
                     ->url(fn (SuppliesMovement $record): ?string => $record->production_id
-                        ? route('filament.admin.resources.productions.view', $record->production_id)
+                        ? route('filament.admin.resources.productions.view', ['record' => $record->production_id])
                         : null)
                     ->sortable(),
 
@@ -80,8 +85,8 @@ class SupplyMovementsTable
                     ->placeholder('-')
                     ->sortable(),
 
-                TextColumn::make('notes')
-                    ->label('Notes')
+                TextColumn::make('reason')
+                    ->label('Raison')
                     ->placeholder('-')
                     ->limit(50)
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -104,7 +109,7 @@ class SupplyMovementsTable
                             ->when($data['to'], fn ($q) => $q->where('moved_at', '<=', $data['to']));
                     }),
 
-                SelectFilter::make('type')
+                SelectFilter::make('movement_type')
                     ->label('Type')
                     ->options([
                         'entry' => 'Entrée',

@@ -2,12 +2,11 @@
 
 use App\Enums\Phases;
 use App\Enums\ProductionStatus;
-use App\Enums\RequirementStatus;
 use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Production;
-use App\Models\Production\ProductionIngredientRequirement;
 use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionItemAllocation;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\Supply;
@@ -43,77 +42,16 @@ describe('MasterbatchService', function () {
                 'planned_quantity' => 26.0,
             ]);
 
-            ProductionIngredientRequirement::create([
+            ProductionItem::factory()->create([
                 'production_id' => $production->id,
                 'ingredient_id' => $ingredient->id,
                 'phase' => Phases::Saponification->value,
                 'required_quantity' => 26.0,
-                'status' => RequirementStatus::NotOrdered,
             ]);
 
             $this->service->selectMasterbatch($production, $masterbatch);
 
             expect($production->fresh()->masterbatch_lot_id)->toBe($masterbatch->id);
-        });
-
-        it('collapses requirements for the replaced phase', function () {
-            $mbFormula = Formula::factory()->create([
-                'replaces_phase' => Phases::Saponification->value,
-                'code' => 'MB-'.Str::random(8),
-            ]);
-            $masterbatch = Production::factory()->masterbatch()->finished()->create([
-                'formula_id' => $mbFormula->id,
-                'replaces_phase' => Phases::Saponification->value,
-            ]);
-
-            $soapFormula = Formula::factory()->create(['code' => 'SOAP-'.Str::random(8)]);
-            $oil1 = Ingredient::factory()->create();
-            $oil2 = Ingredient::factory()->create();
-            $lye = Ingredient::factory()->create();
-
-            FormulaItem::factory()->forFormula($soapFormula)->withIngredient($oil1)->saponified()->percentage(60)->create();
-            FormulaItem::factory()->forFormula($soapFormula)->withIngredient($oil2)->saponified()->percentage(40)->create();
-            FormulaItem::factory()->forFormula($soapFormula)->withIngredient($lye)->lye()->percentage(35)->create();
-
-            $production = Production::factory()->create([
-                'formula_id' => $soapFormula->id,
-                'planned_quantity' => 26.0,
-            ]);
-
-            ProductionIngredientRequirement::create([
-                'production_id' => $production->id,
-                'ingredient_id' => $oil1->id,
-                'phase' => Phases::Saponification->value,
-                'required_quantity' => 15.6,
-                'status' => RequirementStatus::NotOrdered,
-            ]);
-
-            ProductionIngredientRequirement::create([
-                'production_id' => $production->id,
-                'ingredient_id' => $oil2->id,
-                'phase' => Phases::Saponification->value,
-                'required_quantity' => 10.4,
-                'status' => RequirementStatus::NotOrdered,
-            ]);
-
-            ProductionIngredientRequirement::create([
-                'production_id' => $production->id,
-                'ingredient_id' => $lye->id,
-                'phase' => Phases::Lye->value,
-                'required_quantity' => 9.1,
-                'status' => RequirementStatus::NotOrdered,
-            ]);
-
-            $this->service->selectMasterbatch($production, $masterbatch);
-
-            $requirements = $production->fresh()->ingredientRequirements;
-
-            $saponifiedReqs = $requirements->where('phase', Phases::Saponification->value);
-            $lyeReqs = $requirements->where('phase', Phases::Lye->value);
-
-            expect($saponifiedReqs->every(fn ($r) => $r->fulfilled_by_masterbatch_id === $masterbatch->id))->toBeTrue()
-                ->and($saponifiedReqs->every(fn ($r) => $r->is_collapsed_in_ui === true))->toBeTrue()
-                ->and($lyeReqs->first()->fulfilled_by_masterbatch_id)->toBeNull();
         });
 
         it('validates masterbatch compatibility', function () {
@@ -132,12 +70,11 @@ describe('MasterbatchService', function () {
 
             $production = Production::factory()->create(['formula_id' => $soapFormula->id]);
 
-            ProductionIngredientRequirement::create([
+            ProductionItem::factory()->create([
                 'production_id' => $production->id,
                 'ingredient_id' => $ingredient->id,
                 'phase' => Phases::Saponification->value,
                 'required_quantity' => 10.0,
-                'status' => RequirementStatus::NotOrdered,
             ]);
 
             expect(fn () => $this->service->selectMasterbatch($production, $masterbatch))
@@ -161,12 +98,11 @@ describe('MasterbatchService', function () {
 
             $production = Production::factory()->create(['formula_id' => $soapFormula->id]);
 
-            ProductionIngredientRequirement::create([
+            ProductionItem::factory()->create([
                 'production_id' => $production->id,
                 'ingredient_id' => $ingredient->id,
                 'phase' => Phases::Saponification->value,
                 'required_quantity' => 10.0,
-                'status' => RequirementStatus::NotOrdered,
             ]);
 
             expect(fn () => $this->service->selectMasterbatch($production, $masterbatch))
@@ -194,23 +130,16 @@ describe('MasterbatchService', function () {
                 'masterbatch_lot_id' => $masterbatch->id,
             ]);
 
-            ProductionIngredientRequirement::create([
+            ProductionItem::factory()->create([
                 'production_id' => $production->id,
                 'ingredient_id' => $ingredient->id,
                 'phase' => Phases::Saponification->value,
                 'required_quantity' => 26.0,
-                'status' => RequirementStatus::NotOrdered,
-                'fulfilled_by_masterbatch_id' => $masterbatch->id,
-                'is_collapsed_in_ui' => true,
             ]);
 
             $this->service->removeMasterbatch($production);
 
-            $requirement = $production->fresh()->ingredientRequirements->first();
-
-            expect($production->fresh()->masterbatch_lot_id)->toBeNull()
-                ->and($requirement->fulfilled_by_masterbatch_id)->toBeNull()
-                ->and($requirement->is_collapsed_in_ui)->toBeFalse();
+            expect($production->fresh()->masterbatch_lot_id)->toBeNull();
         });
     });
 
@@ -230,14 +159,19 @@ describe('MasterbatchService', function () {
                 'replaces_phase' => 'saponified_oils',
             ]);
 
-            ProductionItem::factory()->create([
+            $mbItem = ProductionItem::factory()->create([
                 'production_id' => $masterbatch->id,
                 'ingredient_id' => $ingredient->id,
                 'supplier_listing_id' => $listing->id,
+                'phase' => Phases::Saponification->value,
+                'required_quantity' => 10.0,
+            ]);
+
+            ProductionItemAllocation::factory()->create([
+                'production_item_id' => $mbItem->id,
                 'supply_id' => $supply->id,
-                'supply_batch_number' => 'LOT-MB-001',
-                'phase' => Phases::Saponification->value,
-                'is_supplied' => true,
+                'quantity' => 10.0,
+                'status' => 'reserved',
             ]);
 
             $production = Production::factory()->create([
@@ -248,59 +182,16 @@ describe('MasterbatchService', function () {
                 'production_id' => $production->id,
                 'ingredient_id' => $ingredient->id,
                 'phase' => Phases::Saponification->value,
-                'supply_id' => null,
-                'supply_batch_number' => null,
-                'is_supplied' => false,
+                'required_quantity' => 10.0,
             ]);
 
             $updated = $this->service->applyTraceabilityToProductionItems($production);
 
-            expect($updated)->toBe(1)
-                ->and($targetItem->fresh()->supply_id)->toBe($supply->id)
-                ->and($targetItem->fresh()->supply_batch_number)->toBe('LOT-MB-001')
-                ->and($targetItem->fresh()->is_supplied)->toBeTrue();
-        });
-
-        it('copies batch traceability even when masterbatch item has no linked supply id', function () {
-            $ingredient = Ingredient::factory()->create();
-            $listing = SupplierListing::factory()->create([
-                'ingredient_id' => $ingredient->id,
-            ]);
-
-            $masterbatch = Production::factory()->masterbatch()->finished()->create([
-                'batch_number' => 'MB02',
-                'replaces_phase' => 'saponified_oils',
-            ]);
-
-            ProductionItem::factory()->create([
-                'production_id' => $masterbatch->id,
-                'ingredient_id' => $ingredient->id,
-                'supplier_listing_id' => $listing->id,
-                'supply_id' => null,
-                'supply_batch_number' => 'LOT-MB-BATCH-ONLY',
-                'phase' => Phases::Saponification->value,
-                'is_supplied' => true,
-            ]);
-
-            $production = Production::factory()->create([
-                'masterbatch_lot_id' => $masterbatch->id,
-            ]);
-
-            $targetItem = ProductionItem::factory()->create([
-                'production_id' => $production->id,
-                'ingredient_id' => $ingredient->id,
-                'phase' => Phases::Saponification->value,
-                'supply_id' => null,
-                'supply_batch_number' => null,
-                'is_supplied' => false,
-            ]);
-
-            $updated = $this->service->applyTraceabilityToProductionItems($production);
+            $targetItem->refresh();
 
             expect($updated)->toBe(1)
-                ->and($targetItem->fresh()->supply_id)->toBeNull()
-                ->and($targetItem->fresh()->supply_batch_number)->toBe('LOT-MB-BATCH-ONLY')
-                ->and($targetItem->fresh()->is_supplied)->toBeTrue();
+                ->and($targetItem->allocations)->toHaveCount(1)
+                ->and($targetItem->allocations->first()->supply_id)->toBe($supply->id);
         });
 
         it('detects percentage mismatches between production and masterbatch oils', function () {
@@ -390,12 +281,11 @@ describe('MasterbatchService', function () {
 
             $production = Production::factory()->create(['formula_id' => $soapFormula->id]);
 
-            ProductionIngredientRequirement::create([
+            ProductionItem::factory()->create([
                 'production_id' => $production->id,
                 'ingredient_id' => $ingredient->id,
                 'phase' => Phases::Saponification->value,
                 'required_quantity' => 10.0,
-                'status' => RequirementStatus::NotOrdered,
             ]);
 
             expect($this->service->isMasterbatchCompatible($production, $masterbatch))->toBeTrue();
@@ -417,12 +307,11 @@ describe('MasterbatchService', function () {
 
             $production = Production::factory()->create(['formula_id' => $soapFormula->id]);
 
-            ProductionIngredientRequirement::create([
+            ProductionItem::factory()->create([
                 'production_id' => $production->id,
                 'ingredient_id' => $ingredient->id,
                 'phase' => Phases::Saponification->value,
                 'required_quantity' => 10.0,
-                'status' => RequirementStatus::NotOrdered,
             ]);
 
             expect($this->service->isMasterbatchCompatible($production, $masterbatch))->toBeFalse();

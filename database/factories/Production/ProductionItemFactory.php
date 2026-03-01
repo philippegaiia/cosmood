@@ -2,8 +2,10 @@
 
 namespace Database\Factories\Production;
 
+use App\Enums\AllocationStatus;
 use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Supply\Ingredient;
@@ -36,6 +38,9 @@ class ProductionItemFactory extends Factory
                 Phases::Additives->value,
             ]),
             'calculation_mode' => FormulaItemCalculationMode::PercentOfOils->value,
+            'required_quantity' => $this->faker->randomFloat(3, 1, 50),
+            'procurement_status' => ProcurementStatus::NotOrdered->value,
+            'allocation_status' => AllocationStatus::Unassigned->value,
             'organic' => true,
             'is_supplied' => false,
             'sort' => $this->faker->numberBetween(1, 20),

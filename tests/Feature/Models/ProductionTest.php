@@ -1,10 +1,9 @@
 <?php
 
+use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
-use App\Enums\RequirementStatus;
 use App\Enums\SizingMode;
 use App\Models\Production\Production;
-use App\Models\Production\ProductionIngredientRequirement;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
@@ -180,21 +179,21 @@ describe('Production Model', function () {
     it('computes supply coverage traffic light states', function () {
         $production = Production::factory()->create();
 
-        ProductionIngredientRequirement::factory()->count(2)->create([
+        ProductionItem::factory()->count(2)->create([
             'production_id' => $production->id,
-            'status' => RequirementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
         expect($production->fresh()->getSupplyCoverageState())->toBe('missing');
 
-        $production->ingredientRequirements()->update([
-            'status' => RequirementStatus::Ordered,
+        $production->productionItems()->update([
+            'procurement_status' => ProcurementStatus::Ordered,
         ]);
 
         expect($production->fresh()->getSupplyCoverageState())->toBe('ordered');
 
-        $production->ingredientRequirements()->update([
-            'status' => RequirementStatus::Received,
+        $production->productionItems()->update([
+            'procurement_status' => ProcurementStatus::Received,
         ]);
 
         expect($production->fresh()->getSupplyCoverageState())->toBe('received');
@@ -214,10 +213,10 @@ describe('Production Relationships', function () {
         expect($production->formula)->not->toBeNull();
     });
 
-    it('can have ingredient requirements', function () {
+    it('can have production items', function () {
         $production = Production::factory()->create();
 
-        expect($production->ingredientRequirements())->not->toBeNull();
+        expect($production->productionItems())->not->toBeNull();
     });
 
     it('can have production tasks', function () {

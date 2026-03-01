@@ -21,7 +21,6 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
-use Filament\Forms;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Repeater;
@@ -198,7 +197,7 @@ class FormulaResource extends Resource
                                             })
                                             ->columnSpan([
                                                 'default' => 1,
-                                                'xl' => 5,
+                                                'xl' => 4,
                                             ]),
 
                                         Select::make('calculation_mode')
@@ -250,7 +249,7 @@ class FormulaResource extends Resource
                                             ->default(1)
                                             ->columnSpan([
                                                 'default' => 1,
-                                                'xl' => 1,
+                                                'xl' => 2,
                                             ]),
 
                                         Select::make('phase')

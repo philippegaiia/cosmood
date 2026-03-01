@@ -163,3 +163,48 @@ When changing production workflow logic, keep concise PHPDoc current in:
 - `app/Services/Production/PermanentBatchNumberService.php`
 - `app/Services/Production/ProductionQcGenerationService.php`
 - `app/Observers/ProductionObserver.php`
+
+## Masterbatch Workflow
+
+### Masterbatch Creation (Planning Tab - Create Only)
+
+When creating a masterbatch production:
+- Toggle `is_masterbatch` in Planning tab
+- Select `replaces_phase` (which phase this masterbatch will replace in future productions)
+- Select `produced_ingredient_id` (the manufactured ingredient this batch produces)
+
+On edit, these fields are visible but disabled for operator awareness.
+
+### Masterbatch Usage (Execution Tab - Edit Only)
+
+For regular productions using a masterbatch:
+- Select `masterbatch_lot_id` in Execution tab
+- Click "Importer traçabilité MB" to copy supply lots from the masterbatch
+- Items in the replaced phase are collapsed and traceability is inherited
+
+### Form Tab Visibility
+
+- **Planning tab**: Visible on create and edit
+- **Execution tab**: Hidden on create, visible on edit
+- **Composition tab**: Hidden on create, visible on edit
+  - Contains "Gérer les items" button that opens a slide-over modal
+
+## Production Items Editor
+
+### Modal-Based Editing
+
+Production items are managed through a slide-over modal accessed via "Gérer les items" button in Composition tab.
+
+### Supply Selection Behavior
+
+- When editing an item, supply lot selection is required for traceability
+- If only 1 supply option exists, it is auto-selected
+- If 2+ supply options exist, user must manually select (placeholder shown)
+- Green callout confirms stock sufficiency
+- Badge "Approvisionné" appears when item has a supply lot assigned
+
+### Save Flow
+
+- Individual item edits are saved to memory
+- "Sauvegarder tout" persists all changes to database
+- Modal can be closed without saving (changes lost)

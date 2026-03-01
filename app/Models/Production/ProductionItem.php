@@ -2,8 +2,10 @@
 
 namespace App\Models\Production;
 
+use App\Enums\AllocationStatus;
 use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
@@ -12,6 +14,7 @@ use App\Services\Production\IngredientQuantityCalculator;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use InvalidArgumentException;
 
@@ -22,11 +25,17 @@ class ProductionItem extends Model
 
     protected $guarded = [];
 
-    protected $casts = [
-        'organic' => 'boolean',
-        'is_supplied' => 'boolean',
-        'calculation_mode' => FormulaItemCalculationMode::class,
-    ];
+    protected function casts(): array
+    {
+        return [
+            'organic' => 'boolean',
+            'is_supplied' => 'boolean',
+            'required_quantity' => 'decimal:3',
+            'calculation_mode' => FormulaItemCalculationMode::class,
+            'procurement_status' => ProcurementStatus::class,
+            'allocation_status' => AllocationStatus::class,
+        ];
+    }
 
     protected static function booted(): void
     {
@@ -70,6 +79,62 @@ class ProductionItem extends Model
     public function supply(): BelongsTo
     {
         return $this->belongsTo(Supply::class);
+    }
+
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(ProductionItemAllocation::class);
+    }
+
+    /**
+     * Returns the total quantity allocated from all supplies.
+     */
+    public function getTotalAllocatedQuantity(): float
+    {
+        return (float) $this->allocations()
+            ->whereIn('status', ['reserved', 'consumed'])
+            ->sum('quantity');
+    }
+
+    /**
+     * Returns the quantity still needing allocation.
+     */
+    public function getUnallocatedQuantity(): float
+    {
+        $required = $this->required_quantity > 0
+            ? $this->required_quantity
+            : $this->getCalculatedQuantityKg();
+
+        return max(0, $required - $this->getTotalAllocatedQuantity());
+    }
+
+    /**
+     * Checks if the item is fully allocated.
+     */
+    public function isFullyAllocated(): bool
+    {
+        return round($this->getUnallocatedQuantity(), 3) <= 0;
+    }
+
+    /**
+     * Updates the allocation_status based on current allocations.
+     */
+    public function updateAllocationStatus(): void
+    {
+        $allocatedQuantity = $this->getTotalAllocatedQuantity();
+        $requiredQuantity = $this->required_quantity > 0
+            ? $this->required_quantity
+            : $this->getCalculatedQuantityKg();
+
+        if ($allocatedQuantity <= 0) {
+            $this->allocation_status = AllocationStatus::Unassigned;
+        } elseif (round($allocatedQuantity, 3) >= round($requiredQuantity, 3)) {
+            $this->allocation_status = AllocationStatus::Allocated;
+        } else {
+            $this->allocation_status = AllocationStatus::Partial;
+        }
+
+        $this->saveQuietly();
     }
 
     public function getPhaseLabel(): string

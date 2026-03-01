@@ -11,6 +11,7 @@ use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\MarkdownEditor;
@@ -175,6 +176,7 @@ class ProductResource extends Resource
             ])
             ->recordActions([
                 EditAction::make(),
+                ReplicateAction::make()->requiresConfirmation(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
