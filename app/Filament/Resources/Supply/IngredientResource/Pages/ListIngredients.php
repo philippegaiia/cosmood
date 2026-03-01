@@ -38,6 +38,19 @@ class ListIngredients extends ListRecords
     }
 
     /**
+     * Hook called when activeTab changes.
+     * Resets the table to force reconfiguration.
+     */
+    public function updatedActiveTab(): void
+    {
+        // Reset table to force reconfiguration with new tab's settings
+        $this->table = null;
+
+        // Reset pagination and filters when switching tabs
+        $this->resetTable();
+    }
+
+    /**
      * Configure the table based on active tab.
      * Accesses the activeTab property from the Livewire component state.
      */
