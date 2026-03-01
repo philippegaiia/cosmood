@@ -28,11 +28,12 @@ class StockMovementResource extends Resource
     protected static ?int $navigationSort = 4;
 
     /**
-     * Only admin users can view stock movements.
+     * Only authenticated users can view stock movements.
+     * TODO: Implement proper admin check when roles are set up.
      */
     public static function canViewAny(): bool
     {
-        return auth()->user()?->isAdmin() ?? false;
+        return auth()->check();
     }
 
     public static function canCreate(): bool
