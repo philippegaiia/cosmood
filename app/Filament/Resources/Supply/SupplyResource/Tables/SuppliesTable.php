@@ -169,6 +169,48 @@ class SuppliesTable
                 ActionGroup::make([
                     ViewAction::make(),
                     EditAction::make(),
+
+                    Action::make('adjust')
+                        ->label('Ajuster')
+                        ->icon(Heroicon::AdjustmentsHorizontal)
+                        ->color('warning')
+                        ->form([
+                            TextInput::make('adjustment_quantity')
+                                ->label('Quantité d\'ajustement')
+                                ->numeric()
+                                ->step(0.001)
+                                ->required()
+                                ->helperText('Positive = ajout de stock, Négative = retrait de stock'),
+
+                            DateTimePicker::make('moved_at')
+                                ->label('Date et heure')
+                                ->default(now())
+                                ->required(),
+
+                            Textarea::make('reason')
+                                ->label('Raison de l\'ajustement')
+                                ->required()
+                                ->placeholder('Ex: Inventaire, correction erreur, etc.'),
+                        ])
+                        ->action(function (array $data, Supply $record): void {
+                            SuppliesMovement::create([
+                                'supply_id' => $record->id,
+                                'quantity' => $data['adjustment_quantity'],
+                                'movement_type' => 'adjustment',
+                                'moved_at' => $data['moved_at'],
+                                'reason' => $data['reason'],
+                                'user_id' => auth()->id(),
+                            ]);
+
+                            // Update supply quantities based on adjustment
+                            if ($data['adjustment_quantity'] > 0) {
+                                $record->quantity_in = ($record->quantity_in ?? 0) + $data['adjustment_quantity'];
+                            } else {
+                                $record->quantity_out = ($record->quantity_out ?? 0) + abs($data['adjustment_quantity']);
+                            }
+                            $record->save();
+                        })
+                        ->successNotificationTitle('Ajustement créé'),
                 ]),
             ])
             ->groups([
