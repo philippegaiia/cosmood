@@ -38,8 +38,7 @@ class StockMovementResource extends Resource
 
     public static function canCreate(): bool
     {
-        // Allow creating adjustments only (manual stock corrections)
-        return true;
+        return false;
     }
 
     public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
