@@ -38,11 +38,13 @@ class ListIngredients extends ListRecords
     }
 
     /**
-     * Get the table instance based on active tab.
+     * Configure the table based on active tab.
+     * Uses tab ID from request to determine which table configuration to use.
      */
     public function table(\Filament\Tables\Table $table): \Filament\Tables\Table
     {
-        $activeTab = $this->getActiveTab();
+        // Get active tab from request or default
+        $activeTab = request()->query('activeTab', $this->getDefaultActiveTab());
 
         if ($activeTab === 'stock') {
             return IngredientStockTable::configure($table);

@@ -172,13 +172,13 @@ class SuppliesTable
                 ]),
             ])
             ->groups([
-                Group::make('supplierListing.ingredient.name')
+                \Filament\Tables\Grouping\Group::make('supplierListing.ingredient.name')
                     ->label('Ingrédient')
                     ->collapsible(),
-                Group::make('supplierListing.supplier.name')
+                \Filament\Tables\Grouping\Group::make('supplierListing.supplier.name')
                     ->label('Fournisseur')
                     ->collapsible(),
-                Group::make('source')
+                \Filament\Tables\Grouping\Group::make('source')
                     ->label('Source')
                     ->getTitleFromRecordUsing(fn (Supply $record): string => $record->source_production_id !== null ? 'Interne' : 'Achat')
                     ->collapsible(),
