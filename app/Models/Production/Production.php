@@ -406,9 +406,9 @@ class Production extends Model implements Eventable
     /**
      * Convert to calendar event for Guava Calendar.
      */
-    public function toCalendarEvent(): CalendarEvent
+    public function toCalendarEvent(): \Guava\Calendar\ValueObjects\CalendarEvent
     {
-        return CalendarEvent::make($this)
+        return \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
             ->title($this->product?->name ?? 'Sans nom')
             ->start($this->production_date)
             ->end($this->production_date)

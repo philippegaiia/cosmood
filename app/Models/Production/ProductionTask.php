@@ -2,6 +2,7 @@
 
 namespace App\Models\Production;
 
+use App\Enums\ProductionStatus;
 use App\Models\User;
 use Guava\Calendar\Contracts\Eventable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -71,7 +72,7 @@ class ProductionTask extends Model implements Eventable
     /**
      * Convert to calendar event for Guava Calendar.
      */
-    public function toCalendarEvent(): CalendarEvent
+    public function toCalendarEvent(): \Guava\Calendar\ValueObjects\CalendarEvent
     {
         $backgroundColor = $this->productionTaskType?->color ?? '#6366f1';
 
@@ -80,7 +81,7 @@ class ProductionTask extends Model implements Eventable
             $backgroundColor = $this->lightenColor($backgroundColor);
         }
 
-        return CalendarEvent::make($this)
+        return \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
             ->title($this->name ?? 'Tâche')
             ->start($this->scheduled_date)
             ->end($this->scheduled_date)
