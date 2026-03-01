@@ -21,33 +21,47 @@ class ListSupplies extends ListRecords
     public function getTabs(): array
     {
         return [
-            'all' => Tab::make('Registre lots')
+            'all' => Tab::make('Tous les lots')
                 ->badge(Supply::query()->count()),
 
             'in_stock' => Tab::make('En stock')
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('is_in_stock', true))
                 ->badge(Supply::query()->where('is_in_stock', true)->count()),
 
-            'internal' => Tab::make('Interne')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $query->whereNotNull('source_production_id'))
-                ->badge(Supply::query()->whereNotNull('source_production_id')->count()),
-
-            'purchase' => Tab::make('Achat')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $query->whereNull('source_production_id'))
-                ->badge(Supply::query()->whereNull('source_production_id')->count()),
-
-            'low_stock' => Tab::make('Rupture / bas')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $query->whereRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) <= 0'))
-                ->badge(
-                    Supply::query()
-                        ->whereRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) <= 0')
-                        ->count()
-                ),
+            'alert' => Tab::make('Alerte stock')
+                ->modifyQueryUsing(function (Builder $query): Builder {
+                    return $query->whereHas('supplierListing.ingredient', function ($q) {
+                        $q->whereColumn('stock_min', '>', 0)
+                            ->whereRaw('(SELECT COALESCE(SUM(COALESCE(s.quantity_in, s.initial_quantity, 0) - COALESCE(s.quantity_out, 0) - COALESCE(s.allocated_quantity, 0)), 0) 
+                                     FROM supplies s 
+                                     JOIN supplier_listings sl ON s.supplier_listing_id = sl.id 
+                                     WHERE sl.ingredient_id = ingredients.id) < stock_min');
+                    });
+                })
+                ->badge(function (): int {
+                    return \App\Models\Supply\Ingredient::query()
+                        ->where('stock_min', '>', 0)
+                        ->get()
+                        ->filter(fn ($i) => $i->getTotalAvailableStock() < $i->stock_min)
+                        ->count();
+                })
+                ->color('warning'),
         ];
     }
 
     public function getDefaultActiveTab(): string|int|null
     {
         return 'in_stock';
+    }
+
+    public function getHeaderActions(): array
+    {
+        return [
+            \Filament\Actions\Action::make('movements')
+                ->label('Voir mouvements')
+                ->icon('heroicon-o-arrows-right-left')
+                ->url(route('filament.admin.resources.supply-movements.index'))
+                ->openUrlInNewTab(),
+        ];
     }
 }

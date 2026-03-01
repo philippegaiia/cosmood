@@ -133,6 +133,13 @@ class SupplyResource extends Resource
                     ->label('Ingrédient')
                     ->searchable()
                     ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: false)
+                    ->icon(fn (Supply $record): ?string => self::getIngredientAlertIcon($record)),
+
+                TextColumn::make('supplier_listing_count')
+                    ->label('Lots')
+                    ->counts('supplierListing')
+                    ->sortable()
                     ->toggleable(isToggledHiddenByDefault: false),
 
                 TextColumn::make('batch_number')
@@ -162,12 +169,17 @@ class SupplyResource extends Resource
                         $available = $record->getAvailableQuantity();
                         $total = $record->getTotalQuantity();
                         $allocated = $record->allocated_quantity ?? 0;
+                        $ingredient = $record->supplierListing?->ingredient;
+                        $minStock = $ingredient?->stock_min ?? null;
+                        $isBelowMin = $minStock !== null && $minStock > 0 && $available < $minStock;
 
                         return [
                             'available' => $available,
                             'allocated' => $allocated,
                             'total' => $total,
                             'unit' => $record->getUnitOfMeasure(),
+                            'min_stock' => $minStock,
+                            'is_below_min' => $isBelowMin,
                         ];
                     })
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query
@@ -286,5 +298,26 @@ class SupplyResource extends Resource
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
+    }
+
+    /**
+     * Get alert icon if ingredient's consolidated stock is below minimum.
+     */
+    private static function getIngredientAlertIcon(Supply $record): ?string
+    {
+        $ingredient = $record->supplierListing?->ingredient;
+
+        if (! $ingredient || ! $ingredient->stock_min || $ingredient->stock_min <= 0) {
+            return null;
+        }
+
+        // Check if consolidated stock is below minimum
+        $consolidatedAvailable = $ingredient->getTotalAvailableStock();
+
+        if ($consolidatedAvailable < $ingredient->stock_min) {
+            return 'heroicon-s-exclamation-triangle';
+        }
+
+        return null;
     }
 }
