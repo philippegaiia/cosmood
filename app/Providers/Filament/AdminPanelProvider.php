@@ -4,6 +4,7 @@ namespace App\Providers\Filament;
 
 use App\Filament\Widgets\ActiveWavesWidget;
 use App\Filament\Widgets\PendingOrdersWidget;
+use App\Filament\Widgets\ProductionCalendarWidget;
 use App\Filament\Widgets\ProductionsSoonReadyWidget;
 use App\Filament\Widgets\ReadyToStartProductionsWidget;
 use App\Filament\Widgets\StockAlertsWidget;
