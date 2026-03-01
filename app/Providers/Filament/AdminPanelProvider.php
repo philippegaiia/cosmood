@@ -51,6 +51,7 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->widgets([
                 TodaysProductionsWidget::class,
+                TodaysTasksWidget::class,
                 ProductionsSoonReadyWidget::class,
                 ReadyToStartProductionsWidget::class,
                 StockAlertsWidget::class,
