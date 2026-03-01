@@ -5,6 +5,16 @@ namespace App\Enums;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
+/**
+ * Wave requirement fulfillment statuses.
+ *
+ * Color semantics (aligned with ProcurementStatus for consistency):
+ * - danger: NotOrdered (immediate action required)
+ * - warning: Ordered (in progress, awaiting delivery)
+ * - primary: Confirmed (supplier commitment received)
+ * - info: Received (physically available)
+ * - success: Allocated (reserved to specific production)
+ */
 enum RequirementStatus: string implements HasColor, HasLabel
 {
     case NotOrdered = 'not_ordered';
@@ -27,10 +37,10 @@ enum RequirementStatus: string implements HasColor, HasLabel
     public function getColor(): string
     {
         return match ($this) {
-            self::NotOrdered => 'gray',
-            self::Ordered => 'info',
+            self::NotOrdered => 'danger',
+            self::Ordered => 'warning',
             self::Confirmed => 'primary',
-            self::Received => 'warning',
+            self::Received => 'info',
             self::Allocated => 'success',
         };
     }

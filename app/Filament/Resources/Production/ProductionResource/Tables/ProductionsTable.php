@@ -1,0 +1,239 @@
+<?php
+
+namespace App\Filament\Resources\Production\ProductionResource\Tables;
+
+use App\Enums\ProductionStatus;
+use App\Models\Production\Production;
+use App\Services\Production\PermanentBatchNumberService;
+use App\Services\Production\PlanningBatchNumberService;
+use App\Services\Production\StatusColorScheme;
+use Filament\Actions\Action;
+use Filament\Actions\BulkAction;
+use Filament\Actions\BulkActionGroup;
+use Filament\Actions\DeleteBulkAction;
+use Filament\Actions\EditAction;
+use Filament\Actions\ForceDeleteBulkAction;
+use Filament\Actions\RestoreBulkAction;
+use Filament\Actions\ViewAction;
+use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\IconColumn;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
+use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Str;
+
+/**
+ * Productions table configuration.
+ *
+ * This class encapsulates all table-related configuration for the Production resource,
+ * following Filament v5 best practices of extracting table definitions from resources.
+ */
+class ProductionsTable
+{
+    /**
+     * Configure the productions table.
+     *
+     * @param  Table  $table  The table instance to configure
+     * @return Table The configured table
+     */
+    public static function configure(Table $table): Table
+    {
+        return $table
+            ->columns([
+                TextColumn::make('product.name')
+                    ->label('Produit')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('production_date')
+                    ->label('Date')
+                    ->date('d/m/Y')
+                    ->sortable(),
+                TextColumn::make('permanent_batch_number')
+                    ->label('Batch permanent')
+                    ->placeholder('-')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('batch_number')
+                    ->label('Batch planif')
+                    ->searchable()
+                    ->sortable(),
+                TextColumn::make('wave.name')
+                    ->label('Vague')
+                    ->badge()
+                    ->placeholder('Autonome')
+                    ->sortable(),
+                TextColumn::make('composite_status')
+                    ->label('État')
+                    ->state(fn (Production $record): string => StatusColorScheme::forProduction($record)['label'])
+                    ->badge()
+                    ->color(fn (Production $record): string => StatusColorScheme::forProduction($record)['color'])
+                    ->icon(fn (Production $record): ?Heroicon => StatusColorScheme::forProduction($record)['icon'])
+                    ->sortable(query: fn (Builder $query, string $direction): Builder => $query
+                        ->orderBy('status', $direction))
+                    ->tooltip(fn (Production $record): string => sprintf(
+                        'Statut: %s | Appro: %s',
+                        $record->status->getLabel(),
+                        $record->getSupplyCoverageLabel()
+                    )),
+                TextColumn::make('planned_quantity')
+                    ->label('Quantité planifiée')
+                    ->numeric()
+                    ->suffix(' kg')
+                    ->sortable(),
+                TextColumn::make('expected_units')
+                    ->label('Unités attendues')
+                    ->numeric()
+                    ->sortable(),
+                IconColumn::make('is_masterbatch')
+                    ->label('MB')
+                    ->boolean()
+                    ->trueIcon(Heroicon::OutlinedBeaker)
+                    ->falseIcon(Heroicon::OutlinedMinus),
+                IconColumn::make('uses_masterbatch')
+                    ->label('Utilise MB')
+                    ->boolean()
+                    ->getStateUsing(fn (Production $record): bool => $record->masterbatch_lot_id !== null)
+                    ->trueIcon(Heroicon::OutlinedLink),
+            ])
+            ->filters([
+                TrashedFilter::make(),
+                SelectFilter::make('production_wave_id')
+                    ->label('Vague')
+                    ->relationship('wave', 'name'),
+                SelectFilter::make('status')
+                    ->label('Statut')
+                    ->options(ProductionStatus::class),
+            ])
+            ->recordActions([
+                Action::make('duplicate')
+                    ->label('Dupliquer')
+                    ->icon(Heroicon::OutlinedDocumentDuplicate)
+                    ->color('gray')
+                    ->requiresConfirmation()
+                    ->action(fn (Production $record) => self::duplicateProduction($record)),
+                ViewAction::make(),
+                EditAction::make(),
+            ])
+            ->toolbarActions([
+                BulkAction::make('assignPermanentBatchNumbers')
+                    ->label('Attribuer lots permanents')
+                    ->icon(Heroicon::OutlinedHashtag)
+                    ->requiresConfirmation()
+                    ->deselectRecordsAfterCompletion()
+                    ->action(fn (Collection $records) => self::assignPermanentBatchNumbers($records)),
+                BulkAction::make('printSelectedDocuments')
+                    ->label('Imprimer fiches sélectionnées')
+                    ->icon(Heroicon::OutlinedPrinter)
+                    ->url(fn (Collection $selectedRecords): string => self::getBulkDocumentsUrl($selectedRecords))
+                    ->openUrlInNewTab(),
+                BulkActionGroup::make([
+                    DeleteBulkAction::make()
+                        ->authorizeIndividualRecords(fn (Production $record): bool => $record->status !== ProductionStatus::Finished),
+                    ForceDeleteBulkAction::make()
+                        ->authorizeIndividualRecords(fn (Production $record): bool => $record->status !== ProductionStatus::Finished),
+                    RestoreBulkAction::make(),
+                ]),
+            ])
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('productionItems'))
+            ->defaultSort('created_at', 'desc');
+    }
+
+    /**
+     * Duplicate a production record with a new batch number.
+     *
+     * Creates a copy of the production with reset status and new identifiers.
+     *
+     * @param  Production  $record  The production to duplicate
+     */
+    private static function duplicateProduction(Production $record): void
+    {
+        $duplicate = $record->replicate();
+        $duplicate->status = ProductionStatus::Planned;
+        $duplicate->actual_units = null;
+        $duplicate->permanent_batch_number = null;
+        $duplicate->batch_number = app(PlanningBatchNumberService::class)->generateNextReference();
+        $duplicate->slug = self::generateDuplicatedSlug($duplicate->batch_number);
+        $duplicate->save();
+
+        Notification::make()
+            ->title('Production dupliquée')
+            ->body('Nouveau batch: '.$duplicate->batch_number)
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Generate a unique slug for a duplicated production.
+     *
+     * Ensures the slug is unique by appending a numeric suffix if necessary.
+     *
+     * @param  string  $batchNumber  The batch number to base the slug on
+     * @return string The unique slug
+     */
+    private static function generateDuplicatedSlug(string $batchNumber): string
+    {
+        $base = Str::slug($batchNumber);
+        $slug = $base;
+        $attempt = 1;
+
+        while (Production::query()->where('slug', $slug)->exists()) {
+            $slug = $base.'-'.str_pad((string) $attempt, 2, '0', STR_PAD_LEFT);
+            $attempt++;
+        }
+
+        return $slug;
+    }
+
+    /**
+     * Assign permanent batch numbers to multiple productions.
+     *
+     * @param  Collection  $records  The productions to process
+     */
+    private static function assignPermanentBatchNumbers(Collection $records): void
+    {
+        $assigned = app(PermanentBatchNumberService::class)
+            ->assignForProductions($records->pluck('id')->all());
+
+        Notification::make()
+            ->title('Lots permanents attribués')
+            ->body($assigned.' lot(s) permanent(s) attribué(s).')
+            ->success()
+            ->send();
+    }
+
+    /**
+     * Generate the URL for bulk document printing.
+     *
+     * @param  Collection  $selectedRecords  The productions to include in the print
+     * @return string The URL for the bulk documents route
+     */
+    private static function getBulkDocumentsUrl(Collection $selectedRecords): string
+    {
+        $ids = $selectedRecords
+            ->pluck('id')
+            ->map(fn ($id): int => (int) $id)
+            ->implode(',');
+
+        return route('productions.bulk-documents', ['ids' => $ids]);
+    }
+
+    /**
+     * Get the Eloquent query without soft deleting scope.
+     *
+     * This ensures trashed records are included in queries.
+     *
+     * @param  Builder  $query  The base query
+     * @return Builder The modified query
+     */
+    public static function getEloquentQuery(Builder $query): Builder
+    {
+        return $query->withoutGlobalScopes([
+            SoftDeletingScope::class,
+        ]);
+    }
+}

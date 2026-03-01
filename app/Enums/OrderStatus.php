@@ -2,10 +2,20 @@
 
 namespace App\Enums;
 
-use Filament\Support\Colors\Color;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
+/**
+ * Supplier order lifecycle statuses.
+ *
+ * Color semantics:
+ * - gray: Draft (not yet actionable, planning phase)
+ * - info: Passed (order sent to supplier, awaiting response)
+ * - primary: Confirmed (supplier confirmed, commitment made)
+ * - warning: Delivered (physically arrived, pending verification)
+ * - success: Checked (verified and accepted into inventory)
+ * - danger: Cancelled (order aborted, attention needed)
+ */
 enum OrderStatus: string implements HasColor, HasLabel
 {
     case Draft = '1';
@@ -16,11 +26,9 @@ enum OrderStatus: string implements HasColor, HasLabel
     case Cancelled = '6';
 
     public function getLabel(): string
-    // This is the method that will be called to get the label of the enum
     {
         return match ($this) {
-
-            self::Draft => 'Draft',
+            self::Draft => 'Brouillon',
             self::Passed => 'Passée',
             self::Confirmed => 'Confirmée',
             self::Delivered => 'Livrée',
@@ -29,11 +37,10 @@ enum OrderStatus: string implements HasColor, HasLabel
         };
     }
 
-    // This is ithe method that will be called to get the color of the enum
     public function getColor(): string|array|null
     {
         return match ($this) {
-            self::Draft => Color::Stone,
+            self::Draft => 'gray',
             self::Passed => 'info',
             self::Confirmed => 'primary',
             self::Delivered => 'warning',
