@@ -39,12 +39,12 @@ class ListIngredients extends ListRecords
 
     /**
      * Configure the table based on active tab.
-     * Uses tab ID from request to determine which table configuration to use.
+     * Accesses the activeTab property from the Livewire component state.
      */
     public function table(\Filament\Tables\Table $table): \Filament\Tables\Table
     {
-        // Get active tab from request or default
-        $activeTab = request()->query('activeTab', $this->getDefaultActiveTab());
+        // Get active tab from component property (managed by Filament tabs)
+        $activeTab = $this->activeTab ?? $this->getDefaultActiveTab();
 
         if ($activeTab === 'stock') {
             return IngredientStockTable::configure($table);
