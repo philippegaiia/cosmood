@@ -2,7 +2,11 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Widgets\ActiveWavesWidget;
+use App\Filament\Widgets\PendingOrdersWidget;
 use App\Filament\Widgets\ProductionCalendarWidget;
+use App\Filament\Widgets\ReadyToStartProductionsWidget;
+use App\Filament\Widgets\StockAlertsWidget;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -45,6 +49,10 @@ class AdminPanelProvider extends PanelProvider
                 Dashboard::class,
             ])
             ->widgets([
+                ReadyToStartProductionsWidget::class,
+                StockAlertsWidget::class,
+                ActiveWavesWidget::class,
+                PendingOrdersWidget::class,
                 ProductionCalendarWidget::class,
             ])
             ->plugin(FilamentFullCalendarPlugin::make())
