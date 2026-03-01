@@ -11,13 +11,13 @@ describe('Dashboard', function () {
     });
 
     it('can access dashboard page', function () {
-        $response = get('/admin');
+        $response = $this->get('/admin');
 
         expect($response->getStatusCode())->toBe(200);
     });
 
     it('displays dashboard widgets', function () {
-        $response = get('/admin');
+        $response = $this->get('/admin');
 
         expect($response->getStatusCode())->toBe(200);
         expect($response->getContent())->toContain('Planification du jour');
