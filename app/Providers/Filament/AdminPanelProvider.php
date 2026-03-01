@@ -7,6 +7,7 @@ use App\Filament\Widgets\PendingOrdersWidget;
 use App\Filament\Widgets\ProductionCalendarWidget;
 use App\Filament\Widgets\ReadyToStartProductionsWidget;
 use App\Filament\Widgets\StockAlertsWidget;
+use App\Filament\Widgets\TodaysProductionsWidget;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
@@ -49,6 +50,7 @@ class AdminPanelProvider extends PanelProvider
                 Dashboard::class,
             ])
             ->widgets([
+                TodaysProductionsWidget::class,
                 ReadyToStartProductionsWidget::class,
                 StockAlertsWidget::class,
                 ActiveWavesWidget::class,
