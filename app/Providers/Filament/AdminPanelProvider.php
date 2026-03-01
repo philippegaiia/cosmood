@@ -9,6 +9,7 @@ use App\Filament\Widgets\ProductionsSoonReadyWidget;
 use App\Filament\Widgets\ReadyToStartProductionsWidget;
 use App\Filament\Widgets\StockAlertsWidget;
 use App\Filament\Widgets\TodaysProductionsWidget;
+use App\Filament\Widgets\TodaysTasksWidget;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
