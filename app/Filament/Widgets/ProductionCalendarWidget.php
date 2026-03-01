@@ -23,7 +23,7 @@ use Illuminate\Support\Collection;
  */
 class ProductionCalendarWidget extends CalendarWidget
 {
-    protected static ?string $heading = 'Calendrier production';
+    protected ?string $heading = 'Calendrier production';
 
     protected int|string|array $columnSpan = 'full';
 
