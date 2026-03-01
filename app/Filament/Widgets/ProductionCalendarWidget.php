@@ -11,6 +11,7 @@ use Guava\Calendar\ValueObjects\CalendarEvent;
 use Guava\Calendar\ValueObjects\FetchInfo;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\HtmlString;
 
 /**
  * Production Calendar Widget using Guava Calendar.
