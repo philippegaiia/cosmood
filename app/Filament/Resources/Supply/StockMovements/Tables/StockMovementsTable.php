@@ -3,6 +3,12 @@
 namespace App\Filament\Resources\Supply\StockMovements\Tables;
 
 use App\Models\Supply\SuppliesMovement;
+use Filament\Actions\Action;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -125,6 +131,55 @@ class StockMovementsTable
                     ->relationship('supply.supplierListing.ingredient', 'name')
                     ->searchable()
                     ->preload(),
+
+                SelectFilter::make('production')
+                    ->label('Production')
+                    ->relationship('production', 'batch_number')
+                    ->searchable()
+                    ->preload(),
+            ])
+            ->headerActions([
+                Action::make('create_adjustment')
+                    ->label('Nouvel ajustement')
+                    ->icon(Heroicon::Plus)
+                    ->color('gray')
+                    ->form([
+                        Select::make('supply_id')
+                            ->label('Lot de stock')
+                            ->relationship('supply', 'batch_number', fn ($query) => $query->where('is_in_stock', true))
+                            ->getOptionLabelFromRecordUsing(fn ($record) => "{$record->batch_number} - {$record->supplierListing?->ingredient?->name}")
+                            ->searchable()
+                            ->preload()
+                            ->required(),
+
+                        TextInput::make('quantity')
+                            ->label('Quantité')
+                            ->numeric()
+                            ->step(0.001)
+                            ->required()
+                            ->helperText('Positive = ajout de stock, Négative = retrait de stock'),
+
+                        DateTimePicker::make('moved_at')
+                            ->label('Date et heure')
+                            ->default(now())
+                            ->required(),
+
+                        Textarea::make('reason')
+                            ->label('Raison de l\'ajustement')
+                            ->required()
+                            ->placeholder('Ex: Inventaire, correction erreur, etc.'),
+                    ])
+                    ->action(function (array $data): void {
+                        SuppliesMovement::create([
+                            'supply_id' => $data['supply_id'],
+                            'quantity' => $data['quantity'],
+                            'movement_type' => 'adjustment',
+                            'moved_at' => $data['moved_at'],
+                            'reason' => $data['reason'],
+                            'user_id' => auth()->id(),
+                        ]);
+                    })
+                    ->successNotificationTitle('Ajustement créé'),
             ])
             ->defaultSort('moved_at', 'desc');
     }
