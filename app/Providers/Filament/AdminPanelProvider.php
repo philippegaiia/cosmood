@@ -5,6 +5,7 @@ namespace App\Providers\Filament;
 use App\Filament\Widgets\ActiveWavesWidget;
 use App\Filament\Widgets\PendingOrdersWidget;
 use App\Filament\Widgets\ProductionCalendarWidget;
+use App\Filament\Widgets\ProductionsSoonReadyWidget;
 use App\Filament\Widgets\ReadyToStartProductionsWidget;
 use App\Filament\Widgets\StockAlertsWidget;
 use App\Filament\Widgets\TodaysProductionsWidget;
@@ -24,7 +25,6 @@ use Illuminate\Session\Middleware\AuthenticateSession;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
-use Saade\FilamentFullCalendar\FilamentFullCalendarPlugin;
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -51,13 +51,13 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->widgets([
                 TodaysProductionsWidget::class,
+                ProductionsSoonReadyWidget::class,
                 ReadyToStartProductionsWidget::class,
                 StockAlertsWidget::class,
                 ActiveWavesWidget::class,
                 PendingOrdersWidget::class,
                 ProductionCalendarWidget::class,
             ])
-            ->plugin(FilamentFullCalendarPlugin::make())
             // ->databaseNotifications()
             ->navigationGroups([
                 'Achats',

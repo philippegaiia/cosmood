@@ -13,6 +13,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\ColorPicker;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -43,6 +44,10 @@ class ProductionTaskTypeResource extends Resource
                 TextInput::make('name')
                     ->required()
                     ->maxLength(255),
+                ColorPicker::make('color')
+                    ->label('Couleur')
+                    ->helperText('Couleur dans le calendrier')
+                    ->default('#3b82f6'),
                 TextInput::make('slug')
                     ->required()
                     ->maxLength(255),
