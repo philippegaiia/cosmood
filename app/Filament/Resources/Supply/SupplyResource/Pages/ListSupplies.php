@@ -45,7 +45,7 @@ class ListSupplies extends ListRecords
                         ->filter(fn ($i) => $i->getTotalAvailableStock() < $i->stock_min)
                         ->count();
                 })
-                ->color('warning'),
+                ->badgeColor('warning'),
         ];
     }
 

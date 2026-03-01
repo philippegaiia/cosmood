@@ -8,6 +8,7 @@ use App\Enums\SizingMode;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use Carbon\Carbon;
+use Guava\Calendar\Contracts\Eventable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use InvalidArgumentException;
 
-class Production extends Model
+class Production extends Model implements Eventable
 {
     use HasFactory;
     use SoftDeletes;
@@ -399,6 +400,33 @@ class Production extends Model
             'lye' => '20',
             'additives' => '30',
             default => (string) $masterbatch->replaces_phase,
+        };
+    }
+
+    /**
+     * Convert to calendar event for Guava Calendar.
+     */
+    public function toCalendarEvent(): CalendarEvent
+    {
+        return CalendarEvent::make($this)
+            ->title($this->product?->name ?? 'Sans nom')
+            ->start($this->production_date)
+            ->end($this->production_date)
+            ->allDay()
+            ->backgroundColor($this->getCalendarColor())
+            ->textColor('#ffffff')
+            ->action('edit');
+    }
+
+    /**
+     * Get calendar color based on status.
+     */
+    private function getCalendarColor(): string
+    {
+        return match ($this->status) {
+            ProductionStatus::Planned => '#64748b', // slate-500
+            ProductionStatus::Confirmed => '#3b82f6', // blue-500
+            default => '#6b7280',
         };
     }
 }
