@@ -170,30 +170,30 @@ class SuppliesTable
                     ViewAction::make(),
                     EditAction::make(),
 
-                    Action::make('adjust')
+                    \Filament\Actions\Action::make('adjust')
                         ->label('Ajuster')
                         ->icon(Heroicon::AdjustmentsHorizontal)
                         ->color('warning')
                         ->form([
-                            TextInput::make('adjustment_quantity')
+                            \Filament\Forms\Components\TextInput::make('adjustment_quantity')
                                 ->label('Quantité d\'ajustement')
                                 ->numeric()
                                 ->step(0.001)
                                 ->required()
                                 ->helperText('Positive = ajout de stock, Négative = retrait de stock'),
 
-                            DateTimePicker::make('moved_at')
+                            \Filament\Forms\Components\DateTimePicker::make('moved_at')
                                 ->label('Date et heure')
                                 ->default(now())
                                 ->required(),
 
-                            Textarea::make('reason')
+                            \Filament\Forms\Components\Textarea::make('reason')
                                 ->label('Raison de l\'ajustement')
                                 ->required()
                                 ->placeholder('Ex: Inventaire, correction erreur, etc.'),
                         ])
                         ->action(function (array $data, Supply $record): void {
-                            SuppliesMovement::create([
+                            \App\Models\Supply\SuppliesMovement::create([
                                 'supply_id' => $record->id,
                                 'quantity' => $data['adjustment_quantity'],
                                 'movement_type' => 'adjustment',
