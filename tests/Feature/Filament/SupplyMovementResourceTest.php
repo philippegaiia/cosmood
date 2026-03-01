@@ -19,7 +19,8 @@ describe('Supply Movement Resource', function () {
     });
 
     it('cannot create supply movements (read-only resource)', function () {
-        $response = $this->get(SupplyMovementResource::getUrl('create'));
+        // Try to access a non-existent create route
+        $response = $this->get('/admin/supply/supply-movements/create');
 
         // Should return 404 since create route doesn't exist
         expect($response->getStatusCode())->toBe(404);
