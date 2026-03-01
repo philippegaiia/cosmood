@@ -68,6 +68,55 @@ class Ingredient extends Model
         return round((float) ($total ?? 0), 3);
     }
 
+    /**
+     * Get total physical stock (received - consumed) across all lots.
+     */
+    public function getTotalPhysicalStock(): float
+    {
+        $total = Supply::query()
+            ->whereHas('supplierListing', fn ($query) => $query->where('ingredient_id', $this->id))
+            ->selectRaw('COALESCE(SUM(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0)), 0) as total')
+            ->value('total');
+
+        return round((float) ($total ?? 0), 3);
+    }
+
+    /**
+     * Get total allocated stock across all lots.
+     */
+    public function getTotalAllocatedStock(): float
+    {
+        $total = Supply::query()
+            ->whereHas('supplierListing', fn ($query) => $query->where('ingredient_id', $this->id))
+            ->selectRaw('COALESCE(SUM(allocated_quantity), 0) as total')
+            ->value('total');
+
+        return round((float) ($total ?? 0), 3);
+    }
+
+    /**
+     * Get count of supply lots for this ingredient.
+     */
+    public function getSupplyLotsCount(): int
+    {
+        return Supply::query()
+            ->whereHas('supplierListing', fn ($query) => $query->where('ingredient_id', $this->id))
+            ->count();
+    }
+
+    /**
+     * Get all supplies for this ingredient.
+     */
+    public function supplies(): HasMany
+    {
+        return $this->hasManyThrough(
+            Supply::class,
+            SupplierListing::class,
+            'ingredient_id',
+            'supplier_listing_id'
+        );
+    }
+
     /*public function formula_items(): HasMany
     {
         return $this->hasMany(FormulaItem::class);

@@ -171,6 +171,18 @@ class SuppliesTable
                     EditAction::make(),
                 ]),
             ])
+            ->groups([
+                Group::make('supplierListing.ingredient.name')
+                    ->label('Ingrédient')
+                    ->collapsible(),
+                Group::make('supplierListing.supplier.name')
+                    ->label('Fournisseur')
+                    ->collapsible(),
+                Group::make('source')
+                    ->label('Source')
+                    ->getTitleFromRecordUsing(fn (Supply $record): string => $record->source_production_id !== null ? 'Interne' : 'Achat')
+                    ->collapsible(),
+            ])
             ->toolbarActions([
                 BulkActionGroup::make([
                     DeleteBulkAction::make(),
