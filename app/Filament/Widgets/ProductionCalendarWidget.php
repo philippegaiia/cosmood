@@ -3,157 +3,128 @@
 namespace App\Filament\Widgets;
 
 use App\Enums\ProductionStatus;
-use App\Filament\Resources\Production\ProductionResource;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionTask;
-use Illuminate\Support\Carbon;
-use Saade\FilamentFullCalendar\Widgets\FullCalendarWidget;
+use Guava\Calendar\Enums\CalendarViewType;
+use Guava\Calendar\Filament\CalendarWidget;
+use Guava\Calendar\ValueObjects\CalendarEvent;
+use Guava\Calendar\ValueObjects\FetchInfo;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 
-class ProductionCalendarWidget extends FullCalendarWidget
+/**
+ * Production Calendar Widget using Guava Calendar.
+ *
+ * Shows:
+ * - Productions: Only Planned and Confirmed (hide when Ongoing/Finished)
+ * - Tasks: All tasks with color from task type
+ *
+ * Default view: Week
+ */
+class ProductionCalendarWidget extends CalendarWidget
 {
-    protected static ?string $heading = 'Calendrier production et tâches';
-
-    protected string $view = 'filament.widgets.production-calendar-widget';
+    protected static ?string $heading = 'Calendrier production';
 
     protected int|string|array $columnSpan = 'full';
 
-    public function config(): array
+    protected CalendarViewType $calendarView = CalendarViewType::DayGridWeek;
+
+    protected ?string $locale = 'fr';
+
+    protected function getEvents(FetchInfo $info): Collection|array|Builder
     {
-        return [
-            'initialView' => 'dayGridMonth',
-            'firstDay' => 1,
-            'height' => 'auto',
-            'weekends' => true,
-            'displayEventTime' => false,
-            'displayEventEnd' => false,
-            'eventDisplay' => 'block',
-            'dayMaxEventRows' => 3,
-            'dayHeaderFormat' => ['weekday' => 'short'],
-            'headerToolbar' => [
-                'left' => 'dayGridMonth,dayGridWeek,dayGridDay,listWeek',
-                'center' => 'title',
-                'right' => 'prev,next today',
-            ],
-        ];
+        $productionEvents = $this->getProductionEvents($info);
+        $taskEvents = $this->getTaskEvents($info);
+
+        return $productionEvents->merge($taskEvents);
     }
 
-    public function fetchEvents(array $fetchInfo): array
+    /**
+     * Get production events (only Planned and Confirmed).
+     */
+    private function getProductionEvents(FetchInfo $info): Collection
     {
-        $start = Carbon::parse($fetchInfo['start'])->startOfDay();
-        $end = Carbon::parse($fetchInfo['end'])->endOfDay();
-
-        $productionEvents = Production::query()
+        return Production::query()
             ->with('product:id,name')
-            ->whereBetween('production_date', [$start, $end])
+            ->whereBetween('production_date', [$info->start, $info->end])
+            ->whereIn('status', [ProductionStatus::Planned, ProductionStatus::Confirmed])
             ->get()
-            ->map(function (Production $production): array {
-                $title = trim('B '.$production->getLotIdentifier().' '.($production->product?->name ? '- '.$production->product->name : ''));
+            ->map(function (Production $production): CalendarEvent {
+                $title = $production->product?->name ?? 'Sans nom';
 
-                $eventColor = $this->getProductionEventColor($production);
-
-                return [
-                    'id' => 'production-'.$production->id,
-                    'title' => $title,
-                    'start' => $production->production_date?->toDateString(),
-                    'allDay' => true,
-                    'backgroundColor' => $eventColor,
-                    'borderColor' => $eventColor,
-                    'textColor' => '#ffffff',
-                    'url' => ProductionResource::getUrl('edit', ['record' => $production]),
-                    'extendedProps' => [
-                        'type' => 'production',
-                        'batch_number' => $production->getLotIdentifier(),
-                    ],
-                ];
+                return CalendarEvent::make($production)
+                    ->title($title)
+                    ->start($production->production_date)
+                    ->end($production->production_date)
+                    ->allDay()
+                    ->backgroundColor($this->getProductionColor($production))
+                    ->textColor('#ffffff')
+                    ->action('edit');
             });
+    }
 
-        $taskEvents = ProductionTask::query()
-            ->with('production:id,batch_number,permanent_batch_number')
-            ->whereBetween('scheduled_date', [$start, $end])
+    /**
+     * Get task events (all tasks).
+     */
+    private function getTaskEvents(FetchInfo $info): Collection
+    {
+        return ProductionTask::query()
+            ->with(['production:id,batch_number,permanent_batch_number,status', 'productionTaskType:id,color'])
+            ->whereBetween('scheduled_date', [$info->start, $info->end])
             ->get()
-            ->map(function (ProductionTask $task): array {
-                $title = trim('T '.($task->name ?? 'Sans nom').' - '.($task->production?->getLotIdentifier() ?? 'n/a'));
+            ->map(function (ProductionTask $task): CalendarEvent {
+                $title = $task->name ?? 'Tâche';
+                $backgroundColor = $task->productionTaskType?->color ?? '#6366f1';
 
-                $eventColor = $this->getTaskEventColor($task);
+                // If parent production is ongoing, make it visually distinct
+                if ($task->production?->status === ProductionStatus::Ongoing) {
+                    $backgroundColor = $this->adjustColorForOngoing($backgroundColor);
+                }
 
-                return [
-                    'id' => 'task-'.$task->id,
-                    'title' => $title,
-                    'start' => $task->scheduled_date?->toDateString(),
-                    'allDay' => true,
-                    'backgroundColor' => $eventColor,
-                    'borderColor' => $eventColor,
-                    'textColor' => '#ffffff',
-                    'url' => $task->production ? ProductionResource::getUrl('edit', ['record' => $task->production]) : null,
-                    'extendedProps' => [
-                        'type' => 'task',
-                        'task_id' => $task->id,
-                    ],
-                ];
+                return CalendarEvent::make($task)
+                    ->title($title)
+                    ->start($task->scheduled_date)
+                    ->end($task->scheduled_date)
+                    ->allDay()
+                    ->backgroundColor($backgroundColor)
+                    ->textColor('#ffffff')
+                    ->action('edit');
             });
-
-        return $productionEvents
-            ->concat($taskEvents)
-            ->values()
-            ->all();
     }
 
-    protected function headerActions(): array
-    {
-        return [];
-    }
-
-    protected function modalActions(): array
-    {
-        return [];
-    }
-
-    private function getProductionEventColor(Production $production): string
+    /**
+     * Get color for production based on status.
+     */
+    private function getProductionColor(Production $production): string
     {
         return match ($production->status) {
-            ProductionStatus::Planned => '#334155',
-            ProductionStatus::Confirmed => '#4338ca',
-            ProductionStatus::Ongoing => '#b45309',
-            ProductionStatus::Finished => '#4d7c0f',
-            ProductionStatus::Cancelled => '#c2410c',
+            ProductionStatus::Planned => '#64748b', // slate-500
+            ProductionStatus::Confirmed => '#3b82f6', // blue-500
+            default => '#6b7280',
         };
     }
 
-    private function getTaskEventColor(ProductionTask $task): string
+    /**
+     * Adjust color for ongoing production tasks (make slightly lighter).
+     */
+    private function adjustColorForOngoing(string $color): string
     {
-        if ($task->isCancelled()) {
-            return '#6b7280';
-        }
+        // Simple approach: blend with white to make it lighter
+        // This is a visual indicator that the parent production has started
+        $r = hexdec(substr($color, 1, 2));
+        $g = hexdec(substr($color, 3, 2));
+        $b = hexdec(substr($color, 5, 2));
 
-        if ($task->is_finished) {
-            return '#166534';
-        }
+        // Blend with white (80% original, 20% white)
+        $r = intval($r * 0.8 + 255 * 0.2);
+        $g = intval($g * 0.8 + 255 * 0.2);
+        $b = intval($b * 0.8 + 255 * 0.2);
 
-        if ($task->scheduled_date && $task->scheduled_date->isFuture()) {
-            return '#b45309';
-        }
-
-        return '#7c2d12';
+        return sprintf('#%02x%02x%02x', $r, $g, $b);
     }
 
-    public function eventDidMount(): string
+    public function editAction(): \Guava\Calendar\Filament\Actions\EditAction
     {
-        return <<<'JS'
-            function(info) {
-                const main = info.el.querySelector('.fc-event-main');
-
-                if (main) {
-                    main.style.fontSize = '0.84rem';
-                    main.style.fontWeight = '600';
-                    main.style.padding = '5px 7px';
-                    main.style.lineHeight = '1.2';
-                    main.style.letterSpacing = '0.01em';
-                }
-
-                info.el.style.borderRadius = '8px';
-                info.el.style.border = 'none';
-                info.el.style.boxShadow = 'inset 0 0 0 1px rgba(255, 255, 255, 0.14)';
-            }
-        JS;
+        return \Guava\Calendar\Filament\Actions\EditAction::make('edit');
     }
 }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1e61f03052670b5a0dea9f10b0884957",
+    "content-hash": "b55987d19891e55d4f5aea582cb277b7",
     "packages": [
         {
             "name": "anourvalar/eloquent-serialize",
@@ -1839,6 +1839,86 @@
                 }
             ],
             "time": "2025-12-27T19:43:20+00:00"
+        },
+        {
+            "name": "guava/calendar",
+            "version": "3.0.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/GuavaCZ/calendar.git",
+                "reference": "a8e19b833dd6cc540284d2237888f567d658c909"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/GuavaCZ/calendar/zipball/a8e19b833dd6cc540284d2237888f567d658c909",
+                "reference": "a8e19b833dd6cc540284d2237888f567d658c909",
+                "shasum": ""
+            },
+            "require": {
+                "filament/filament": "^5.0",
+                "illuminate/contracts": "^11.0|^12.0",
+                "php": "^8.1|^8.2",
+                "spatie/laravel-package-tools": "^1.14.0"
+            },
+            "require-dev": {
+                "laravel/pint": "^1.0",
+                "nunomaduro/collision": "^7.8|^8.0",
+                "nunomaduro/larastan": "^2.0.1",
+                "orchestra/testbench": "^9.0|^10.0",
+                "pestphp/pest": "^2.36",
+                "pestphp/pest-plugin": "^2.1.1",
+                "pestphp/pest-plugin-arch": "^2.0",
+                "pestphp/pest-plugin-laravel": "^2.0",
+                "phpstan/extension-installer": "^1.1",
+                "phpstan/phpstan-deprecation-rules": "^1.0",
+                "phpstan/phpstan-phpunit": "^1.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Guava\\Calendar\\CalendarServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "files": [
+                    "src/helpers.php"
+                ],
+                "psr-4": {
+                    "Guava\\Calendar\\": "src/",
+                    "Guava\\Calendar\\Database\\Factories\\": "database/factories/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Lukas Frey",
+                    "email": "lukas.frey@guava.cz",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Adds support for vkurko/calendar to Filament PHP.",
+            "homepage": "https://github.com/GuavaCZ/calendar",
+            "keywords": [
+                "Guava",
+                "calendar",
+                "laravel"
+            ],
+            "support": {
+                "issues": "https://github.com/GuavaCZ/calendar/issues",
+                "source": "https://github.com/GuavaCZ/calendar/tree/3.0.2"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/GuavaCZ",
+                    "type": "github"
+                }
+            ],
+            "time": "2026-02-18T17:53:55+00:00"
         },
         {
             "name": "guzzlehttp/guzzle",
@@ -5426,80 +5506,6 @@
                 }
             ],
             "time": "2025-02-25T09:09:36+00:00"
-        },
-        {
-            "name": "saade/filament-fullcalendar",
-            "version": "v4.0.0-beta4",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/saade/filament-fullcalendar.git",
-                "reference": "f1275cdec0f0a5e564fa334306cd9fd46077b57a"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/saade/filament-fullcalendar/zipball/f1275cdec0f0a5e564fa334306cd9fd46077b57a",
-                "reference": "f1275cdec0f0a5e564fa334306cd9fd46077b57a",
-                "shasum": ""
-            },
-            "require": {
-                "filament/filament": "^4.0|^5.0",
-                "illuminate/contracts": "^10.0|^11.0|^12.0",
-                "php": "^8.2",
-                "spatie/laravel-package-tools": "^1.92.7"
-            },
-            "require-dev": {
-                "nunomaduro/collision": "^7.0|^8.0",
-                "nunomaduro/larastan": "^2.0",
-                "phpstan/extension-installer": "^1.1",
-                "phpstan/phpstan-deprecation-rules": "^1.0|^2.0",
-                "phpstan/phpstan-phpunit": "^1.0|^2.0",
-                "spatie/laravel-ray": "^1.26"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "providers": [
-                        "Saade\\FilamentFullCalendar\\FilamentFullCalendarServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "files": [
-                    "src/helpers.php"
-                ],
-                "psr-4": {
-                    "Saade\\FilamentFullCalendar\\": "src"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Saade",
-                    "email": "saade@outlook.com.br",
-                    "role": "Developer"
-                }
-            ],
-            "description": "The Most Popular JavaScript Calendar integrated with Filament 💛",
-            "homepage": "https://github.com/saade/filament-fullcalendar",
-            "keywords": [
-                "filament-fullcalendar",
-                "laravel",
-                "saade"
-            ],
-            "support": {
-                "issues": "https://github.com/saade/filament-fullcalendar/issues",
-                "source": "https://github.com/saade/filament-fullcalendar/tree/v4.0.0-beta4"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/saade",
-                    "type": "github"
-                }
-            ],
-            "time": "2026-02-26T18:32:09+00:00"
         },
         {
             "name": "sabberworm/php-css-parser",
@@ -12715,9 +12721,7 @@
     ],
     "aliases": [],
     "minimum-stability": "beta",
-    "stability-flags": {
-        "saade/filament-fullcalendar": 10
-    },
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
