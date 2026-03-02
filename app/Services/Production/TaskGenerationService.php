@@ -28,7 +28,9 @@ class TaskGenerationService
 
         $lastScheduledDate = null;
 
-        foreach ($template->taskTypes as $taskType) {
+        foreach ($template->taskTemplateTaskTypes as $pivot) {
+            $taskType = $pivot->taskType;
+
             // Skip if this task type already exists for this production
             if (in_array($taskType->id, $existingTaskTypeIds)) {
                 continue;
@@ -36,8 +38,8 @@ class TaskGenerationService
 
             $scheduledDate = $this->calculateScheduledDate(
                 $production->production_date,
-                $taskType->pivot->offset_days,
-                $taskType->pivot->skip_weekends
+                $pivot->offset_days,
+                $pivot->skip_weekends
             );
 
             if ($lastScheduledDate && $scheduledDate->lt($lastScheduledDate)) {
@@ -45,7 +47,7 @@ class TaskGenerationService
             }
 
             // Use duration override if set, otherwise use task type's base duration
-            $durationMinutes = $taskType->pivot->duration_override ?? $taskType->duration ?? 60;
+            $durationMinutes = $pivot->duration_override ?? $taskType->duration ?? 60;
 
             ProductionTask::create([
                 'production_id' => $production->id,
@@ -54,7 +56,7 @@ class TaskGenerationService
                 'description' => null,
                 'production_task_type_id' => $taskType->id,
                 'source' => 'template',
-                'sequence_order' => $taskType->pivot->sort_order,
+                'sequence_order' => $pivot->sort_order,
                 'scheduled_date' => $scheduledDate,
                 'date' => $scheduledDate,
                 'duration_minutes' => $durationMinutes,
@@ -96,12 +98,12 @@ class TaskGenerationService
         }
 
         // Build lookup of task type pivot data by task type ID
-        $taskTypeLookup = $template->taskTypes
-            ->mapWithKeys(fn ($taskType) => [
-                $taskType->id => [
-                    'offset_days' => $taskType->pivot->offset_days,
-                    'skip_weekends' => $taskType->pivot->skip_weekends,
-                    'sort_order' => $taskType->pivot->sort_order,
+        $taskTypeLookup = $template->taskTemplateTaskTypes
+            ->mapWithKeys(fn ($pivot) => [
+                $pivot->taskType->id => [
+                    'offset_days' => $pivot->offset_days,
+                    'skip_weekends' => $pivot->skip_weekends,
+                    'sort_order' => $pivot->sort_order,
                 ],
             ])
             ->all();
