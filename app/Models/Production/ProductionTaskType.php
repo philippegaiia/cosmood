@@ -18,4 +18,11 @@ class ProductionTaskType extends Model
     {
         return $this->hasMany(ProductionTask::class);
     }
+
+    public function taskTemplates(): BelongsToMany
+    {
+        return $this->belongsToMany(TaskTemplate::class, 'task_template_task_type')
+            ->withPivot(['sort_order', 'offset_days', 'skip_weekends', 'duration_override'])
+            ->orderByPivot('sort_order');
+    }
 }

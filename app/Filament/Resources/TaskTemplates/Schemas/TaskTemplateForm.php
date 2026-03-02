@@ -37,29 +37,32 @@ class TaskTemplateForm
 
                 Section::make('Tâches')
                     ->schema([
-                        Repeater::make('items')
+                        Repeater::make('taskTypes')
                             ->hiddenLabel()
                             ->relationship()
                             ->schema([
-                                TextInput::make('name')
-                                    ->label('Nom de la tâche')
+                                Select::make('production_task_type_id')
+                                    ->label('Type de tâche')
+                                    ->relationship('taskTypes', 'name')
+                                    ->searchable()
+                                    ->preload()
                                     ->required()
-                                    ->maxLength(255)
-                                    ->columnSpan(2),
-                                TextInput::make('duration_minutes')
+                                    ->columnSpan(2)
+                                    ->helperText(fn ($state) => $state ? 'Durée par défaut: '.(ProductionTaskType::find($state)?->duration ?? '-').' min' : null),
+                                TextInput::make('duration_override')
                                     ->label('Durée (minutes)')
                                     ->numeric()
-                                    ->required()
-                                    ->default(60)
+                                    ->nullable()
                                     ->minValue(5)
                                     ->step(5)
-                                    ->suffix('min'),
+                                    ->suffix('min')
+                                    ->helperText('Laisser vide pour utiliser la durée par défaut du type'),
                                 TextInput::make('offset_days')
                                     ->label('Décalage (jours)')
                                     ->numeric()
                                     ->default(0)
                                     ->minValue(0)
-                                    ->helperText('Jours avant/après le début de production'),
+                                    ->helperText('Jours après le début de production'),
                                 Toggle::make('skip_weekends')
                                     ->label('Ignorer week-ends')
                                     ->default(true)
@@ -74,9 +77,9 @@ class TaskTemplateForm
                             ->defaultItems(0)
                             ->reorderableWithButtons()
                             ->orderColumn('sort_order')
-                            ->itemLabel(fn (array $state): string => $state['name'] ?? 'Nouvelle tâche'),
+                            ->itemLabel(fn (array $state): string => $state['production_task_type_id'] ? (ProductionTaskType::find($state['production_task_type_id'])?->name ?? 'Nouvelle tâche') : 'Nouvelle tâche'),
                     ])
-                    ->description('Définissez les tâches à exécuter pour chaque production utilisant ce modèle.')
+                    ->description('Sélectionnez les types de tâches à exécuter pour chaque production utilisant ce modèle.')
                     ->columnSpanFull(),
             ]);
     }
