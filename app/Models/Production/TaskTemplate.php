@@ -46,6 +46,11 @@ class TaskTemplate extends Model
             ->orderByPivot('sort_order');
     }
 
+    public function taskTemplateTaskTypes(): HasMany
+    {
+        return $this->hasMany(TaskTemplateTaskType::class)->orderBy('sort_order');
+    }
+
     public function productionTasks(): HasManyThrough
     {
         return $this->hasManyThrough(

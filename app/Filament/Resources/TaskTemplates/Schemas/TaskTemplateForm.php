@@ -38,13 +38,13 @@ class TaskTemplateForm
 
                 Section::make('Tâches')
                     ->schema([
-                        Repeater::make('taskTypes')
+                        Repeater::make('taskTemplateTaskTypes')
                             ->hiddenLabel()
-                            ->relationship('taskTypes')
+                            ->relationship('taskTemplateTaskTypes')
                             ->schema([
-                                Select::make('id')
+                                Select::make('production_task_type_id')
                                     ->label('Type de tâche')
-                                    ->options(fn () => ProductionTaskType::pluck('name', 'id'))
+                                    ->relationship('taskType', 'name')
                                     ->searchable()
                                     ->preload()
                                     ->required()
@@ -86,10 +86,10 @@ class TaskTemplateForm
                             ->reorderableWithButtons()
                             ->orderColumn('sort_order')
                             ->itemLabel(function (array $state): string {
-                                if (empty($state['id'])) {
+                                if (empty($state['production_task_type_id'])) {
                                     return 'Nouvelle tâche';
                                 }
-                                $type = ProductionTaskType::find($state['id']);
+                                $type = ProductionTaskType::find($state['production_task_type_id']);
 
                                 return $type ? $type->name : 'Nouvelle tâche';
                             }),
