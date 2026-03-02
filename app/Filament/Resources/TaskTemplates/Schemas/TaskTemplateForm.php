@@ -40,10 +40,7 @@ class TaskTemplateForm
                     ->schema([
                         Repeater::make('taskTypes')
                             ->hiddenLabel()
-                            ->relationship(
-                                'taskTypes',
-                                fn ($query) => $query->orderByPivot('sort_order')
-                            )
+                            ->relationship('taskTypes')
                             ->schema([
                                 Select::make('id')
                                     ->label('Type de tâche')
