@@ -20,7 +20,7 @@ class FlashSimulationService
     /**
      * @param  array<int, array{product_id: int|string|null, desired_units?: int|float|string|null, units?: int|float|string|null, batch_size_preset_id?: int|string|null}>  $lines
      * @return array{
-     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_preset_name: string|null, duration_per_batch_minutes: int, total_duration_minutes: int}>,
+     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_preset_name: string|null, duration_per_batch_minutes: int, total_duration_minutes: int, tasks: array<int, array{name: string, duration_minutes: int}>}>,
      *     ingredient_totals: \Illuminate\Support\Collection<int, array{ingredient_id: int, ingredient_name: string, required_quantity: float, base_unit: string, unit_price: float, estimated_cost: float}>,
      *     warnings: \Illuminate\Support\Collection<int, string>,
      *     totals: array{products_count: int, total_units: float|int, total_desired_units: float|int, total_produced_units: float|int, total_extra_units: float|int, total_batches: int, total_batch_kg: float|int, total_estimated_cost: float|int, total_duration_minutes: int}
@@ -101,7 +101,8 @@ class FlashSimulationService
             $extraUnits = max(0, $producedUnits - (float) $line['desired_units']);
             $oilsWeightKg = round($batchesRequired * $batchSizeKg, 3);
 
-            $durationPerBatch = $this->resolveDurationPerBatch($product->productType?->defaultTaskTemplate());
+            $taskBreakdown = $this->resolveTaskBreakdown($product->productType?->defaultTaskTemplate());
+            $durationPerBatch = $taskBreakdown['total_minutes'];
             $totalDuration = $durationPerBatch * $batchesRequired;
 
             $lineEstimatedCost = 0.0;
@@ -170,6 +171,7 @@ class FlashSimulationService
                 'batch_preset_name' => $batchConfiguration['batch_preset_name'],
                 'duration_per_batch_minutes' => $durationPerBatch,
                 'total_duration_minutes' => $totalDuration,
+                'tasks' => $taskBreakdown['tasks'],
             ]);
         }
 
@@ -260,15 +262,32 @@ class FlashSimulationService
     }
 
     /**
-     * Resolves total duration per batch from task template.
+     * Resolves task breakdown with individual task durations from task template.
+     *
+     * @return array{total_minutes: int, tasks: array<int, array{name: string, duration_minutes: int}>}
      */
-    private function resolveDurationPerBatch(?TaskTemplate $taskTemplate): int
+    private function resolveTaskBreakdown(?TaskTemplate $taskTemplate): array
     {
         if (! $taskTemplate) {
-            return 0;
+            return [
+                'total_minutes' => 0,
+                'tasks' => [],
+            ];
         }
 
-        return (int) $taskTemplate->items()->sum('duration_minutes');
+        $items = $taskTemplate->items()->get();
+
+        $tasks = $items
+            ->map(fn ($item): array => [
+                'name' => $item->name,
+                'duration_minutes' => (int) $item->duration_minutes,
+            ])
+            ->all();
+
+        return [
+            'total_minutes' => (int) $items->sum('duration_minutes'),
+            'tasks' => $tasks,
+        ];
     }
 
     /**
