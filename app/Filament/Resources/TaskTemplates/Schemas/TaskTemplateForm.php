@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\TaskTemplates\Schemas;
 
+use App\Models\Production\ProductionTaskType;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -39,16 +40,23 @@ class TaskTemplateForm
                     ->schema([
                         Repeater::make('taskTypes')
                             ->hiddenLabel()
-                            ->relationship()
+                            ->relationship('taskTypes')
                             ->schema([
                                 Select::make('production_task_type_id')
                                     ->label('Type de tâche')
-                                    ->relationship('taskTypes', 'name')
+                                    ->options(fn () => ProductionTaskType::pluck('name', 'id'))
                                     ->searchable()
                                     ->preload()
                                     ->required()
                                     ->columnSpan(2)
-                                    ->helperText(fn ($state) => $state ? 'Durée par défaut: '.(ProductionTaskType::find($state)?->duration ?? '-').' min' : null),
+                                    ->helperText(function ($state) {
+                                        if (! $state) {
+                                            return null;
+                                        }
+                                        $type = ProductionTaskType::find($state);
+
+                                        return $type ? 'Durée par défaut: '.$type->duration.' min' : null;
+                                    }),
                                 TextInput::make('duration_override')
                                     ->label('Durée (minutes)')
                                     ->numeric()
@@ -77,7 +85,14 @@ class TaskTemplateForm
                             ->defaultItems(0)
                             ->reorderableWithButtons()
                             ->orderColumn('sort_order')
-                            ->itemLabel(fn (array $state): string => $state['production_task_type_id'] ? (ProductionTaskType::find($state['production_task_type_id'])?->name ?? 'Nouvelle tâche') : 'Nouvelle tâche'),
+                            ->itemLabel(function (array $state): string {
+                                if (empty($state['production_task_type_id'])) {
+                                    return 'Nouvelle tâche';
+                                }
+                                $type = ProductionTaskType::find($state['production_task_type_id']);
+
+                                return $type ? $type->name : 'Nouvelle tâche';
+                            }),
                     ])
                     ->description('Sélectionnez les types de tâches à exécuter pour chaque production utilisant ce modèle.')
                     ->columnSpanFull(),
