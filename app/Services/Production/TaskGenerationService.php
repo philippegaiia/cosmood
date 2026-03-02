@@ -378,8 +378,9 @@ class TaskGenerationService
 
     /**
      * Calculates one scheduled date from a start date and day offset.
+     * Skips weekends and holidays when configured.
      */
-    public function calculateScheduledDate($startDate, int $offsetDays, bool $skipWeekends): Carbon
+    public function calculateScheduledDate($startDate, int $offsetDays, bool $skipWeekends, bool $skipHolidays = true): Carbon
     {
         $date = Carbon::parse($startDate)->copy();
 
@@ -393,6 +394,10 @@ class TaskGenerationService
             $date->addDay();
 
             if ($skipWeekends && $date->isWeekend()) {
+                continue;
+            }
+
+            if ($skipHolidays && Holiday::isHoliday($date)) {
                 continue;
             }
 

@@ -20,6 +20,55 @@ Code commenting expectations for critical logic:
   - `app/Observers/ProductionObserver.php`
 - Avoid noisy inline comments; document intent and invariants where a future developer could break business rules.
 
+## Internationalization (i18n) Guidelines
+
+**ALWAYS use translation functions** for all user-facing strings to ensure the application can be translated in the future:
+
+```php
+// In PHP code (Filament forms, tables, validation messages)
+->label(__('Date'))
+->helperText(__('Laisser vide pour utiliser la valeur par défaut'))
+
+// In Blade templates
+<h1>{{ __('Welcome') }}</h1>
+
+// With parameters
+__('Hello :name', ['name' => $user->name])
+```
+
+**Current convention**: Strings are in French but wrapped in `__()` for future translation support.
+
+## Holidays Management System
+
+The application includes a holidays management system for production scheduling:
+
+### Database
+- Table: `holidays` (see migration)
+- Model: `App\Models\Production\Holiday`
+- Fields: `date`, `name`, `is_recurring`, `year`
+
+### Features
+- **Recurring holidays**: Annual holidays like Christmas (stored once, applied every year)
+- **Specific holidays**: One-time holidays for a specific date
+- **Filament Resource**: `HolidayResource` under Settings navigation group
+
+### Scheduling Integration
+Task scheduling automatically skips holidays when calculating production dates:
+- Location: `TaskGenerationService::calculateScheduledDate()`
+- Holidays are checked after weekend checks
+- Method: `Holiday::isHoliday(Carbon $date)`
+
+### Usage Example
+```php
+// Check if a date is a holiday
+if (Holiday::isHoliday($date)) {
+    // Skip this date for scheduling
+}
+
+// Get all holidays in a date range
+$holidays = Holiday::getHolidayDatesBetween($startDate, $endDate);
+```
+
 # Laravel Boost Guidelines
 
 The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.
