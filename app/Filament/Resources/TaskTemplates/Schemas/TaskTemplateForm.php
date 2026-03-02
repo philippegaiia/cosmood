@@ -44,7 +44,7 @@ class TaskTemplateForm
                             ->schema([
                                 Select::make('id')
                                     ->label('Type de tâche')
-                                    ->relationship('taskTypes', 'name')
+                                    ->options(fn () => ProductionTaskType::pluck('name', 'id'))
                                     ->searchable()
                                     ->preload()
                                     ->required()
