@@ -52,9 +52,14 @@ class ProductType extends Model
         return $this->belongsTo(QcTemplate::class);
     }
 
-    public function taskTemplate(): BelongsTo
+    public function taskTemplates(): HasMany
     {
-        return $this->belongsTo(TaskTemplate::class);
+        return $this->hasMany(TaskTemplate::class);
+    }
+
+    public function defaultTaskTemplate(): ?TaskTemplate
+    {
+        return $this->taskTemplates()->where('is_default', true)->first();
     }
 
     public function defaultPreset(): ?BatchSizePreset

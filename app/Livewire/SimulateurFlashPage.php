@@ -12,7 +12,7 @@ use Livewire\Component;
 class SimulateurFlashPage extends Component
 {
     /**
-     * @var array<int, array{line_key: string, product_id: int|null, product_search: string, desired_units: float|int|null, batch_size_preset_id: int|null}>
+     * @var array<int, array{line_key: string, product_id: int|null, desired_units: float|int|null, batch_size_preset_id: int|null}>
      */
     public array $lines = [];
 
@@ -120,10 +120,6 @@ class SimulateurFlashPage extends Component
     {
         [$index, $field] = explode('.', $path, 3) + [null, null];
 
-        if ($field === 'product_search') {
-            return;
-        }
-
         if ($field === 'product_id' && is_numeric($index)) {
             $lineIndex = (int) $index;
             $productId = (int) ($this->lines[$lineIndex]['product_id'] ?? 0);
@@ -131,8 +127,6 @@ class SimulateurFlashPage extends Component
             $this->lines[$lineIndex]['batch_size_preset_id'] = $productId > 0
                 ? ($this->defaultPresetIdByProduct[$productId] ?? null)
                 : null;
-
-            $this->lines[$lineIndex]['product_search'] = '';
         }
 
         $this->recalculate();
@@ -184,36 +178,19 @@ class SimulateurFlashPage extends Component
         return $this->batchPresetOptionsByProduct[$productId] ?? [];
     }
 
-    /**
-     * @return array<int, string>
-     */
-    public function getFilteredProductOptionsForLine(int $lineIndex): array
-    {
-        $search = strtolower(trim((string) ($this->lines[$lineIndex]['product_search'] ?? '')));
-
-        if ($search === '') {
-            return $this->productOptions;
-        }
-
-        return collect($this->productOptions)
-            ->filter(fn (string $label): bool => str_contains(strtolower($label), $search))
-            ->all();
-    }
-
     public function render(): View
     {
         return view('livewire.simulateur-flash-page');
     }
 
     /**
-     * @return array{line_key: string, product_id: int|null, product_search: string, desired_units: float|int|null, batch_size_preset_id: int|null}
+     * @return array{line_key: string, product_id: int|null, desired_units: float|int|null, batch_size_preset_id: int|null}
      */
     private function makeLine(): array
     {
         return [
             'line_key' => (string) Str::uuid(),
             'product_id' => null,
-            'product_search' => '',
             'desired_units' => null,
             'batch_size_preset_id' => null,
         ];

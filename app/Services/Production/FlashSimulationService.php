@@ -49,7 +49,7 @@ class FlashSimulationService
             ->with([
                 'productType:id,name,slug,default_batch_size,expected_units_output',
                 'productType.batchSizePresets',
-                'productType.taskTemplate.items',
+                'productType.taskTemplates.items',
                 'formulas' => fn ($query) => $query
                     ->where('is_active', true)
                     ->with(['formulaItems.ingredient'])
@@ -101,7 +101,7 @@ class FlashSimulationService
             $extraUnits = max(0, $producedUnits - (float) $line['desired_units']);
             $oilsWeightKg = round($batchesRequired * $batchSizeKg, 3);
 
-            $durationPerBatch = $this->resolveDurationPerBatch($product->productType?->taskTemplate);
+            $durationPerBatch = $this->resolveDurationPerBatch($product->productType?->defaultTaskTemplate());
             $totalDuration = $durationPerBatch * $batchesRequired;
 
             $lineEstimatedCost = 0.0;
@@ -166,6 +166,7 @@ class FlashSimulationService
                 'batch_size_kg' => $batchSizeKg,
                 'oils_kg' => $oilsWeightKg,
                 'estimated_cost' => round($lineEstimatedCost, 2),
+                'cost_per_unit' => $producedUnits > 0 ? round($lineEstimatedCost / $producedUnits, 4) : 0,
                 'batch_preset_name' => $batchConfiguration['batch_preset_name'],
                 'duration_per_batch_minutes' => $durationPerBatch,
                 'total_duration_minutes' => $totalDuration,

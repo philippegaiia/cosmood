@@ -13,7 +13,7 @@ it('renders the livewire simulateur flash component', function () {
     Livewire::test(SimulateurFlashPage::class)
         ->assertSuccessful()
         ->assertSee('Simulateur Flash')
-        ->assertSee('Rechercher')
+        ->assertSee('Selectionner un produit')
         ->assertSee('Synthese')
         ->assertSee('Print');
 });

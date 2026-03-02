@@ -1,33 +1,6 @@
 <div id="flash-print-area">
     @once
         <style>
-            .flash-sim-grid {
-                display: grid;
-                grid-template-columns: repeat(12, minmax(0, 1fr));
-                gap: 0.75rem;
-                min-width: 0;
-            }
-
-            .flash-col-1 {
-                grid-column: span 1 / span 1;
-                min-width: 0;
-            }
-
-            .flash-col-2 {
-                grid-column: span 2 / span 2;
-                min-width: 0;
-            }
-
-            .flash-col-3 {
-                grid-column: span 3 / span 3;
-                min-width: 0;
-            }
-
-            .flash-col-4 {
-                grid-column: span 4 / span 4;
-                min-width: 0;
-            }
-
             @media print {
                 body * {
                     visibility: hidden !important;
@@ -59,70 +32,56 @@
         <flux:separator />
 
         <div class="overflow-x-auto">
-            <div class="min-w-245 space-y-3">
+            <div class="min-w-[906px] space-y-3">
                 @foreach ($this->lines as $index => $line)
-                <div wire:key="line-{{ $line['line_key'] ?? $index }}" class="flash-sim-grid">
-                    <div class="flash-col-2">
-                        <flux:input
-                            wire:key="search-{{ $line['line_key'] ?? $index }}"
-                            field:class="w-full"
-                            type="search"
-                            placeholder="Rechercher"
-                            wire:model.live.debounce.300ms="lines.{{ $index }}.product_search"
-                        />
-                    </div>
+                <div wire:key="line-{{ $line['line_key'] ?? $index }}" class="flex gap-3">
+                    <flux:select
+                        wire:key="product-select-{{ $line['line_key'] ?? $index }}"
+                        wire:model.live="lines.{{ $index }}.product_id"
+                        class="w-[400px]"
+                        placeholder="Selectionner un produit"
+                    >
+                        <flux:select.option value="">Selectionner un produit</flux:select.option>
+                        @foreach ($this->productOptions as $productId => $label)
+                            <flux:select.option wire:key="product-option-{{ $line['line_key'] ?? $index }}-{{ $productId }}" value="{{ $productId }}">{{ $label }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
 
-                    <div class="flash-col-4">
+                    <flux:input
+                        wire:key="desired-units-{{ $line['line_key'] ?? $index }}"
+                        wire:model.live="lines.{{ $index }}.desired_units"
+                        type="number"
+                        min="0"
+                        step="1"
+                        class="w-[80px]"
+                        placeholder="Qté"
+                    />
+
+                    @if (! empty($line['product_id']))
                         <flux:select
-                            wire:key="product-select-{{ $line['line_key'] ?? $index }}"
-                            field:class="w-full"
-                            class="w-full"
-                            wire:model.live="lines.{{ $index }}.product_id"
-                            placeholder="Selectionner un produit"
+                            wire:key="batch-preset-{{ $line['line_key'] ?? $index }}"
+                            wire:model.live="lines.{{ $index }}.batch_size_preset_id"
+                            class="w-[350px]"
+                            placeholder="Format de batch"
                         >
-                            @foreach ($this->getFilteredProductOptionsForLine($index) as $productId => $label)
-                                <flux:select.option wire:key="product-option-{{ $line['line_key'] ?? $index }}-{{ $productId }}" value="{{ $productId }}">{{ $label }}</flux:select.option>
+                            <flux:select.option value="" disabled>Format de batch</flux:select.option>
+                            @foreach ($this->getBatchPresetOptionsForLine($index) as $presetId => $label)
+                                <flux:select.option wire:key="preset-option-{{ $line['line_key'] ?? $index }}-{{ $presetId }}" value="{{ $presetId }}">{{ $label }}</flux:select.option>
                             @endforeach
                         </flux:select>
-                    </div>
+                    @else
+                        <div class="w-[350px] flex h-10 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-400">
+                            Selectionnez d'abord un produit
+                        </div>
+                    @endif
 
-                    <div class="flash-col-2">
-                        <flux:input
-                            wire:key="desired-units-{{ $line['line_key'] ?? $index }}"
-                            field:class="w-full"
-                            type="number"
-                            min="0"
-                            step="1"
-                            placeholder="Quantite demandee"
-                            wire:model.live="lines.{{ $index }}.desired_units"
-                        />
-                    </div>
-
-                    <div class="flash-col-3">
-                        @if (! empty($line['product_id']))
-                            <flux:select
-                                class="w-full"
-                                field:class="w-full"
-                                wire:model.live="lines.{{ $index }}.batch_size_preset_id"
-                                wire:key="batch-preset-{{ $line['line_key'] ?? $index }}"
-                                placeholder="Format de batch"
-                            >
-                                @foreach ($this->getBatchPresetOptionsForLine($index) as $presetId => $label)
-                                    <flux:select.option wire:key="preset-option-{{ $line['line_key'] ?? $index }}-{{ $presetId }}" value="{{ $presetId }}">{{ $label }}</flux:select.option>
-                                @endforeach
-                            </flux:select>
-                        @else
-                            <div class="flex h-10 w-full items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-400">
-                                Selectionnez d'abord un produit
-                            </div>
-                        @endif
-                    </div>
-
-                    <div class="flash-col-1">
-                        <flux:button variant="danger" wire:click="removeLine({{ $index }})" class="w-full">
-                            -
-                        </flux:button>
-                    </div>
+                    <flux:button
+                        wire:click="removeLine({{ $index }})"
+                        variant="danger"
+                        class="w-[40px]"
+                    >
+                        -
+                    </flux:button>
                 </div>
                 @endforeach
 
@@ -274,7 +233,7 @@
                             <th class="py-2 pr-4">Extra (ligne)</th>
                             <th class="py-2 pr-4">Kg / batch</th>
                             <th class="py-2 pr-4">Poids huiles (kg)</th>
-                            <th class="py-2">Cout estime (EUR)</th>
+                            <th class="py-2">Cout par produit (EUR)</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -289,7 +248,7 @@
                                 <td class="py-2 pr-4">{{ number_format((float) $line['extra_units'], 0, ',', ' ') }}</td>
                                 <td class="py-2 pr-4">{{ number_format((float) $line['batch_size_kg'], 3, ',', ' ') }}</td>
                                 <td class="py-2 pr-4">{{ number_format((float) $line['oils_kg'], 3, ',', ' ') }}</td>
-                                <td class="py-2 font-semibold">{{ number_format((float) $line['estimated_cost'], 2, ',', ' ') }}</td>
+                                <td class="py-2 font-semibold">{{ number_format((float) $line['cost_per_unit'], 4, ',', ' ') }}</td>
                             </tr>
                         @endforeach
                     </tbody>
