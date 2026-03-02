@@ -40,11 +40,14 @@ class TaskTemplateForm
                     ->schema([
                         Repeater::make('taskTypes')
                             ->hiddenLabel()
-                            ->relationship('taskTypes')
+                            ->relationship(
+                                'taskTypes',
+                                fn ($query) => $query->orderByPivot('sort_order')
+                            )
                             ->schema([
-                                Select::make('production_task_type_id')
+                                Select::make('id')
                                     ->label('Type de tâche')
-                                    ->options(fn () => ProductionTaskType::pluck('name', 'id'))
+                                    ->relationship('taskTypes', 'name')
                                     ->searchable()
                                     ->preload()
                                     ->required()
@@ -86,10 +89,10 @@ class TaskTemplateForm
                             ->reorderableWithButtons()
                             ->orderColumn('sort_order')
                             ->itemLabel(function (array $state): string {
-                                if (empty($state['production_task_type_id'])) {
+                                if (empty($state['id'])) {
                                     return 'Nouvelle tâche';
                                 }
-                                $type = ProductionTaskType::find($state['production_task_type_id']);
+                                $type = ProductionTaskType::find($state['id']);
 
                                 return $type ? $type->name : 'Nouvelle tâche';
                             }),
