@@ -5,10 +5,8 @@ namespace App\Filament\Resources\Production\ProductionResource\RelationManagers;
 use App\Models\Production\ProductionTask;
 use App\Services\Production\TaskGenerationService;
 use Filament\Actions\Action;
-use Filament\Actions\CreateAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Textarea;
-use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Support\Icons\Heroicon;
@@ -117,35 +115,9 @@ class ProductionTasksRelationManager extends RelationManager
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
-                CreateAction::make()
-                    ->label('Ajouter tâche manuelle')
-                    ->schema([
-                        TextInput::make('name')
-                            ->label('Nom')
-                            ->required(),
-                        DatePicker::make('scheduled_date')
-                            ->label('Date planifiée')
-                            ->native(false)
-                            ->required(),
-                        TextInput::make('duration_minutes')
-                            ->label('Durée (minutes)')
-                            ->numeric()
-                            ->minValue(5)
-                            ->default(60)
-                            ->required(),
-                        Textarea::make('notes')
-                            ->label('Notes')
-                            ->rows(3),
-                    ])
-                    ->mutateDataUsing(fn (array $data): array => [
-                        ...$data,
-                        'date' => $data['scheduled_date'],
-                        'source' => 'manual',
-                        'is_finished' => false,
-                        'is_manual_schedule' => true,
-                        'sequence_order' => null,
-                    ]),
+                // No manual task creation - all tasks are generated from templates
             ])
+            ->emptyStateDescription(__('Toutes les tâches sont générées automatiquement à partir des modèles de tâches associés au type de produit. Pour ajouter une tâche manquante, configurez un modèle de tâche ou ajoutez une note à la production.'))
             ->recordActions([
                 Action::make('finish')
                     ->label('Terminer')

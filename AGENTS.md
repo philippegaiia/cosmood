@@ -69,6 +69,133 @@ if (Holiday::isHoliday($date)) {
 $holidays = Holiday::getHolidayDatesBetween($startDate, $endDate);
 ```
 
+## Production Date Changes
+
+When a production's `production_date` is changed, tasks are automatically rescheduled:
+
+### Trigger
+- Location: `ProductionObserver::updated()` at line 70-72
+- Condition: `production_date` changed AND status is `Planned`, `Confirmed`, or `Ongoing`
+
+### Behavior
+```php
+// In ProductionObserver
+if ($production->wasChanged('production_date') && in_array($production->status, self::RESCHEDULABLE_STATUSES, true)) {
+    $this->taskGenerationService->rescheduleTasks($production);
+}
+```
+
+### rescheduleTasks() Logic
+Location: `TaskGenerationService::rescheduleTasks()` at line 91-167
+
+1. **Recalculates dates** based on new `production_date` + `offset_days` from task template pivot
+2. **Skips weekends** if `skip_weekends` is true in pivot data
+3. **Skips holidays** using `Holiday::isHoliday()` check
+4. **Respects dependencies** - won't schedule a task before the previous task's scheduled date
+5. **Preserves manual schedules** - tasks with `is_manual_schedule=true` keep their dates (unless `$force=true`)
+6. **Ignores finished/cancelled tasks** - only reschedules pending tasks
+
+### Important Notes
+- Tasks linked to a `production_task_type_id` (from master list) are rescheduled
+- Tasks without a task type ID are skipped
+- The `date` field is updated along with `scheduled_date`
+- Manual schedule flag is cleared when auto-rescheduled
+
+## Lazy Loading Prevention
+
+This application has lazy loading prevention enabled in **non-production environments** to catch N+1 query issues early:
+
+**Configuration:** `AppServiceProvider.php:16`
+```php
+Model::preventLazyLoading(! app()->isProduction());
+```
+
+### What This Means
+- **Development/Local:** Accessing unloaded relationships throws `LazyLoadingViolationException`
+- **Production:** Lazy loading is allowed (but you should still avoid it for performance)
+
+### How to Fix Lazy Loading Violations
+
+**Always eager load relationships using `with()`:**
+
+```php
+// ❌ BAD - Will throw exception in development
+$template->taskTemplateTaskTypes->map(fn ($pivot) => $pivot->taskType->name);
+
+// ✅ GOOD - Eager load nested relationships
+$template->load('taskTemplateTaskTypes.taskType');
+$template->taskTemplateTaskTypes->map(fn ($pivot) => $pivot->taskType->name);
+
+// ✅ ALSO GOOD - Eager load at query time
+TaskTemplate::with('taskTemplateTaskTypes.taskType')->first();
+```
+
+### Common Patterns
+
+**Services returning models:**
+```php
+public function getTaskTemplateForProduction(Production $production): ?TaskTemplate
+{
+    return TaskTemplate::with('taskTemplateTaskTypes.taskType')->first();
+}
+```
+
+**Defensive loading in methods:**
+```php
+public function processTemplate(TaskTemplate $template): void
+{
+    // Ensure relationships are loaded (idempotent - safe to call multiple times)
+    $template->loadMissing('taskTemplateTaskTypes.taskType');
+    
+    // Now safe to access nested relationships
+    foreach ($template->taskTemplateTaskTypes as $pivot) {
+        $name = $pivot->taskType->name;
+    }
+}
+```
+
+### Key Locations
+- `TaskGenerationService::getTaskTemplateForProduction()` - Eager loads template relationships
+- `TaskGenerationService::generateFromTemplate()` - Defensively loads relationships
+- `TaskGenerationService::rescheduleTasks()` - Defensively loads relationships
+
+### Related
+- Always check query logs with `DB::enableQueryLog()` and `DB::getQueryLog()` to verify eager loading
+- Use `->relationLoaded('relationship')` to check if already loaded
+- Use `->loadMissing('relationship')` for conditional loading
+
+## Task Template Pivot Table Structure
+
+The task template system uses a pivot table with an auto-incrementing `id` column for Filament repeater compatibility:
+
+### Table: `task_template_task_type`
+- `id` - Auto-incrementing primary key (required for Filament repeaters)
+- `task_template_id` - Foreign key to task_templates
+- `production_task_type_id` - Foreign key to production_task_types
+- `sort_order` - Display order
+- `offset_days` - Days after production start
+- `skip_weekends` - Whether to skip weekends when scheduling
+- `duration_override` - Optional duration override (null = use task type default)
+- `created_at`, `updated_at` - Timestamps
+
+### Why Auto-Incrementing ID?
+Filament's Repeater component requires a single primary key to track existing vs new records. While a composite key (`task_template_id`, `production_task_type_id`) works for database integrity, it doesn't work well with Filament's form handling.
+
+### Model Configuration
+```php
+class TaskTemplateTaskType extends Pivot
+{
+    public $incrementing = true;  // Required for Filament repeaters
+    protected $table = 'task_template_task_type';
+    // ...
+}
+```
+
+### Key Locations
+- Migration: `2026_03_03_061116_add_id_to_task_template_task_type_table.php`
+- Model: `app/Models/Production/TaskTemplateTaskType.php`
+- Form: `app/Filament/Resources/TaskTemplates/Schemas/TaskTemplateForm.php`
+
 # Laravel Boost Guidelines
 
 The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.

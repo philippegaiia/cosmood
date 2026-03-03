@@ -2,6 +2,7 @@
 
 namespace App\Services\Production;
 
+use App\Models\Production\Holiday;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionTask;
@@ -20,6 +21,9 @@ class TaskGenerationService
      */
     public function generateFromTemplate(Production $production, TaskTemplate $template): void
     {
+        // Eager load relationships to prevent lazy loading violations
+        $template->load('taskTemplateTaskTypes.taskType');
+
         // Get existing task type IDs for this production
         $existingTaskTypeIds = $production->productionTasks()
             ->where('source', 'template')
@@ -96,6 +100,9 @@ class TaskGenerationService
         if (! $template) {
             return;
         }
+
+        // Ensure relationships are loaded to prevent lazy loading violations
+        $template->load('taskTemplateTaskTypes.taskType');
 
         // Build lookup of task type pivot data by task type ID
         $taskTypeLookup = $template->taskTemplateTaskTypes
@@ -349,6 +356,7 @@ class TaskGenerationService
 
         $specificTemplate = TaskTemplate::where('product_type_id', $productTypeId)
             ->where('is_default', true)
+            ->with('taskTemplateTaskTypes.taskType')
             ->first();
 
         if ($specificTemplate) {
@@ -357,6 +365,7 @@ class TaskGenerationService
 
         return TaskTemplate::whereNull('product_type_id')
             ->where('is_default', true)
+            ->with('taskTemplateTaskTypes.taskType')
             ->first();
     }
 
