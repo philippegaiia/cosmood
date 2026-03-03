@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\TaskTemplates\Schemas;
 
 use App\Models\Production\ProductionTaskType;
+use App\Models\Production\ProductType;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -28,9 +29,8 @@ class TaskTemplateForm
                             ->schema([
                                 Select::make('id')
                                     ->label(__('Type de produit'))
-                                    ->relationship('productTypes', 'name')
+                                    ->options(ProductType::pluck('name', 'id'))
                                     ->searchable()
-                                    ->preload()
                                     ->required(),
                                 Toggle::make('is_default')
                                     ->label(__('Par défaut'))
