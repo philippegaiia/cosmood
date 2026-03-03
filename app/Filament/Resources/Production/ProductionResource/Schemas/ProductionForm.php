@@ -160,12 +160,11 @@ class ProductionForm
                     ->dehydrated()
                     ->required(),
                 Select::make('product_type_id')
-                    ->label('Type de produit')
+                    ->label(__('Type de produit'))
                     ->relationship('productType', 'name')
-                    ->searchable()
-                    ->preload()
-                    ->live()
-                    ->afterStateUpdated(fn (Set $set, Get $get, ?string $state) => self::handleProductTypeUpdate($set, $get, $state))
+                    ->disabled()
+                    ->dehydrated()
+                    ->helperText(__('Déterminé automatiquement par le produit sélectionné'))
                     ->nullable(),
                 Select::make('batch_size_preset_id')
                     ->label('Préréglage de taille')
