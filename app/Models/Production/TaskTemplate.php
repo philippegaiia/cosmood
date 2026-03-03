@@ -17,21 +17,16 @@ class TaskTemplate extends Model
 
     protected $guarded = [];
 
-    protected function casts(): array
-    {
-        return [
-            'is_default' => 'boolean',
-        ];
-    }
-
     public function productCategory(): BelongsTo
     {
         return $this->belongsTo(ProductCategory::class);
     }
 
-    public function productType(): BelongsTo
+    public function productTypes(): BelongsToMany
     {
-        return $this->belongsTo(ProductType::class);
+        return $this->belongsToMany(ProductType::class, 'product_type_task_template')
+            ->withPivot('is_default')
+            ->withTimestamps();
     }
 
     public function items(): HasMany

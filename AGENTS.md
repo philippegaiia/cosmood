@@ -196,6 +196,50 @@ class TaskTemplateTaskType extends Pivot
 - Model: `app/Models/Production/TaskTemplateTaskType.php`
 - Form: `app/Filament/Resources/TaskTemplates/Schemas/TaskTemplateForm.php`
 
+## Task Templates - Product Type Relationship
+
+Task templates can be shared across multiple product types via a pivot table.
+
+### Architecture
+
+```
+TaskTemplate
+└── BelongsToMany ProductTypes (via product_type_task_template pivot)
+    └── withPivot('is_default')
+
+ProductType
+└── BelongsToMany TaskTemplates (via product_type_task_template pivot)
+    └── withPivot('is_default')
+    └── defaultTaskTemplate() - returns template where is_default=true
+```
+
+### Use Case Example
+
+One task template shared across multiple soap sizes:
+- TaskTemplate: "Standard Soap Workflow"
+  - Mélange, Moulage, Séchage, Conditionnement
+  - Linked to ProductType "Savon 100g" (is_default=true)
+  - Linked to ProductType "Savon 150g" (is_default=true)
+  - Linked to ProductType "Savon 200g" (is_default=true)
+
+Separate QC templates per size (different target values):
+- QC Template: "QC Soap 100g" → ProductType "Savon 100g"
+- QC Template: "QC Soap 150g" → ProductType "Savon 150g"
+
+### Pivot Table Structure
+- `product_type_id` - Foreign key to product_types
+- `task_template_id` - Foreign key to task_templates
+- `is_default` - Boolean, which template to use automatically
+- Timestamps
+
+### Key Locations
+- Migration: `2026_03_03_095123_create_product_type_task_template_pivot_table.php`
+- Models: 
+  - `TaskTemplate::productTypes()` - BelongsToMany relationship
+  - `ProductType::taskTemplates()` - BelongsToMany relationship
+  - `ProductType::defaultTaskTemplate()` - Get default template
+- Service: `TaskGenerationService::getTaskTemplateForProduction()` - Queries via pivot table
+
 # Laravel Boost Guidelines
 
 The Laravel Boost guidelines are specifically curated by Laravel maintainers for this application. These guidelines should be followed closely to ensure the best experience when building Laravel applications.

@@ -16,34 +16,41 @@ class TaskTemplateForm
     {
         return $schema
             ->components([
-                Section::make('Informations générales')
+                Section::make(__('Informations générales'))
                     ->schema([
                         TextInput::make('name')
-                            ->label('Nom')
+                            ->label(__('Nom'))
                             ->required()
                             ->maxLength(255),
-                        Select::make('product_type_id')
-                            ->label('Type de produit')
-                            ->relationship('productType', 'name')
-                            ->searchable()
-                            ->preload()
-                            ->nullable()
-                            ->helperText('Laisser vide pour un modèle global'),
-                        Toggle::make('is_default')
-                            ->label('Modèle par défaut')
-                            ->default(false)
-                            ->helperText('Utilisé automatiquement pour les nouvelles productions'),
+                        Repeater::make('productTypes')
+                            ->label(__('Types de produit'))
+                            ->relationship('productTypes')
+                            ->schema([
+                                Select::make('id')
+                                    ->label(__('Type de produit'))
+                                    ->relationship('productTypes', 'name')
+                                    ->searchable()
+                                    ->preload()
+                                    ->required(),
+                                Toggle::make('is_default')
+                                    ->label(__('Par défaut'))
+                                    ->default(false)
+                                    ->helperText(__('Utilisé automatiquement pour les productions de ce type')),
+                            ])
+                            ->defaultItems(0)
+                            ->reorderable(false)
+                            ->columnSpanFull(),
                     ])
                     ->columnSpan(3),
 
-                Section::make('Tâches')
+                Section::make(__('Tâches'))
                     ->schema([
                         Repeater::make('taskTemplateTaskTypes')
                             ->hiddenLabel()
                             ->relationship('taskTemplateTaskTypes')
                             ->schema([
                                 Select::make('production_task_type_id')
-                                    ->label('Type de tâche')
+                                    ->label(__('Type de tâche'))
                                     ->relationship('taskType', 'name')
                                     ->searchable()
                                     ->preload()
@@ -55,28 +62,28 @@ class TaskTemplateForm
                                         }
                                         $type = ProductionTaskType::find($state);
 
-                                        return $type ? 'Durée par défaut: '.$type->duration.' min' : null;
+                                        return $type ? __('Durée par défaut: :duration min', ['duration' => $type->duration]) : null;
                                     }),
                                 TextInput::make('duration_override')
-                                    ->label('Durée (minutes)')
+                                    ->label(__('Durée (minutes)'))
                                     ->numeric()
                                     ->nullable()
                                     ->minValue(5)
                                     ->step(5)
                                     ->suffix('min')
-                                    ->helperText('Laisser vide pour utiliser la durée par défaut du type'),
+                                    ->helperText(__('Laisser vide pour utiliser la durée par défaut du type')),
                                 TextInput::make('offset_days')
-                                    ->label('Décalage (jours)')
+                                    ->label(__('Décalage (jours)'))
                                     ->numeric()
                                     ->default(0)
                                     ->minValue(0)
-                                    ->helperText('Jours après le début de production'),
+                                    ->helperText(__('Jours après le début de production')),
                                 Toggle::make('skip_weekends')
-                                    ->label('Ignorer week-ends')
+                                    ->label(__('Ignorer week-ends'))
                                     ->default(true)
-                                    ->helperText('Reporter les tâches tombant le week-end'),
+                                    ->helperText(__('Reporter les tâches tombant le week-end')),
                                 TextInput::make('sort_order')
-                                    ->label('Ordre')
+                                    ->label(__('Ordre'))
                                     ->numeric()
                                     ->default(0)
                                     ->hidden(),
@@ -87,14 +94,14 @@ class TaskTemplateForm
                             ->orderColumn('sort_order')
                             ->itemLabel(function (array $state): string {
                                 if (empty($state['production_task_type_id'])) {
-                                    return 'Nouvelle tâche';
+                                    return __('Nouvelle tâche');
                                 }
                                 $type = ProductionTaskType::find($state['production_task_type_id']);
 
-                                return $type ? $type->name : 'Nouvelle tâche';
+                                return $type ? $type->name : __('Nouvelle tâche');
                             }),
                     ])
-                    ->description('Sélectionnez les types de tâches à exécuter pour chaque production utilisant ce modèle.')
+                    ->description(__('Sélectionnez les types de tâches à exécuter pour chaque production utilisant ce modèle.'))
                     ->columnSpanFull(),
             ]);
     }

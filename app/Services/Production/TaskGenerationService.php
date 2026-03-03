@@ -354,8 +354,11 @@ class TaskGenerationService
             return null;
         }
 
-        $specificTemplate = TaskTemplate::where('product_type_id', $productTypeId)
-            ->where('is_default', true)
+        // Get template from pivot table relationship
+        $specificTemplate = TaskTemplate::whereHas('productTypes', function ($query) use ($productTypeId) {
+            $query->where('product_types.id', $productTypeId)
+                ->where('product_type_task_template.is_default', true);
+        })
             ->with('taskTemplateTaskTypes.taskType')
             ->first();
 
@@ -363,8 +366,8 @@ class TaskGenerationService
             return $specificTemplate;
         }
 
-        return TaskTemplate::whereNull('product_type_id')
-            ->where('is_default', true)
+        // Fallback to global default (template not linked to any product type)
+        return TaskTemplate::doesntHave('productTypes')
             ->with('taskTemplateTaskTypes.taskType')
             ->first();
     }

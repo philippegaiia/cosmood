@@ -6,6 +6,7 @@ use App\Enums\SizingMode;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -52,14 +53,16 @@ class ProductType extends Model
         return $this->belongsTo(QcTemplate::class);
     }
 
-    public function taskTemplates(): HasMany
+    public function taskTemplates(): BelongsToMany
     {
-        return $this->hasMany(TaskTemplate::class);
+        return $this->belongsToMany(TaskTemplate::class, 'product_type_task_template')
+            ->withPivot('is_default')
+            ->withTimestamps();
     }
 
     public function defaultTaskTemplate(): ?TaskTemplate
     {
-        return $this->taskTemplates()->where('is_default', true)->first();
+        return $this->taskTemplates()->wherePivot('is_default', true)->first();
     }
 
     public function defaultPreset(): ?BatchSizePreset
