@@ -471,7 +471,7 @@ class ProductionForm
             $set('produced_ingredient_id', $product->produced_ingredient_id);
         }
 
-        $formula = $product->formulas()->first();
+        $formula = $product->defaultFormula() ?? $product->formulas()->first();
         if ($formula) {
             $set('formula_id', $formula->id);
         }
