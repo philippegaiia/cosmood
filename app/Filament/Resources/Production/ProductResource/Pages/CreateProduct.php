@@ -15,5 +15,10 @@ class CreateProduct extends CreateRecord
         if ($defaultFormulaId) {
             $this->record->setDefaultFormula((int) $defaultFormulaId);
         }
+
+        $packagingIds = $this->data['packaging_ids'] ?? [];
+        if (! empty($packagingIds)) {
+            $this->record->syncPackaging($packagingIds);
+        }
     }
 }

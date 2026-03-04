@@ -85,4 +85,13 @@ class Product extends Model
             $this->formulas()->attach($formulaId, ['is_default' => true]);
         }
     }
+
+    public function syncPackaging(array $packagingIds): void
+    {
+        $this->packaging()->detach();
+
+        foreach ($packagingIds as $ingredientId) {
+            $this->packaging()->attach($ingredientId, ['quantity_per_unit' => 1]);
+        }
+    }
 }

@@ -45,6 +45,7 @@ class ProductionCalendarWidget extends CalendarWidget
     {
         // Fetch productions (only Planned and Confirmed)
         $productions = Production::query()
+            ->with(['product'])
             ->whereBetween('production_date', [$info->start, $info->end])
             ->whereIn('status', [ProductionStatus::Planned, ProductionStatus::Confirmed])
             ->get();

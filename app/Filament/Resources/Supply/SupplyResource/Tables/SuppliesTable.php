@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Supply\SupplyResource\Tables;
 
 use App\Models\Supply\Supply;
 use Filament\Actions\ActionGroup;
+use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;

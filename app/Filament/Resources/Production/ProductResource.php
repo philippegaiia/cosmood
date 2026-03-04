@@ -16,7 +16,6 @@ use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\MarkdownEditor;
-use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -143,27 +142,21 @@ class ProductResource extends Resource
                     })
                     ->dehydrated(false),
 
-                // Packaging
-                Repeater::make('productPackagingItems')
+                Select::make('packaging_ids')
                     ->label('Packaging')
-                    ->relationship()
-                    ->schema([
-                        Select::make('ingredient_id')
-                            ->label('Élément de packaging')
-                            ->options(Ingredient::where('is_active', true)->where('is_packaging', true)->pluck('name', 'id'))
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->native(false),
-                        TextInput::make('quantity_per_unit')
-                            ->label('Quantité par unité')
-                            ->numeric()
-                            ->default(1)
-                            ->required(),
-                    ])
-                    ->columns(2)
-                    ->defaultItems(0)
-                    ->addActionLabel('Ajouter un élément de packaging'),
+                    ->multiple()
+                    ->options(Ingredient::where('is_active', true)->where('is_packaging', true)->pluck('name', 'id'))
+                    ->searchable()
+                    ->preload()
+                    ->native(false)
+                    ->helperText('Sélectionnez les éléments de packaging pour ce produit')
+                    ->afterStateHydrated(function (Set $set, ?Product $record): void {
+                        if ($record) {
+                            $packagingIds = $record->packaging()->pluck('ingredients.id')->toArray();
+                            $set('packaging_ids', $packagingIds);
+                        }
+                    })
+                    ->dehydrated(false),
             ]);
     }
 

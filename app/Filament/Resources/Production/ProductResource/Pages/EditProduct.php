@@ -25,5 +25,8 @@ class EditProduct extends EditRecord
     {
         $defaultFormulaId = $this->data['default_formula_id'] ?? null;
         $this->record->setDefaultFormula($defaultFormulaId ? (int) $defaultFormulaId : null);
+
+        $packagingIds = $this->data['packaging_ids'] ?? [];
+        $this->record->syncPackaging($packagingIds);
     }
 }
