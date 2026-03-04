@@ -257,7 +257,7 @@ class SuppliesTable
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),
 
-                    \Filament\Tables\Actions\BulkAction::make('markOutOfStock')
+                    BulkAction::make('markOutOfStock')
                         ->label('Marquer épuisés')
                         ->icon(Heroicon::ArchiveBoxXMark)
                         ->color('danger')

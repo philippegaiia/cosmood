@@ -41,6 +41,7 @@ class Ingredient extends Model
         'is_active',
         'base_unit',
         'is_manufactured',
+        'is_packaging',
         'description',
         'price',
         'stock_min',
