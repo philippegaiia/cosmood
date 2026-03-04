@@ -96,6 +96,10 @@ class IngredientResource extends Resource
                     ->label('Ingrédient fabriqué')
                     ->helperText('Activez pour les ingrédients fabriqués en interne (masterbatch, macérats, etc.)')
                     ->default(false),
+                Toggle::make('is_packaging')
+                    ->label('Packaging')
+                    ->helperText('Activez pour les éléments de packaging (boîtes, étiquettes, etc.)')
+                    ->default(false),
                 Textarea::make('description')
                     ->columnSpanFull(),
             ]);
