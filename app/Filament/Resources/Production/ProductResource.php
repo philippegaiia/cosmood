@@ -175,8 +175,9 @@ class ProductResource extends Resource
                     ->label('Type')
                     ->sortable()
                     ->placeholder('-'),
-                TextColumn::make('defaultFormula.name')
+                TextColumn::make('formula_name')
                     ->label('Formule par défaut')
+                    ->state(fn (Product $record): ?string => $record->defaultFormula()?->name)
                     ->placeholder('-'),
                 TextColumn::make('code')
                     ->searchable(),
@@ -247,6 +248,7 @@ class ProductResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
+            ->with(['formulas'])
             ->withoutGlobalScopes([
                 SoftDeletingScope::class,
             ]);
