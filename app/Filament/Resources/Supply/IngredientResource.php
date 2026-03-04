@@ -18,6 +18,7 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -47,8 +48,16 @@ class IngredientResource extends Resource
                     ->required()
                     ->maxLength(255),
                 TextInput::make('code')
-                    ->required()
-                    ->maxLength(255),
+                    ->label('Code')
+                    ->helperText(__('Généré automatiquement basé sur la catégorie si vide'))
+                    ->maxLength(255)
+                    ->placeholder(fn (Get $get) => self::generateIngredientCodePreview($get('ingredient_category_id')))
+                    ->live()
+                    ->afterStateHydrated(function (TextInput $component, $state, $record) {
+                        if ($record && empty($state)) {
+                            $component->state(self::generateIngredientCode($record->ingredient_category_id));
+                        }
+                    }),
                 Select::make('base_unit')
                     ->label('Unité de base')
                     ->options(IngredientBaseUnit::class)
@@ -199,5 +208,69 @@ class IngredientResource extends Resource
             'create' => CreateIngredient::route('/create'),
             'edit' => EditIngredient::route('/{record}/edit'),
         ];
+    }
+
+    /**
+     * Generate an ingredient code preview based on category.
+     */
+    private static function generateIngredientCodePreview(?int $categoryId): ?string
+    {
+        if (! $categoryId) {
+            return null;
+        }
+
+        $category = \App\Models\Supply\IngredientCategory::query()->find($categoryId);
+
+        if (! $category || empty($category->code)) {
+            return null;
+        }
+
+        $nextSequence = self::getNextSequenceForCategory($category->code);
+
+        return $category->code.str_pad((string) $nextSequence, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Generate an ingredient code based on category.
+     */
+    private static function generateIngredientCode(?int $categoryId): string
+    {
+        if (! $categoryId) {
+            return 'ING'.str_pad((string) (Ingredient::max('id') + 1), 4, '0', STR_PAD_LEFT);
+        }
+
+        $category = \App\Models\Supply\IngredientCategory::query()->find($categoryId);
+
+        if (! $category || empty($category->code)) {
+            return 'ING'.str_pad((string) (Ingredient::max('id') + 1), 4, '0', STR_PAD_LEFT);
+        }
+
+        $nextSequence = self::getNextSequenceForCategory($category->code);
+
+        return $category->code.str_pad((string) $nextSequence, 3, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Get the next sequence number for a category code.
+     */
+    private static function getNextSequenceForCategory(string $categoryCode): int
+    {
+        $maxSequence = Ingredient::query()
+            ->where('code', 'like', $categoryCode.'%')
+            ->get()
+            ->map(function ($ingredient) use ($categoryCode) {
+                // Extract numeric part after category code
+                if (str_starts_with($ingredient->code, $categoryCode)) {
+                    $numericPart = substr($ingredient->code, strlen($categoryCode));
+                    if (is_numeric($numericPart)) {
+                        return (int) $numericPart;
+                    }
+                }
+
+                return 0;
+            })
+            ->max() ?? 0;
+
+        return $maxSequence + 1;
     }
 }

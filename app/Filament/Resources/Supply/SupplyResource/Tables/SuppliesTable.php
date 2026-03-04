@@ -141,6 +141,13 @@ class SuppliesTable
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+
+                TextColumn::make('last_used_at')
+                    ->label('Dernière utilisation')
+                    ->dateTime('d/m/Y')
+                    ->sortable()
+                    ->placeholder('Jamais utilisé')
+                    ->toggleable(),
             ])
             ->filters([
                 TrashedFilter::make(),
@@ -211,6 +218,25 @@ class SuppliesTable
                             $record->save();
                         })
                         ->successNotificationTitle('Ajustement créé'),
+
+                    \Filament\Actions\Action::make('markOutOfStock')
+                        ->label('Marquer épuisé')
+                        ->icon(Heroicon::ArchiveBoxXMark)
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Marquer ce lot comme épuisé?')
+                        ->modalDescription('Cette action marquera le lot comme hors stock. Assurez-vous d\'avoir effectué un ajustement manuel si nécessaire.')
+                        ->visible(fn (Supply $record): bool => $record->is_in_stock)
+                        ->action(function (Supply $record): void {
+                            $record->update(['is_in_stock' => false]);
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Lot marqué comme épuisé')
+                                ->body("Le lot {$record->batch_number} a été marqué comme hors stock.")
+                                ->success()
+                                ->send();
+                        })
+                        ->successNotificationTitle('Lot marqué comme épuisé'),
                 ]),
             ])
             ->groups([
@@ -230,6 +256,30 @@ class SuppliesTable
                     DeleteBulkAction::make(),
                     ForceDeleteBulkAction::make(),
                     RestoreBulkAction::make(),
+
+                    \Filament\Tables\Actions\BulkAction::make('markOutOfStock')
+                        ->label('Marquer épuisés')
+                        ->icon(Heroicon::ArchiveBoxXMark)
+                        ->color('danger')
+                        ->requiresConfirmation()
+                        ->modalHeading('Marquer les lots comme épuisés?')
+                        ->modalDescription('Cette action marquera tous les lots sélectionnés comme hors stock.')
+                        ->action(function (\Illuminate\Support\Collection $records): void {
+                            $count = 0;
+                            foreach ($records as $record) {
+                                if ($record->is_in_stock) {
+                                    $record->update(['is_in_stock' => false]);
+                                    $count++;
+                                }
+                            }
+
+                            \Filament\Notifications\Notification::make()
+                                ->title('Lots marqués comme épuisés')
+                                ->body("{$count} lot(s) ont été marqués comme hors stock.")
+                                ->success()
+                                ->send();
+                        })
+                        ->deselectRecordsAfterCompletion(),
                 ]),
             ])
             ->defaultSort('created_at', 'desc');

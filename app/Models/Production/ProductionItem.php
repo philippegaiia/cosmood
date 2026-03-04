@@ -87,6 +87,66 @@ class ProductionItem extends Model
     }
 
     /**
+     * Get the parent item if this was split.
+     */
+    public function splitParent(): BelongsTo
+    {
+        return $this->belongsTo(ProductionItem::class, 'split_from_item_id');
+    }
+
+    /**
+     * Get the root item if this was split.
+     */
+    public function splitRoot(): BelongsTo
+    {
+        return $this->belongsTo(ProductionItem::class, 'split_root_item_id');
+    }
+
+    /**
+     * Get child items if this was split.
+     */
+    public function splitChildren(): HasMany
+    {
+        return $this->hasMany(ProductionItem::class, 'split_from_item_id');
+    }
+
+    /**
+     * Get sibling items from the same split.
+     */
+    public function splitSiblings(): HasMany
+    {
+        return $this->hasMany(ProductionItem::class, 'split_root_item_id')
+            ->where('id', '!=', $this->id);
+    }
+
+    /**
+     * Check if this item was split from another item.
+     */
+    public function isSplitChild(): bool
+    {
+        return $this->split_from_item_id !== null;
+    }
+
+    /**
+     * Get all items in the split chain.
+     *
+     * @return \Illuminate\Support\Collection<int, ProductionItem>
+     */
+    public function getSplitChain(): \Illuminate\Support\Collection
+    {
+        if ($this->split_root_item_id === null) {
+            return collect([$this])->merge($this->splitChildren);
+        }
+
+        $root = $this->splitRoot;
+
+        return collect([$root])
+            ->merge($root->splitChildren)
+            ->sortBy('sort')
+            ->values();
+    }
+
+    /**
      * Returns the total quantity allocated from all supplies.
      */
     public function getTotalAllocatedQuantity(): float

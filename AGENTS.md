@@ -164,6 +164,43 @@ public function processTemplate(TaskTemplate $template): void
 - Use `->relationLoaded('relationship')` to check if already loaded
 - Use `->loadMissing('relationship')` for conditional loading
 
+## Out-of-Stock Supply Management
+
+Supplies can be marked as "out of stock" to exclude them from calculations while preserving historical traceability.
+
+### Key Fields
+- `supplies.is_in_stock` (boolean) - Controls inclusion in calculations
+- `supplies.last_used_at` (timestamp) - Auto-updated when consumed
+
+### Workflow
+1. Supply empty → Manual adjustment with comment (set qty to 0)
+2. Mark as out-of-stock → "Marquer épuisé" action
+3. Supply excluded from:
+   - Ingredient stock totals
+   - Available supply listings
+   - Allocation dropdowns
+
+### Stock Calculation Logic
+- **Physical Stock**: Sum of `(quantity_in - quantity_out)` for in-stock supplies only
+- **Allocated Stock**: Sum of allocation movements from in-stock supplies
+- **Available Stock**: Physical - Allocated (both filtered by `is_in_stock = true`)
+
+### Double-Entry Accounting
+- **Allocation**: `+quantity` (allocation movement type)
+- **Release**: `-quantity` (allocation movement type) - compensating transaction
+- **Consumption**: `-quantity` (allocation) + `+quantity` (outbound) - two movements
+
+### Database Index
+```sql
+CREATE INDEX idx_supply_movement_type ON supplies_movements(supply_id, movement_type);
+```
+
+### Key Locations
+- `Supply::getAllocatedQuantity()` - Calculates from movements
+- `Ingredient::getTotalAllocatedStock()` - Excludes out-of-stock supplies
+- `ProductionAllocationService::allocate()` - Validates supply is in stock
+- `ProductionAllocationService::consume()` - Updates `last_used_at`
+
 ## Task Template Pivot Table Structure
 
 The task template system uses a pivot table with an auto-incrementing `id` column for Filament repeater compatibility:
@@ -195,6 +232,58 @@ class TaskTemplateTaskType extends Pivot
 - Migration: `2026_03_03_061116_add_id_to_task_template_task_type_table.php`
 - Model: `app/Models/Production/TaskTemplateTaskType.php`
 - Form: `app/Filament/Resources/TaskTemplates/Schemas/TaskTemplateForm.php`
+
+## Code Generation and Naming Conventions
+
+### Formula Codes
+- **Format**: `FRM-XXXX` (e.g., `FRM-0001`, `FRM-0042`)
+- **Uniqueness**: Enforced at database level (`formulas_code_unique` index)
+- **Auto-generation**: New formulas automatically get next available code
+- **Duplication**: When duplicating a formula, a new unique code is auto-generated
+- **Editable**: Formula codes can be modified after creation
+
+**Key Locations:**
+- `FormulaResource::generateUniqueFormulaCode()` - Generates unique codes
+- `FormulaResource::duplicateFormula()` - Auto-generates code on duplication
+- `FormulaResource::form()` - Code field configuration
+
+### Ingredient Codes
+- **Format**: `CATEGORYXXX` (e.g., `EO003`, `OIL042`, `ACT001`)
+- **No dash**: Sequential number is appended directly to category code
+- **Fallback**: `INGXXXX` when no category or category has no code
+- **Auto-generation**: Generated automatically on ingredient creation based on category
+- **Based on**: Ingredient category `code` field
+
+**Examples:**
+- Category "Huiles Essentielles" with code `EO` → Ingredients: `EO001`, `EO002`, `EO003`
+- Category "Actifs" with code `ACT` → Ingredients: `ACT001`, `ACT002`
+- No category → `ING0001`, `ING0002`
+
+**Key Locations:**
+- `Ingredient::generateUniqueCode()` - Model method for code generation
+- `Ingredient::boot()` - Auto-generates code on create if empty
+- `IngredientResource::generateIngredientCodePreview()` - Shows preview in form
+
+### Ingredient Category Codes
+- **Required**: Cannot create a category without a code
+- **Unique**: Enforced at database level (`ingredient_categories_code_unique` index)
+- **Usage**: Used as prefix for ingredient codes
+- **Format**: Short uppercase code (e.g., `EO`, `OIL`, `ACT`, `HE`)
+
+**Key Locations:**
+- `IngredientCategoryResource::form()` - Required and unique validation
+- Database unique index on `ingredient_categories.code`
+
+### Supply Batch Numbers
+- **Supplier batch numbers**: Can have duplicates when receiving same lot in different orders
+- **Auto-suffix**: System automatically appends sequential suffix for duplicates
+- **Format**: Original: `ABC123`, Duplicate: `ABC123-1`, Next: `ABC123-2`
+- **Empty batches**: Falls back to `NO-BATCH-YYYYMMDDhhmmss`
+- **Display**: Supplier batch is written on the bottle
+
+**Key Locations:**
+- `InventoryMovementService::generateUniqueBatchNumber()` - Handles duplicate detection and suffix generation
+- `InventoryMovementService::receiveOrderItemIntoStock()` - Applies unique batch number on supply creation
 
 ## Task Templates - Product Type Relationship
 

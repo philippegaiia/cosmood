@@ -73,8 +73,8 @@ class FormulaResource extends Resource
 
                         TextInput::make('code')
                             ->maxLength(20)
-                            ->disabledOn('edit')
                             ->unique(Formula::class)
+                            ->default(fn () => self::generateUniqueFormulaCode())
                             ->required(fn (string $operation): bool => $operation === 'create'),
 
                         Select::make('product_id')
@@ -424,6 +424,22 @@ class FormulaResource extends Resource
         return $isSoap;
     }
 
+    /**
+     * Generate a unique formula code in format FRM-XXXX.
+     */
+    private static function generateUniqueFormulaCode(): string
+    {
+        $maxSerial = Formula::withTrashed()
+            ->where('code', 'like', 'FRM-%')
+            ->get()
+            ->map(fn ($f) => (int) str_replace('FRM-', '', $f->code))
+            ->max() ?? 0;
+
+        $nextSerial = $maxSerial + 1;
+
+        return 'FRM-'.str_pad((string) $nextSerial, 4, '0', STR_PAD_LEFT);
+    }
+
     public static function makeDuplicateAction(): Action
     {
         return Action::make('duplicate')
@@ -442,7 +458,7 @@ class FormulaResource extends Resource
             $duplicate = $record->replicate();
             $duplicate->name = $record->name.' (copie)';
             $duplicate->slug = null;
-            $duplicate->code = null;
+            $duplicate->code = self::generateUniqueFormulaCode();
             $duplicate->save();
 
             $record->formulaItems()

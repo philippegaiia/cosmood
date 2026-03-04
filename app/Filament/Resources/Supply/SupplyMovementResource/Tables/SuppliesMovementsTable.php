@@ -76,7 +76,7 @@ class SuppliesMovementsTable
                     ->label('Production')
                     ->placeholder('-')
                     ->url(fn (SuppliesMovement $record): ?string => $record->production_id
-                        ? route('filament.admin.resources.productions.view', ['record' => $record->production_id])
+                        ? route('filament.admin.resources.production.productions.view', ['record' => $record->production_id])
                         : null)
                     ->sortable(),
 

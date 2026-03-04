@@ -238,17 +238,17 @@ class EditProduction extends EditRecord
     {
         return [
             Action::make('exportPdf')
-                ->label('Exporter PDF production')
+                ->label('PDF production')
                 ->icon(Heroicon::OutlinedDocumentArrowDown)
                 ->url(fn (): string => route('productions.sheet-pdf', $this->record))
                 ->openUrlInNewTab(),
             Action::make('printSheet')
-                ->label('Imprimer fiche de production')
+                ->label('Fiche de production')
                 ->icon(Heroicon::OutlinedPrinter)
                 ->url(fn (): string => route('productions.print-sheet', $this->record))
                 ->openUrlInNewTab(),
             Action::make('followSheet')
-                ->label('Fiche de suivi')
+                ->label('Fiche suivi')
                 ->icon(Heroicon::OutlinedDocumentText)
                 ->url(fn (): string => route('productions.follow-sheet', $this->record))
                 ->openUrlInNewTab(),

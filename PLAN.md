@@ -145,6 +145,8 @@ replaces_phase (nullable) -- for MB formulas
 #### supplies ADD
 ```
 allocated_quantity (default 0)
+is_in_stock (boolean, default true)
+last_used_at (timestamp, nullable)
 ```
 
 #### supplier_order_items ADD
@@ -260,7 +262,9 @@ tests/Feature/
 | 12. Task Templates | Resource + tests | ✅ Done |
 | 13. Task Generation | Service + tests | ✅ Done |
 | 14. Packaging | Requirements + tests | ✅ Done |
-| 15. Polish | UI/UX, validation | 🔲 Remaining |
+| 15. Polish | UI/UX, validation | ✅ Done
+16. Out-of-Stock Handling | Supply lifecycle management | ✅ Done |
+17. Code Generation | Formula, ingredient, supply batch auto-codes | ✅ Done |
 
 ---
 
@@ -273,6 +277,13 @@ tests/Feature/
 5. **Packaging**: Tracked as separate requirements (units, not kg)
 6. **Weekend Handling**: Skip weekends for task scheduling
 7. **Auth**: Single panel, Filament Shield later
+8. **Out-of-Stock Handling**: Supplies marked as out-of-stock are excluded from calculations and allocation
+9. **Stock Calculation**: Double-entry accounting with compensating transactions (positive allocation, negative release)
+10. **Last Used Tracking**: Timestamp updated when supply is consumed in production
+11. **Formula Codes**: Unique, auto-generated on creation (`FRM-XXXX`), editable after creation
+12. **Ingredient Codes**: Auto-generated from category code (`CATEGORYXXX` format, e.g., `EO003`)
+13. **Category Codes**: Required and unique, used as prefix for ingredient codes
+14. **Supply Batch Numbers**: Auto-suffix added for duplicates (`ABC123` → `ABC123-1`)
 
 ---
 
@@ -286,3 +297,10 @@ tests/Feature/
 - [ ] Masterbatch selection collapses oils in UI, expands in PDF
 - [ ] Orphan productions work independently
 - [ ] All core workflows have feature tests
+- [ ] Out-of-stock supplies excluded from calculations and allocation
+- [ ] Manual supply adjustment workflow with comments
+- [ ] Stock movements maintain complete audit trail with compensating transactions
+- [ ] Formula codes auto-generated and unique (`FRM-XXXX`)
+- [ ] Ingredient codes auto-generated from category (`CATEGORYXXX`)
+- [ ] Category codes required and unique
+- [ ] Supply batch numbers handle duplicates with auto-suffix

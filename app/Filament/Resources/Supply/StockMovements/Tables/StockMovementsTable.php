@@ -32,12 +32,13 @@ class StockMovementsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
-                'supply.supplierListing.ingredient',
-                'supply.supplierListing.supplier',
-                'production',
-                'user',
-            ]))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->with([
+                    'supply.supplierListing.ingredient',
+                    'supply.supplierListing.supplier',
+                    'production',
+                    'user',
+                ]))
             ->columns([
                 TextColumn::make('moved_at')
                     ->label('Date')
@@ -57,9 +58,16 @@ class StockMovementsTable
                 TextColumn::make('movement_type')
                     ->label('Type')
                     ->badge()
+                    ->formatStateUsing(fn (SuppliesMovement $record): string => match ($record->movement_type) {
+                        'entry', 'reception' => 'Entrée',
+                        'allocation' => $record->quantity >= 0 ? 'Réservation (+)' : 'Réservation (-)',
+                        'consumption', 'use' => 'Consommation',
+                        'adjustment', 'correction' => 'Ajustement',
+                        default => $record->movement_type,
+                    })
                     ->color(fn (SuppliesMovement $record): string => match ($record->movement_type) {
                         'entry', 'reception' => 'success',
-                        'allocation', 'reserve' => 'warning',
+                        'allocation' => $record->quantity >= 0 ? 'warning' : 'info',
                         'consumption', 'use' => 'info',
                         'adjustment', 'correction' => 'gray',
                         default => 'gray',
@@ -78,7 +86,7 @@ class StockMovementsTable
                     ->label('Production')
                     ->placeholder('-')
                     ->url(fn (SuppliesMovement $record): ?string => $record->production_id
-                        ? route('filament.admin.resources.productions.view', ['record' => $record->production_id])
+                        ? route('filament.admin.resources.production.productions.view', ['record' => $record->production_id])
                         : null)
                     ->sortable(),
 

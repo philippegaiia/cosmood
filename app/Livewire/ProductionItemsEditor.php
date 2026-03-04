@@ -12,12 +12,14 @@ use App\Models\Supply\Supply;
 use App\Services\Production\IngredientQuantityCalculator;
 use App\Services\Production\MasterbatchService;
 use App\Services\Production\ProductionAllocationService;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class ProductionItemsEditor extends Component
@@ -46,6 +48,8 @@ class ProductionItemsEditor extends Component
     public ?array $masterbatchInfo = null;
 
     public array $collapsedItems = [];
+
+    private array $availableSuppliesCache = [];
 
     private IngredientQuantityCalculator $calculator;
 
@@ -192,18 +196,30 @@ class ProductionItemsEditor extends Component
             return collect();
         }
 
-        $ingredient = Ingredient::find($this->editingItem['ingredient_id']);
+        $ingredientId = $this->editingItem['ingredient_id'];
+
+        // Check cache
+        if (isset($this->availableSuppliesCache[$ingredientId])) {
+            return $this->availableSuppliesCache[$ingredientId];
+        }
+
+        $ingredient = Ingredient::find($ingredientId);
         if (! $ingredient) {
             return collect();
         }
 
-        return $this->allocationService->getAvailableSupplies($ingredient)
+        $supplies = $this->allocationService->getAvailableSupplies($ingredient)
             ->map(fn ($supply): array => array_merge($supply, [
                 'unit' => 'kg',
                 'supplier_name' => $this->formatSupplierName($supply['id']),
                 'delivery_date' => $supply['delivery_date'],
                 'wave_name' => null,
             ]));
+
+        // Cache results
+        $this->availableSuppliesCache[$ingredientId] = $supplies;
+
+        return $supplies;
     }
 
     private function formatSupplierName(int $supplyId): string
@@ -445,6 +461,8 @@ class ProductionItemsEditor extends Component
             'organic' => $this->editingItem['organic'] ?? false,
             'required_quantity' => $this->calculateQuantity($this->editingItem),
             'sort' => $this->editingIndex ?? count($this->items),
+            'supply_id' => $this->editingItem['supply_id'] ?? null,
+            'is_supplied' => ! empty($this->editingItem['supply_id']),
         ];
 
         $savedItem = null;
@@ -469,6 +487,26 @@ class ProductionItemsEditor extends Component
         $this->allocationService->releaseAll($item);
 
         if ($newSupplyId === null) {
+            // Deallocation - check if it's a split item that should be merged
+            if ($item->isSplitChild()) {
+                Notification::make()
+                    ->title('Désallocation')
+                    ->body('Cet item est un item divisé. Voulez-vous le fusionner avec l\'item parent ?')
+                    ->warning()
+                    ->actions([
+                        Action::make('merge')
+                            ->label('Fusionner avec parent')
+                            ->button()
+                            ->color('primary')
+                            ->dispatch('mergeSplitItem', ['index' => $this->editingIndex]),
+                        Action::make('keep')
+                            ->label('Garder séparé')
+                            ->close(),
+                    ])
+                    ->persistent()
+                    ->send();
+            }
+
             return;
         }
 
@@ -481,20 +519,188 @@ class ProductionItemsEditor extends Component
         try {
             $allocation = $this->allocationService->allocate($item, $supply);
 
-            if ($allocation->quantity < $item->required_quantity) {
+            $requiredQty = $item->required_quantity ?? $item->getCalculatedQuantityKg();
+
+            if ($allocation->quantity < $requiredQty) {
+                $shortage = round($requiredQty - $allocation->quantity, 3);
+
+                // Clear cache for this ingredient
+                unset($this->availableSuppliesCache[$item->ingredient_id]);
+
                 Notification::make()
                     ->title('Allocation partielle')
                     ->body(sprintf(
-                        'Stock insuffisant. Alloué %.3f kg sur %.3f kg requis.',
+                        'Stock insuffisant. Alloué %.3f kg sur %.3f kg requis (manque: %.3f kg).',
                         (float) $allocation->quantity,
-                        (float) $item->required_quantity,
+                        $requiredQty,
+                        $shortage,
                     ))
                     ->warning()
+                    ->actions([
+                        Action::make('split')
+                            ->label('Créer item pour le reste')
+                            ->button()
+                            ->color('primary')
+                            ->dispatch('createSplitForItem', ['index' => $this->editingIndex]),
+                        Action::make('dismiss')
+                            ->label('Ignorer')
+                            ->close(),
+                    ])
+                    ->persistent()
                     ->send();
             }
         } catch (\InvalidArgumentException $e) {
             Notification::make()
                 ->title('Erreur d\'allocation')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    #[On('createSplitForItem')]
+    public function createSplitForItem(int $index): void
+    {
+        if (! isset($this->items[$index])) {
+            return;
+        }
+
+        $item = ProductionItem::find($this->items[$index]['id']);
+
+        if (! $item) {
+            return;
+        }
+
+        try {
+            $newItem = $this->allocationService->createSplitItem($item);
+
+            // Clear supply cache for this ingredient
+            unset($this->availableSuppliesCache[$item->ingredient_id]);
+
+            // Reload items
+            $production = Production::find($this->productionId);
+            $this->loadItems($production);
+
+            // Find new item and open edit modal
+            $newIndex = collect($this->items)->search(fn ($i) => $i['id'] === $newItem->id);
+
+            Notification::make()
+                ->title('Item divisé')
+                ->body(sprintf(
+                    'Nouvel item créé avec coefficient %.5f.',
+                    $newItem->percentage_of_oils,
+                ))
+                ->success()
+                ->send();
+
+            if ($newIndex !== false) {
+                $this->editItem($newIndex);
+            }
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur lors de la division')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    #[On('mergeSplitItem')]
+    public function mergeSplitItem(int $index): void
+    {
+        if (! isset($this->items[$index])) {
+            return;
+        }
+
+        $item = ProductionItem::find($this->items[$index]['id']);
+
+        if (! $item) {
+            return;
+        }
+
+        try {
+            $parentItem = $this->allocationService->mergeSplitItem($item);
+
+            // Clear supply cache
+            unset($this->availableSuppliesCache[$item->ingredient_id]);
+
+            // Reload items
+            $production = Production::find($this->productionId);
+            $this->loadItems($production);
+
+            Notification::make()
+                ->title('Item fusionné')
+                ->body(sprintf(
+                    'Item fusionné avec parent. Nouveau coefficient: %.5f.',
+                    $parentItem->percentage_of_oils,
+                ))
+                ->success()
+                ->send();
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur lors de la fusion')
+                ->body($e->getMessage())
+                ->danger()
+                ->send();
+        }
+    }
+
+    public function deallocateItem(int $index): void
+    {
+        if (! isset($this->items[$index])) {
+            return;
+        }
+
+        $item = ProductionItem::find($this->items[$index]['id']);
+
+        if (! $item) {
+            return;
+        }
+
+        try {
+            $this->allocationService->releaseAll($item);
+
+            // Clear supply cache for this ingredient
+            unset($this->availableSuppliesCache[$item->ingredient_id]);
+
+            // Update item to remove supply reference
+            $item->update([
+                'supply_id' => null,
+                'is_supplied' => false,
+            ]);
+
+            // Check if it's a split item and offer to merge
+            if ($item->isSplitChild()) {
+                Notification::make()
+                    ->title('Item désalloué')
+                    ->body('Cet item est un item divisé. Voulez-vous le fusionner avec l\'item parent ?')
+                    ->success()
+                    ->actions([
+                        Action::make('merge')
+                            ->label('Fusionner avec parent')
+                            ->button()
+                            ->color('primary')
+                            ->dispatch('mergeSplitItem', ['index' => $index]),
+                        Action::make('keep')
+                            ->label('Garder séparé')
+                            ->close(),
+                    ])
+                    ->persistent()
+                    ->send();
+            } else {
+                Notification::make()
+                    ->title('Item désalloué')
+                    ->body('L\'item a été désalloué avec succès.')
+                    ->success()
+                    ->send();
+            }
+
+            // Reload items
+            $production = Production::find($this->productionId);
+            $this->loadItems($production);
+        } catch (\Exception $e) {
+            Notification::make()
+                ->title('Erreur lors de la désallocation')
                 ->body($e->getMessage())
                 ->danger()
                 ->send();

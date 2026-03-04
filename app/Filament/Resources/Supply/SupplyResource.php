@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Supply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
+use App\Filament\Resources\Supply\SupplyResource\RelationManagers;
 use App\Filament\Resources\Supply\SupplyResource\Tables\SuppliesTable;
 use App\Models\Supply\Supply;
 use Filament\Forms\Components\DatePicker;
@@ -84,7 +85,7 @@ class SupplyResource extends Resource
                     ->columns([
                         'default' => 1,
                         'md' => 2,
-                        'xl' => 4,
+                        'xl' => 5,
                     ])
                     ->schema([
                         TextInput::make('initial_quantity')
@@ -96,6 +97,17 @@ class SupplyResource extends Resource
                         TextInput::make('quantity_out')
                             ->label('Qté consommée')
                             ->numeric(),
+                        TextInput::make('allocated_quantity_display')
+                            ->label('Qté réservée')
+                            ->numeric()
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->afterStateHydrated(function (TextInput $component, $state, $record) {
+                                if ($record) {
+                                    $component->state($record->getAllocatedQuantity());
+                                }
+                            })
+                            ->helperText(__('Quantité réservée pour les productions en cours (calculée automatiquement)')),
                         ToggleButtons::make('is_in_stock')
                             ->label('En stock')
                             ->inline(false)
@@ -138,7 +150,7 @@ class SupplyResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            RelationManagers\StockMovementsRelationManager::make(),
         ];
     }
 

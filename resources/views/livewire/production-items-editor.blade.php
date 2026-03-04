@@ -33,6 +33,7 @@
             <flux:callout.text>Cliquez sur "Ajouter un item" pour commencer.</flux:callout.text>
         </flux:callout>
     @else
+        @php $renderedGroups = []; @endphp
         <div class="space-y-3">
             @foreach($items as $index => $item)
                 @php
@@ -43,12 +44,38 @@
                     $isPartial = $allocationStatus === App\Enums\AllocationStatus::Partial;
                 @endphp
 
-                <flux:card class="hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors">
+                @php
+                    $isSplitChild = !empty($item['split_from_item_id']);
+                    $splitGroupId = $item['split_root_item_id'] ?? $item['id'];
+                @endphp
+
+                @if($isSplitChild && !isset($renderedGroups[$splitGroupId]))
+                    @php $renderedGroups[$splitGroupId] = true; @endphp
+                    <div class="border-l-4 border-blue-500 pl-4 space-y-3 mb-3">
+                        <div class="flex items-center gap-2">
+                            <flux:badge color="info" size="sm">
+                                Items divisés
+                            </flux:badge>
+                        </div>
+                @endif
+
+                <flux:card class="hover:border-zinc-400 dark:hover:border-zinc-600 transition-colors {{ $isSplitChild ? 'ml-4' : '' }}">
                     <div class="flex items-start justify-between gap-4">
                         <div class="flex-1 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                             <div>
                                 <flux:text class="text-xs text-zinc-500">Ingrédient</flux:text>
-                                <flux:text class="font-medium">{{ $item['ingredient_name'] ?? '-' }}</flux:text>
+                                <div class="flex items-center gap-2">
+                                    <flux:text class="font-medium">{{ $item['ingredient_name'] ?? '-' }}</flux:text>
+                                    @if($isSplitChild)
+                                        <flux:badge color="info" size="sm">
+                                            @if($item['split_root_item_id'] == $item['split_from_item_id'])
+                                                Divisé depuis #{{ $item['split_from_item_id'] }}
+                                            @else
+                                                Divisé (branche)
+                                            @endif
+                                        </flux:badge>
+                                    @endif
+                                </div>
                             </div>
                             <div>
                                 <flux:text class="text-xs text-zinc-500">Phase</flux:text>
@@ -99,6 +126,11 @@
                                     <flux:menu.item wire:click="editItem({{ $index }})" icon="pencil-square">
                                         Modifier
                                     </flux:menu.item>
+                                    @if($hasAllocation)
+                                        <flux:menu.item wire:click="deallocateItem({{ $index }})" wire:confirm="Désallouer cet item ?" icon="x-mark" color="warning">
+                                            Désallouer
+                                        </flux:menu.item>
+                                    @endif
                                     <flux:menu.separator />
                                     <flux:menu.item wire:click="removeItem({{ $index }})" wire:confirm="Supprimer cet item ?" icon="trash" color="danger">
                                         Supprimer
@@ -122,6 +154,16 @@
                         @endif
                     </div>
                 </flux:card>
+
+                @php
+                    // Close split group if this is the last item of the group
+                    $nextItem = $items[$index + 1] ?? null;
+                    $isLastInGroup = !$nextItem || ($nextItem['split_root_item_id'] ?? $nextItem['id']) !== $splitGroupId;
+                @endphp
+
+                @if($isSplitChild && $isLastInGroup)
+                    </div>
+                @endif
             @endforeach
         </div>
     @endif

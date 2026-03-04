@@ -28,6 +28,7 @@ class Supply extends Model
             'expiry_date' => 'date',
             'delivery_date' => 'date',
             'is_in_stock' => 'boolean',
+            'last_used_at' => 'datetime',
         ];
     }
 
@@ -51,16 +52,46 @@ class Supply extends Model
         return $this->hasMany(ProductionItemAllocation::class);
     }
 
+    /**
+     * Get all stock movements for this supply.
+     */
     public function movements(): HasMany
     {
         return $this->hasMany(SuppliesMovement::class);
     }
 
+    /**
+     * Calculate allocated quantity from stock movements.
+     *
+     * Uses double-entry accounting: sums all allocation movements (positive for reservations,
+     * negative for releases). This ensures accurate tracking even when supplies are marked
+     * as out-of-stock.
+     *
+     * @return float The net allocated quantity (can be negative if more releases than allocations)
+     */
+    public function getAllocatedQuantity(): float
+    {
+        return $this->movements()
+            ->where('movement_type', 'allocation')
+            ->sum('quantity');
+    }
+
+    /**
+     * Calculate available quantity for allocation.
+     *
+     * Available = (quantity_in + initial_quantity) - quantity_out - allocated_quantity
+     *
+     * Note: This calculation does NOT check is_in_stock. The is_in_stock flag is used
+     * at the query/filter level to exclude supplies from availability lists.
+     *
+     * @return float Available quantity (never negative)
+     */
     public function getAvailableQuantity(): float
     {
         $stockIn = $this->quantity_in ?? $this->initial_quantity ?? 0;
+        $allocated = $this->getAllocatedQuantity();
 
-        return max(0, $stockIn - ($this->quantity_out ?? 0) - ($this->allocated_quantity ?? 0));
+        return max(0, $stockIn - ($this->quantity_out ?? 0) - $allocated);
     }
 
     public function getTotalQuantity(): float

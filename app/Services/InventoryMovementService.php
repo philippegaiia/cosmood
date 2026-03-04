@@ -35,11 +35,13 @@ class InventoryMovementService
                 throw new \InvalidArgumentException('Supplier order item quantity must be greater than zero.');
             }
 
+            $batchNumber = $this->generateUniqueBatchNumber($lockedItem->batch_number);
+
             $supply = Supply::query()->create([
                 'supplier_order_item_id' => $lockedItem->id,
                 'supplier_listing_id' => $lockedItem->supplier_listing_id,
                 'order_ref' => $orderRef,
-                'batch_number' => $lockedItem->batch_number,
+                'batch_number' => $batchNumber,
                 'unit_price' => $lockedItem->unit_price,
                 'initial_quantity' => $totalQuantity,
                 'quantity_in' => $totalQuantity,
@@ -167,6 +169,79 @@ class InventoryMovementService
         ]);
     }
 
+    /**
+     * Records an allocation movement when stock is reserved for production.
+     *
+     * This creates an audit trail for reservations made via ProductionAllocationService.
+     */
+    public function recordAllocation(Supply $supply, Production $production, float $quantityKg, ?string $reason = null): SuppliesMovement
+    {
+        return SuppliesMovement::query()->create([
+            'supply_id' => $supply->id,
+            'supplier_order_item_id' => $supply->supplier_order_item_id,
+            'production_id' => $production->id,
+            'user_id' => null,
+            'movement_type' => 'allocation',
+            'quantity' => $quantityKg,
+            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
+            'reason' => $reason ?? 'Reserved for production',
+            'meta' => [
+                'production_batch' => $production->getLotIdentifier(),
+                'supply_batch' => $supply->batch_number,
+            ],
+            'moved_at' => now(),
+        ]);
+    }
+
+    /**
+     * Records a release movement (negative allocation) when stock reservation is cancelled.
+     *
+     * This creates a compensating transaction instead of deleting the original allocation.
+     */
+    public function recordRelease(Supply $supply, Production $production, float $quantityKg, ?string $reason = null): SuppliesMovement
+    {
+        // Eager load supplierListing to prevent lazy loading violation
+        $supply->loadMissing('supplierListing');
+
+        return SuppliesMovement::query()->create([
+            'supply_id' => $supply->id,
+            'supplier_order_item_id' => $supply->supplier_order_item_id,
+            'production_id' => $production->id,
+            'user_id' => null,
+            'movement_type' => 'allocation',
+            'quantity' => -$quantityKg,
+            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
+            'reason' => $reason ?? 'Released from production',
+            'meta' => [
+                'production_batch' => $production->getLotIdentifier(),
+                'supply_batch' => $supply->batch_number,
+            ],
+            'moved_at' => now(),
+        ]);
+    }
+
+    /**
+     * @deprecated Use recordRelease() instead to create compensating transactions
+     */
+    public function deleteAllocationsForProductionItem(Production $production, Supply $supply, float $quantity): void
+    {
+        // Create compensating negative movement instead of deleting
+        $this->recordRelease($supply, $production, $quantity);
+    }
+
+    /**
+     * Deletes all allocation movements for a production.
+     *
+     * Used when cancelling productions.
+     */
+    public function deleteAllAllocationsForProduction(Production $production): void
+    {
+        SuppliesMovement::query()
+            ->where('production_id', $production->id)
+            ->where('movement_type', 'allocation')
+            ->delete();
+    }
+
     private function resolveOrderItemStockQuantity(SupplierOrderItem $item): float
     {
         $quantity = (float) ($item->quantity ?? 0);
@@ -174,5 +249,39 @@ class InventoryMovementService
         $unitMultiplier = $unitWeight > 0 ? $unitWeight : 1;
 
         return round($quantity * $unitMultiplier, 3);
+    }
+
+    /**
+     * Generate a unique batch number by appending a sequential suffix if the original already exists.
+     *
+     * For example, if "ABC123" exists, returns "ABC123-1". If "ABC123-1" also exists, returns "ABC123-2", etc.
+     */
+    private function generateUniqueBatchNumber(?string $originalBatchNumber): string
+    {
+        if (empty($originalBatchNumber)) {
+            return 'NO-BATCH-'.now()->format('YmdHis');
+        }
+
+        // Check if the original batch number exists
+        if (! Supply::query()->where('batch_number', $originalBatchNumber)->exists()) {
+            return $originalBatchNumber;
+        }
+
+        // Find the next available suffix
+        $counter = 1;
+        $baseBatchNumber = $originalBatchNumber;
+
+        // Check if the original already has a suffix pattern and extract the base
+        if (preg_match('/^(.+)-(\d+)$/', $originalBatchNumber, $matches)) {
+            $baseBatchNumber = $matches[1];
+            $counter = (int) $matches[2] + 1;
+        }
+
+        // Find the next available suffix
+        while (Supply::query()->where('batch_number', $baseBatchNumber.'-'.$counter)->exists()) {
+            $counter++;
+        }
+
+        return $baseBatchNumber.'-'.$counter;
     }
 }

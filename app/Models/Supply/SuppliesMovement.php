@@ -7,10 +7,12 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SuppliesMovement extends Model
 {
     use HasFactory;
+    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -20,6 +22,7 @@ class SuppliesMovement extends Model
             'quantity' => 'decimal:3',
             'meta' => 'array',
             'moved_at' => 'datetime',
+            'deleted_at' => 'datetime',
         ];
     }
 

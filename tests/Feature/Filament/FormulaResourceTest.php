@@ -194,7 +194,8 @@ describe('FormulaResource list table actions', function () {
 
         expect($duplicate)->not->toBeNull()
             ->and($duplicate->name)->toBe('Savon Doux (copie)')
-            ->and($duplicate->code)->toBeNull()
+            ->and($duplicate->code)->not->toBeNull()
+            ->and($duplicate->code)->toStartWith('FRM-')
             ->and($duplicate->slug)->toBeNull()
             ->and($duplicate->is_soap)->toBeTrue();
 

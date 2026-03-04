@@ -143,10 +143,30 @@ class IngredientStockTable
                     ->falseLabel('Rupture')
                     ->queries(
                         true: fn (Builder $query) => $query->whereHas('supplier_listings.supplies', fn ($q) => $q
+                            ->where('is_in_stock', true)
                             ->whereRaw('COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0) > 0')),
                         false: fn (Builder $query) => $query->whereDoesntHave('supplier_listings.supplies', fn ($q) => $q
+                            ->where('is_in_stock', true)
                             ->whereRaw('COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0) > 0')),
                     ),
+
+                SelectFilter::make('has_out_of_stock_lots')
+                    ->label('Lots épuisés')
+                    ->options([
+                        'yes' => 'Avec lots épuisés',
+                        'no' => 'Tous les lots actifs',
+                    ])
+                    ->query(function (Builder $query, array $data): Builder {
+                        return $query->when(
+                            $data['value'] === 'yes',
+                            fn (Builder $query) => $query->whereHas('supplier_listings.supplies',
+                                fn ($q) => $q->where('is_in_stock', false))
+                        )->when(
+                            $data['value'] === 'no',
+                            fn (Builder $query) => $query->whereDoesntHave('supplier_listings.supplies',
+                                fn ($q) => $q->where('is_in_stock', false))
+                        );
+                    }),
 
                 TernaryFilter::make('stock_alert')
                     ->label('Alerte stock')
@@ -156,17 +176,19 @@ class IngredientStockTable
                     ->queries(
                         true: fn (Builder $query) => $query
                             ->where('stock_min', '>', 0)
-                            ->whereRaw('(SELECT COALESCE(SUM(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)), 0) 
+                            ->whereRaw('(SELECT COALESCE(SUM(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0)), 0) 
                                        FROM supplies s 
                                        JOIN supplier_listings sl ON s.supplier_listing_id = sl.id 
-                                       WHERE sl.ingredient_id = ingredients.id) <= stock_min'),
+                                       WHERE sl.ingredient_id = ingredients.id 
+                                       AND s.is_in_stock = 1) <= stock_min'),
                         false: fn (Builder $query) => $query
                             ->where(function ($q) {
                                 $q->where('stock_min', '<=', 0)
-                                    ->orWhereRaw('(SELECT COALESCE(SUM(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)), 0) 
+                                    ->orWhereRaw('(SELECT COALESCE(SUM(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0)), 0) 
                                                 FROM supplies s 
                                                 JOIN supplier_listings sl ON s.supplier_listing_id = sl.id 
-                                                WHERE sl.ingredient_id = ingredients.id) > stock_min');
+                                                WHERE sl.ingredient_id = ingredients.id 
+                                                AND s.is_in_stock = 1) > stock_min');
                             }),
                     ),
             ])

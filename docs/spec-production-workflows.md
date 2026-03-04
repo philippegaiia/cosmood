@@ -156,6 +156,44 @@ Recompute behavior:
   - allocated quantity,
   - available to allocate.
 
+## Out-of-Stock Supply Management
+
+### Overview
+
+Supplies can be marked as "out of stock" (`is_in_stock = false`) to exclude them from active calculations while preserving historical traceability.
+
+### Workflow
+
+1. **Supply Empty Detection**: Operator notices supply is empty during production
+2. **Manual Adjustment**: Create adjustment movement with comment (e.g., "Empty, remaining 12g adjusted")
+3. **Mark as Out-of-Stock**: Click "Marquer épuisé" action on supply row
+4. **Automatic Exclusion**: Supply is immediately excluded from:
+   - Ingredient stock calculations
+   - Available supply listings
+   - Allocation dropdowns
+
+### Data Integrity
+
+- **Historical Allocations**: Preserved for traceability (production items maintain supply link)
+- **Stock Movements**: All movements remain in audit trail
+- **Ingredient Totals**: Only in-stock supplies counted in ingredient-level aggregations
+
+### UI Features
+
+- **Last Used Date**: Automatically updated when supply is consumed in production
+- **Bulk Actions**: Mark multiple supplies as out-of-stock simultaneously
+- **Filters**: View ingredients with out-of-stock lots
+- **Validation**: Cannot allocate from out-of-stock supplies (error message displayed)
+
+### Technical Implementation
+
+- **Stock Calculation**: `allocated_quantity` calculated from movement sum (not cached field)
+- **Double-Entry Accounting**: 
+  - Reservation: `+quantity` (allocation movement)
+  - Release: `-quantity` (allocation movement) 
+  - Consumption: `-quantity` (allocation) + `+quantity` (outbound movement)
+- **Index**: Composite index on `supplies_movements(supply_id, movement_type)` for performance
+
 ## Commenting Hotspots
 
 When changing production workflow logic, keep concise PHPDoc current in:
