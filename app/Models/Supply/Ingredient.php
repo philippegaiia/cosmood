@@ -56,6 +56,7 @@ class Ingredient extends Model
             'stock_min' => 'decimal:3',
             'base_unit' => IngredientBaseUnit::class,
             'is_manufactured' => 'boolean',
+            'is_packaging' => 'boolean',
         ];
     }
 

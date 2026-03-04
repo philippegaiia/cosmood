@@ -6,6 +6,7 @@ use App\Models\Supply\Ingredient;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -39,9 +40,24 @@ class Product extends Model
         return $this->belongsTo(Ingredient::class, 'produced_ingredient_id');
     }
 
-    public function formulas(): HasMany
+    public function formulas(): BelongsToMany
     {
-        return $this->hasMany(Formula::class);
+        return $this->belongsToMany(Formula::class, 'formula_product')
+            ->withPivot('is_default')
+            ->withTimestamps();
+    }
+
+    public function defaultFormula(): ?Formula
+    {
+        return $this->formulas()->wherePivot('is_default', true)->first();
+    }
+
+    public function packaging(): BelongsToMany
+    {
+        return $this->belongsToMany(Ingredient::class, 'product_packaging')
+            ->withPivot('quantity_per_unit', 'sort')
+            ->withTimestamps()
+            ->where('ingredients.is_packaging', true);
     }
 
     public function productions(): HasMany

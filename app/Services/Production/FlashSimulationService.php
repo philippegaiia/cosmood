@@ -200,9 +200,18 @@ class FlashSimulationService
 
     /**
      * Resolves the active formula to use for simulation.
+     * Uses the default formula if available, otherwise first formula with items.
      */
     private function resolveFormula(Product $product): ?Formula
     {
+        // First try to get the default formula
+        $defaultFormula = $product->defaultFormula();
+
+        if ($defaultFormula && $defaultFormula->formulaItems->isNotEmpty()) {
+            return $defaultFormula;
+        }
+
+        // Fallback to first formula with items
         $activeFormula = $product->formulas
             ->first(fn (Formula $formula): bool => $formula->formulaItems->isNotEmpty());
 

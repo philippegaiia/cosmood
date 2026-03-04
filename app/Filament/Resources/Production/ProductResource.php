@@ -5,8 +5,10 @@ namespace App\Filament\Resources\Production;
 use App\Filament\Resources\Production\ProductResource\Pages\CreateProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\ListProducts;
+use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\ProductType;
+use App\Models\Supply\Ingredient;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -15,6 +17,7 @@ use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\MarkdownEditor;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -119,6 +122,48 @@ class ProductResource extends Resource
                     ->onColor('success')
                     ->offColor('warning')
                     ->required(),
+
+                // Formules associées
+                Repeater::make('formulas')
+                    ->label('Formules')
+                    ->relationship()
+                    ->schema([
+                        Select::make('formula_id')
+                            ->label('Formule')
+                            ->options(Formula::where('is_active', true)->pluck('name', 'id'))
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->native(false),
+                        Toggle::make('is_default')
+                            ->label('Formule par défaut')
+                            ->helperText('Cette formule sera utilisée par défaut pour les productions'),
+                    ])
+                    ->columns(2)
+                    ->defaultItems(0)
+                    ->addActionLabel('Ajouter une formule'),
+
+                // Packaging
+                Repeater::make('packaging')
+                    ->label('Packaging')
+                    ->relationship()
+                    ->schema([
+                        Select::make('ingredient_id')
+                            ->label('Élément de packaging')
+                            ->options(Ingredient::where('is_active', true)->where('is_packaging', true)->pluck('name', 'id'))
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->native(false),
+                        TextInput::make('quantity_per_unit')
+                            ->label('Quantité par unité')
+                            ->numeric()
+                            ->default(1)
+                            ->required(),
+                    ])
+                    ->columns(2)
+                    ->defaultItems(0)
+                    ->addActionLabel('Ajouter un élément de packaging'),
             ]);
     }
 

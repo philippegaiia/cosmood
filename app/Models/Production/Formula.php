@@ -4,7 +4,7 @@ namespace App\Models\Production;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -29,9 +29,16 @@ class Formula extends Model
         return $this->hasMany(FormulaItem::class);
     }
 
-    public function product(): BelongsTo
+    public function products(): BelongsToMany
     {
-        return $this->belongsTo(Product::class)->withDefault();
+        return $this->belongsToMany(Product::class, 'formula_product')
+            ->withPivot('is_default')
+            ->withTimestamps();
+    }
+
+    public function defaultProduct(): ?Product
+    {
+        return $this->products()->wherePivot('is_default', true)->first();
     }
 
     public function productions(): HasMany

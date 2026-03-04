@@ -77,13 +77,6 @@ class FormulaResource extends Resource
                             ->default(fn () => self::generateUniqueFormulaCode())
                             ->required(fn (string $operation): bool => $operation === 'create'),
 
-                        Select::make('product_id')
-                            ->relationship('product', 'name')
-                            ->options(Product::all()->pluck('name', 'id'))
-                            ->preload()
-                            ->searchable()
-                            ->required(),
-
                         TextInput::make('dip_number')
                             ->maxLength(50),
 
@@ -109,6 +102,28 @@ class FormulaResource extends Resource
                             ])
                             ->collapsed()
                             ->columnSpanFull(),
+
+                        Section::make('Produits associés')
+                            ->columnSpanFull()
+                            ->schema([
+                                Repeater::make('products')
+                                    ->relationship()
+                                    ->schema([
+                                        Select::make('product_id')
+                                            ->label('Produit')
+                                            ->options(Product::all()->pluck('name', 'id'))
+                                            ->searchable()
+                                            ->preload()
+                                            ->required()
+                                            ->native(false),
+                                        Toggle::make('is_default')
+                                            ->label('Formule par défaut')
+                                            ->helperText('Cette formule sera utilisée par défaut pour ce produit'),
+                                    ])
+                                    ->columns(2)
+                                    ->defaultItems(0)
+                                    ->addActionLabel('Ajouter un produit'),
+                            ]),
 
                     ]),
                 Section::make('Composition')
@@ -461,6 +476,7 @@ class FormulaResource extends Resource
             $duplicate->code = self::generateUniqueFormulaCode();
             $duplicate->save();
 
+            // Duplicate formula items
             $record->formulaItems()
                 ->orderBy('sort')
                 ->get()
@@ -468,6 +484,15 @@ class FormulaResource extends Resource
                     $itemDuplicate = $item->replicate();
                     $itemDuplicate->formula_id = $duplicate->id;
                     $itemDuplicate->save();
+                });
+
+            // Duplicate product relationships
+            $record->products()
+                ->get()
+                ->each(function (Product $product) use ($duplicate): void {
+                    $duplicate->products()->attach($product->id, [
+                        'is_default' => $product->pivot->is_default,
+                    ]);
                 });
 
             return $duplicate;
