@@ -145,7 +145,7 @@ class ProductResource extends Resource
                 Select::make('packaging_ids')
                     ->label('Packaging')
                     ->multiple()
-                    ->options(Ingredient::where('is_active', true)->where('is_packaging', true)->pluck('name', 'id'))
+                    ->options(Ingredient::where('is_packaging', true)->pluck('name', 'id'))
                     ->searchable()
                     ->preload()
                     ->native(false)
