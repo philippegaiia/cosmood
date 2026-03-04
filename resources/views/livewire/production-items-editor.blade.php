@@ -202,9 +202,9 @@
                         type="number" 
                         step="0.001" 
                         min="0" 
-                        @if(!empty($editingItem['ingredient_id']) && $this->isQuantityPerUnit($editingItem)) readonly @endif
+                        @if(!empty($editingItem['ingredient_id']) && $this->isQuantityPerUnit($editingItem) && $editingIndex !== null && !empty($items[$editingIndex]['id'])) readonly @endif
                     />
-                    @if(!empty($editingItem['ingredient_id']) && $this->isQuantityPerUnit($editingItem))
+                    @if(!empty($editingItem['ingredient_id']) && $this->isQuantityPerUnit($editingItem) && $editingIndex !== null && !empty($items[$editingIndex]['id']))
                         <flux:text class="text-xs text-zinc-500 mt-1">Valeur déterminée par l'ingrédient</flux:text>
                     @endif
                 </div>
