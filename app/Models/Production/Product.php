@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Product extends Model
 {
@@ -79,11 +80,20 @@ class Product extends Model
 
     public function setDefaultFormula(?int $formulaId): void
     {
-        $this->formulas()->detach();
+        DB::transaction(function () use ($formulaId): void {
+            // Clear all existing defaults for this product
+            $this->formulas()->updateExistingPivot(
+                $this->formulas()->pluck('formulas.id')->toArray(),
+                ['is_default' => false]
+            );
 
-        if ($formulaId) {
-            $this->formulas()->attach($formulaId, ['is_default' => true]);
-        }
+            // Set new default (attach if not exists, update if exists)
+            if ($formulaId) {
+                $this->formulas()->syncWithoutDetaching([
+                    $formulaId => ['is_default' => true],
+                ]);
+            }
+        });
     }
 
     public function syncPackaging(array $packagingIds): void
