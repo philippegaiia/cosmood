@@ -124,7 +124,7 @@ class ProductResource extends Resource
                     ->required(),
 
                 // Formules associées
-                Repeater::make('formulas')
+                Repeater::make('productFormulas')
                     ->label('Formules')
                     ->relationship()
                     ->schema([
@@ -144,7 +144,7 @@ class ProductResource extends Resource
                     ->addActionLabel('Ajouter une formule'),
 
                 // Packaging
-                Repeater::make('packaging')
+                Repeater::make('productPackagingItems')
                     ->label('Packaging')
                     ->relationship()
                     ->schema([

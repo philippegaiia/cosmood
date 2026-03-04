@@ -32,8 +32,14 @@ class Formula extends Model
     public function products(): BelongsToMany
     {
         return $this->belongsToMany(Product::class, 'formula_product')
+            ->using(FormulaProduct::class)
             ->withPivot('is_default')
             ->withTimestamps();
+    }
+
+    public function formulaProducts(): HasMany
+    {
+        return $this->hasMany(FormulaProduct::class);
     }
 
     public function defaultProduct(): ?Product

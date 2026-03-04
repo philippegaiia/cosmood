@@ -43,8 +43,14 @@ class Product extends Model
     public function formulas(): BelongsToMany
     {
         return $this->belongsToMany(Formula::class, 'formula_product')
+            ->using(FormulaProduct::class)
             ->withPivot('is_default')
             ->withTimestamps();
+    }
+
+    public function productFormulas(): HasMany
+    {
+        return $this->hasMany(FormulaProduct::class);
     }
 
     public function defaultFormula(): ?Formula
@@ -55,9 +61,15 @@ class Product extends Model
     public function packaging(): BelongsToMany
     {
         return $this->belongsToMany(Ingredient::class, 'product_packaging')
+            ->using(ProductPackaging::class)
             ->withPivot('quantity_per_unit', 'sort')
             ->withTimestamps()
             ->where('ingredients.is_packaging', true);
+    }
+
+    public function productPackagingItems(): HasMany
+    {
+        return $this->hasMany(ProductPackaging::class);
     }
 
     public function productions(): HasMany
