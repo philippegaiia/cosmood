@@ -8,6 +8,7 @@ use App\Models\Supply\Ingredient;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use InvalidArgumentException;
 
 class FormulaItem extends Model
 {
@@ -19,6 +20,20 @@ class FormulaItem extends Model
         'phase' => Phases::class,
         'calculation_mode' => FormulaItemCalculationMode::class,
     ];
+
+    protected static function boot(): void
+    {
+        parent::boot();
+
+        static::saving(function (FormulaItem $item): void {
+            if ($item->ingredient_id) {
+                $ingredient = Ingredient::find($item->ingredient_id);
+                if ($ingredient && $ingredient->is_packaging) {
+                    throw new InvalidArgumentException('Les ingrédients de packaging ne peuvent pas être ajoutés aux formules. Utilisez la section Packaging du produit.');
+                }
+            }
+        });
+    }
 
     public function formula(): BelongsTo
     {

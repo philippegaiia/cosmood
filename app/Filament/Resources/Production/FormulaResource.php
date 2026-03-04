@@ -186,7 +186,7 @@ class FormulaResource extends Resource
                                     modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query->where('supplier_id', $get('../../supplier_id')),
                                     )*/
                                             ->label('Ingrédient')
-                                            ->options(Ingredient::where('is_active', true)->pluck('name', 'id'))
+                                            ->options(Ingredient::where('is_active', true)->where('is_packaging', false)->pluck('name', 'id'))
                                             ->searchable()
                                             ->preload()
                                             ->required()
