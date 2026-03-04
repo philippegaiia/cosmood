@@ -76,4 +76,13 @@ class Product extends Model
     {
         return $this->hasMany(Production::class);
     }
+
+    public function setDefaultFormula(?int $formulaId): void
+    {
+        $this->formulas()->detach();
+
+        if ($formulaId) {
+            $this->formulas()->attach($formulaId, ['is_default' => true]);
+        }
+    }
 }

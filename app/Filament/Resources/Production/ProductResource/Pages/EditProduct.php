@@ -20,4 +20,10 @@ class EditProduct extends EditRecord
             RestoreAction::make(),
         ];
     }
+
+    protected function afterSave(): void
+    {
+        $defaultFormulaId = $this->data['default_formula_id'] ?? null;
+        $this->record->setDefaultFormula($defaultFormulaId ? (int) $defaultFormulaId : null);
+    }
 }

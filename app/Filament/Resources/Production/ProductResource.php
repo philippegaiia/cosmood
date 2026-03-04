@@ -123,25 +123,20 @@ class ProductResource extends Resource
                     ->offColor('warning')
                     ->required(),
 
-                // Formules associées
-                Repeater::make('productFormulas')
-                    ->label('Formules')
-                    ->relationship()
-                    ->schema([
-                        Select::make('formula_id')
-                            ->label('Formule')
-                            ->options(Formula::where('is_active', true)->pluck('name', 'id'))
-                            ->searchable()
-                            ->preload()
-                            ->required()
-                            ->native(false),
-                        Toggle::make('is_default')
-                            ->label('Formule par défaut')
-                            ->helperText('Cette formule sera utilisée par défaut pour les productions'),
-                    ])
-                    ->columns(2)
-                    ->defaultItems(0)
-                    ->addActionLabel('Ajouter une formule'),
+                Select::make('default_formula_id')
+                    ->label('Formule par défaut')
+                    ->options(Formula::where('is_active', true)->pluck('name', 'id'))
+                    ->searchable()
+                    ->preload()
+                    ->nullable()
+                    ->native(false)
+                    ->helperText('Sélectionnez la formule principale pour ce produit. Laissez vide si aucune formule n\'est encore définie.')
+                    ->afterStateHydrated(function (Set $set, ?Product $record): void {
+                        if ($record) {
+                            $set('default_formula_id', $record->defaultFormula()?->id);
+                        }
+                    })
+                    ->dehydrated(false),
 
                 // Packaging
                 Repeater::make('productPackagingItems')
@@ -180,8 +175,9 @@ class ProductResource extends Resource
                     ->label('Type')
                     ->sortable()
                     ->placeholder('-'),
-                TextColumn::make('formulas.name')
-                    ->badge(),
+                TextColumn::make('defaultFormula.name')
+                    ->label('Formule par défaut')
+                    ->placeholder('-'),
                 TextColumn::make('code')
                     ->searchable(),
                 TextColumn::make('producedIngredient.name')
