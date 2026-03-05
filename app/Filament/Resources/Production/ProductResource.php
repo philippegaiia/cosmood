@@ -20,6 +20,10 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Grid;
+use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -45,118 +49,165 @@ class ProductResource extends Resource
     {
         return $schema
             ->components([
-                Select::make('product_category_id')
-                    ->label('Catégorie')
-                    ->relationship('productCategory', 'name')
-                    ->native(false)
-                    ->live()
-                    ->afterStateUpdated(function (Set $set): void {
-                        $set('product_type_id', null);
-                    })
-                    ->helperText('La catégorie détermine les types disponibles.')
-                    ->required(),
+                Tabs::make('ProductTabs')
+                    ->tabs([
+                        Tab::make('Détails')
+                            ->schema([
+                                Grid::make(3)
+                                    ->schema([
+                                        // Column 1: Classification
+                                        Section::make('Classification')
+                                            ->schema([
+                                                Select::make('product_category_id')
+                                                    ->label('Catégorie')
+                                                    ->relationship('productCategory', 'name')
+                                                    ->native(false)
+                                                    ->live()
+                                                    ->afterStateUpdated(fn (Set $set) => $set('product_type_id', null))
+                                                    ->required(),
 
-                Select::make('product_type_id')
-                    ->label('Type de produit')
-                    ->options(function (Get $get): array {
-                        return self::getProductTypeOptionsForCategory((int) ($get('product_category_id') ?? 0));
-                    })
-                    ->searchable()
-                    ->preload()
-                    ->native(false)
-                    ->placeholder(function (Get $get): string {
-                        if (blank($get('product_category_id'))) {
-                            return 'Choisissez d\'abord une catégorie';
-                        }
+                                                Select::make('product_type_id')
+                                                    ->label('Type de produit')
+                                                    ->options(fn (Get $get): array => self::getProductTypeOptionsForCategory((int) ($get('product_category_id') ?? 0)))
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->native(false)
+                                                    ->placeholder(fn (Get $get): string => blank($get('product_category_id')) ? 'Choisissez d\'abord une catégorie' : 'Sélectionnez un type')
+                                                    ->disabled(fn (Get $get): bool => blank($get('product_category_id')))
+                                                    ->required(),
+                                            ])
+                                            ->columnSpan(1),
 
-                        return 'Sélectionnez un type';
-                    })
-                    ->helperText(function (Get $get): ?string {
-                        $categoryId = (int) ($get('product_category_id') ?? 0);
+                                        // Column 2: Identité
+                                        Section::make('Identité')
+                                            ->schema([
+                                                TextInput::make('name')
+                                                    ->label('Nom')
+                                                    ->required()
+                                                    ->maxLength(255)
+                                                    ->columnSpanFull(),
 
-                        if ($categoryId <= 0) {
-                            return 'Sélectionnez la catégorie avant le type.';
-                        }
+                                                Grid::make(2)
+                                                    ->schema([
+                                                        TextInput::make('code')
+                                                            ->label('Code')
+                                                            ->maxLength(255),
 
-                        if (self::getProductTypeOptionsForCategory($categoryId) === []) {
-                            return 'Aucun type défini pour cette catégorie. Créez-le dans Types de Produit.';
-                        }
+                                                        TextInput::make('wp_code')
+                                                            ->label('Code WP')
+                                                            ->maxLength(255),
+                                                    ]),
+                                            ])
+                                            ->columnSpan(1),
 
-                        return 'Le type pilote les presets de batch et le modèle QC.';
-                    })
-                    ->disabled(fn (Get $get): bool => blank($get('product_category_id')))
-                    ->required(),
+                                        // Column 3: Statut
+                                        Section::make('Statut')
+                                            ->schema([
+                                                Toggle::make('is_active')
+                                                    ->label('Actif')
+                                                    ->onColor('success')
+                                                    ->offColor('warning')
+                                                    ->default(true),
 
-                TextInput::make('name')
-                    ->required()
-                    ->maxLength(255),
-                TextInput::make('code')
-                    ->maxLength(255),
-                TextInput::make('wp_code')
-                    ->maxLength(255),
-                Select::make('produced_ingredient_id')
-                    ->label('Ingrédient fabriqué lié')
-                    ->relationship(
-                        name: 'producedIngredient',
-                        titleAttribute: 'name',
-                        modifyQueryUsing: fn (Builder $query): Builder => $query->where('is_manufactured', true),
-                    )
-                    ->searchable()
-                    ->preload()
-                    ->nullable(),
+                                                DatePicker::make('launch_date')
+                                                    ->label('Date de lancement')
+                                                    ->native(false)
+                                                    ->required(),
+                                            ])
+                                            ->columnSpan(1),
+                                    ]),
 
-                DatePicker::make('launch_date')
-                    ->native(false)
-                    ->required(),
-                TextInput::make('net_weight')
-                    ->required()
-                    ->numeric(),
-                TextInput::make('ean_code')
-                    ->maxLength(255),
-                MarkdownEditor::make('description')
-                    ->maxLength(65535)
-                    ->columnSpanFull(),
-                Toggle::make('is_active')
-                    ->onColor('success')
-                    ->offColor('warning')
-                    ->required(),
+                                Grid::make(3)
+                                    ->schema([
+                                        // Column 1: Formula & Packaging
+                                        Section::make('Formule & Packaging')
+                                            ->schema([
+                                                Select::make('default_formula_id')
+                                                    ->label('Formule par défaut')
+                                                    ->options(function (?Product $record): array {
+                                                        if (! $record) {
+                                                            return [];
+                                                        }
 
-                Select::make('default_formula_id')
-                    ->label('Formule par défaut')
-                    ->options(function (?Product $record): array {
-                        if (! $record) {
-                            return [];
-                        }
+                                                        return $record->formulas()->pluck('formulas.name', 'formulas.id')->toArray();
+                                                    })
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->nullable()
+                                                    ->native(false)
+                                                    ->helperText('Parmi les formules attachées')
+                                                    ->afterStateHydrated(function (Set $set, ?Product $record): void {
+                                                        if ($record) {
+                                                            $set('default_formula_id', $record->defaultFormula()?->id);
+                                                        }
+                                                    })
+                                                    ->dehydrated(false),
 
-                        return $record->formulas()->pluck('formulas.name', 'formulas.id')->toArray();
-                    })
-                    ->searchable()
-                    ->preload()
-                    ->nullable()
-                    ->native(false)
-                    ->helperText('Sélectionnez la formule principale pour ce produit parmi les formules déjà attachées. Laissez vide si aucune formule n\'est encore définie.')
-                    ->afterStateHydrated(function (Set $set, ?Product $record): void {
-                        if ($record) {
-                            $set('default_formula_id', $record->defaultFormula()?->id);
-                        }
-                    })
-                    ->dehydrated(false),
+                                                Select::make('packaging_ids')
+                                                    ->label('Packaging')
+                                                    ->multiple()
+                                                    ->options(Ingredient::where('is_packaging', true)->pluck('name', 'id'))
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->native(false)
+                                                    ->afterStateHydrated(function (Set $set, ?Product $record): void {
+                                                        if ($record) {
+                                                            $packagingIds = $record->packaging()->pluck('ingredients.id')->toArray();
+                                                            $set('packaging_ids', $packagingIds);
+                                                        }
+                                                    })
+                                                    ->dehydrated(false),
+                                            ])
+                                            ->columnSpan(1),
 
-                Select::make('packaging_ids')
-                    ->label('Packaging')
-                    ->multiple()
-                    ->options(Ingredient::where('is_packaging', true)->pluck('name', 'id'))
-                    ->searchable()
-                    ->preload()
-                    ->native(false)
-                    ->helperText('Sélectionnez les éléments de packaging pour ce produit')
-                    ->afterStateHydrated(function (Set $set, ?Product $record): void {
-                        if ($record) {
-                            $packagingIds = $record->packaging()->pluck('ingredients.id')->toArray();
-                            $set('packaging_ids', $packagingIds);
-                        }
-                    })
-                    ->dehydrated(false),
+                                        // Column 2: Poids & Dimensions
+                                        Section::make('Poids & Dimensions')
+                                            ->schema([
+                                                TextInput::make('net_weight')
+                                                    ->label('Poids net (kg)')
+                                                    ->numeric()
+                                                    ->step(0.001)
+                                                    ->required(),
+
+                                                TextInput::make('ean_code')
+                                                    ->label('Code EAN')
+                                                    ->maxLength(255),
+                                            ])
+                                            ->columnSpan(1),
+
+                                        // Column 3: Ingrédient fabriqué
+                                        Section::make('Production')
+                                            ->schema([
+                                                Select::make('produced_ingredient_id')
+                                                    ->label('Ingrédient fabriqué')
+                                                    ->relationship(
+                                                        name: 'producedIngredient',
+                                                        titleAttribute: 'name',
+                                                        modifyQueryUsing: fn (Builder $query): Builder => $query->where('is_manufactured', true),
+                                                    )
+                                                    ->searchable()
+                                                    ->preload()
+                                                    ->nullable()
+                                                    ->helperText('Si ce produit crée un ingrédient'),
+                                            ])
+                                            ->columnSpan(1),
+                                    ]),
+
+                                MarkdownEditor::make('description')
+                                    ->label('Description')
+                                    ->maxLength(65535)
+                                    ->columnSpanFull(),
+                            ]),
+
+                        Tab::make('Productions')
+                            ->schema([
+                                \Filament\Forms\Components\Placeholder::make('productions_info')
+                                    ->label('Productions liées')
+                                    ->content('Les productions de ce produit apparaîtront ici.'),
+                            ])
+                            ->visibleOn('edit'),
+                    ])
+                    ->persistTabInQueryString(),
             ]);
     }
 
