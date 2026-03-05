@@ -32,12 +32,14 @@ Example:
 - `produced_units = 3456`, `extra_units = 256`.
 - `oils_kg = 312`.
 
-## Formula and Ingredients
+## Formula, Ingredients, and Packaging
 
 - Active formula is resolved for selected product.
 - Ingredient totals aggregate formula item requirements against computed oils kg.
 - Unit-based lines (`qty_per_unit`) are excluded from ingredient kg requirement totals.
 - Compatibility fallback: packaging phase and unit-base ingredients are treated as unit-based even when old rows still miss explicit mode.
+- Product packaging (`product_packaging.quantity_per_unit`) is included in totals using `produced_units` as the multiplier.
+- Packaging rows are merged in the same totals table as ingredients and keep their own base unit (`u` or `kg`) for planning and cost estimation.
 
 ## Outputs
 
@@ -50,6 +52,10 @@ Example:
   - total oils kg,
   - estimated cost.
 - Ingredient totals table.
+- Consolidated tasks table (global totals per task name, not per product line), with:
+  - weighted average duration per batch,
+  - cumulative batches,
+  - total duration.
 - Per-product extra summary table.
 - Per-line detail table.
 - Print action (`Print`) to export current simulator view through browser print.

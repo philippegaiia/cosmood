@@ -7,6 +7,7 @@ use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\TaskTemplate;
+use Illuminate\Support\Collection;
 
 /**
  * Computes a non-persistent procurement and cost estimate from product/unit inputs.
@@ -22,6 +23,7 @@ class FlashSimulationService
      * @return array{
      *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_preset_name: string|null, duration_per_batch_minutes: int, total_duration_minutes: int, tasks: array<int, array{name: string, duration_minutes: int}>}>,
      *     ingredient_totals: \Illuminate\Support\Collection<int, array{ingredient_id: int, ingredient_name: string, required_quantity: float, base_unit: string, unit_price: float, estimated_cost: float}>,
+     *     task_totals: \Illuminate\Support\Collection<int, array{name: string, duration_per_batch_minutes: float, average_duration_per_batch_minutes: float, total_duration_minutes: int, batches: int}>,
      *     warnings: \Illuminate\Support\Collection<int, string>,
      *     totals: array{products_count: int, total_units: float|int, total_desired_units: float|int, total_produced_units: float|int, total_extra_units: float|int, total_batches: int, total_batch_kg: float|int, total_estimated_cost: float|int, total_duration_minutes: int}
      * }
@@ -50,6 +52,7 @@ class FlashSimulationService
                 'productType:id,name,slug,default_batch_size,expected_units_output',
                 'productType.batchSizePresets',
                 'productType.taskTemplates.items',
+                'packaging',
                 'formulas' => fn ($query) => $query
                     ->where('is_active', true)
                     ->with(['formulaItems.ingredient'])
@@ -61,6 +64,7 @@ class FlashSimulationService
 
         $productLines = collect();
         $ingredientTotals = collect();
+        $taskTotals = collect();
         $warnings = collect();
 
         foreach ($normalizedLines as $line) {
@@ -132,27 +136,51 @@ class FlashSimulationService
 
                 $lineEstimatedCost += $estimatedCost;
 
-                if (! $ingredientTotals->has($ingredient->id)) {
-                    $ingredientTotals->put($ingredient->id, [
-                        'ingredient_id' => $ingredient->id,
-                        'ingredient_name' => $ingredient->name,
-                        'required_quantity' => 0.0,
-                        'base_unit' => $baseUnit,
-                        'unit_price' => $unitPrice,
-                        'estimated_cost' => 0.0,
-                    ]);
-                }
-
-                $current = $ingredientTotals->get($ingredient->id);
-                $current['required_quantity'] = round((float) $current['required_quantity'] + $requiredQuantity, 3);
-                $current['estimated_cost'] = round((float) $current['estimated_cost'] + $estimatedCost, 2);
-
-                if ((float) $current['unit_price'] <= 0 && $unitPrice > 0) {
-                    $current['unit_price'] = $unitPrice;
-                }
-
-                $ingredientTotals->put($ingredient->id, $current);
+                $this->upsertIngredientTotal(
+                    ingredientTotals: $ingredientTotals,
+                    ingredientId: $ingredient->id,
+                    ingredientName: $ingredient->name,
+                    requiredQuantity: $requiredQuantity,
+                    baseUnit: $baseUnit,
+                    unitPrice: $unitPrice,
+                    estimatedCost: $estimatedCost,
+                );
             }
+
+            foreach ($product->packaging as $packagingIngredient) {
+                $quantityPerUnit = (float) ($packagingIngredient->pivot->quantity_per_unit ?? 0);
+
+                if ($quantityPerUnit <= 0) {
+                    continue;
+                }
+
+                $requiredQuantity = round($producedUnits * $quantityPerUnit, 3);
+
+                if ($requiredQuantity <= 0) {
+                    continue;
+                }
+
+                $baseUnit = $packagingIngredient->base_unit instanceof IngredientBaseUnit
+                    ? $packagingIngredient->base_unit->value
+                    : (string) ($packagingIngredient->base_unit ?? IngredientBaseUnit::Unit->value);
+
+                $unitPrice = (float) ($packagingIngredient->price ?? 0);
+                $estimatedCost = round($requiredQuantity * $unitPrice, 2);
+
+                $lineEstimatedCost += $estimatedCost;
+
+                $this->upsertIngredientTotal(
+                    ingredientTotals: $ingredientTotals,
+                    ingredientId: $packagingIngredient->id,
+                    ingredientName: $packagingIngredient->name,
+                    requiredQuantity: $requiredQuantity,
+                    baseUnit: $baseUnit,
+                    unitPrice: $unitPrice,
+                    estimatedCost: $estimatedCost,
+                );
+            }
+
+            $this->upsertTaskTotals($taskTotals, $taskBreakdown['tasks'], $batchesRequired);
 
             $productLines->push([
                 'product_id' => $product->id,
@@ -180,9 +208,27 @@ class FlashSimulationService
             ->sortByDesc('required_quantity')
             ->values();
 
+        $taskTotals = $taskTotals
+            ->values()
+            ->map(function (array $task): array {
+                $batches = (int) ($task['batches'] ?? 0);
+                $totalDurationMinutes = (int) ($task['total_duration_minutes'] ?? 0);
+                $averageDurationPerBatch = $batches > 0
+                    ? round($totalDurationMinutes / $batches, 2)
+                    : 0.0;
+
+                $task['average_duration_per_batch_minutes'] = $averageDurationPerBatch;
+                $task['duration_per_batch_minutes'] = $averageDurationPerBatch;
+
+                return $task;
+            })
+            ->sortByDesc('total_duration_minutes')
+            ->values();
+
         return [
             'product_lines' => $productLines,
             'ingredient_totals' => $ingredientTotals,
+            'task_totals' => $taskTotals,
             'warnings' => $warnings,
             'totals' => [
                 'products_count' => $productLines->count(),
@@ -300,13 +346,14 @@ class FlashSimulationService
     }
 
     /**
-     * @return array{product_lines: \Illuminate\Support\Collection, ingredient_totals: \Illuminate\Support\Collection, warnings: \Illuminate\Support\Collection, totals: array}
+     * @return array{product_lines: \Illuminate\Support\Collection, ingredient_totals: \Illuminate\Support\Collection, task_totals: \Illuminate\Support\Collection, warnings: \Illuminate\Support\Collection, totals: array}
      */
     private function emptyResult(): array
     {
         return [
             'product_lines' => collect(),
             'ingredient_totals' => collect(),
+            'task_totals' => collect(),
             'warnings' => collect(),
             'totals' => [
                 'products_count' => 0,
@@ -320,5 +367,65 @@ class FlashSimulationService
                 'total_duration_minutes' => 0,
             ],
         ];
+    }
+
+    private function upsertIngredientTotal(
+        Collection $ingredientTotals,
+        int $ingredientId,
+        string $ingredientName,
+        float $requiredQuantity,
+        string $baseUnit,
+        float $unitPrice,
+        float $estimatedCost,
+    ): void {
+        if (! $ingredientTotals->has($ingredientId)) {
+            $ingredientTotals->put($ingredientId, [
+                'ingredient_id' => $ingredientId,
+                'ingredient_name' => $ingredientName,
+                'required_quantity' => 0.0,
+                'base_unit' => $baseUnit,
+                'unit_price' => $unitPrice,
+                'estimated_cost' => 0.0,
+            ]);
+        }
+
+        $current = $ingredientTotals->get($ingredientId);
+        $current['required_quantity'] = round((float) $current['required_quantity'] + $requiredQuantity, 3);
+        $current['estimated_cost'] = round((float) $current['estimated_cost'] + $estimatedCost, 2);
+
+        if ((float) $current['unit_price'] <= 0 && $unitPrice > 0) {
+            $current['unit_price'] = $unitPrice;
+        }
+
+        $ingredientTotals->put($ingredientId, $current);
+    }
+
+    /**
+     * @param  array<int, array{name: string, duration_minutes: int}>  $tasks
+     */
+    private function upsertTaskTotals(Collection $taskTotals, array $tasks, int $batchesRequired): void
+    {
+        foreach ($tasks as $task) {
+            $taskName = (string) ($task['name'] ?? '');
+            $durationMinutes = (int) ($task['duration_minutes'] ?? 0);
+
+            if ($taskName === '' || $durationMinutes <= 0) {
+                continue;
+            }
+
+            if (! $taskTotals->has($taskName)) {
+                $taskTotals->put($taskName, [
+                    'name' => $taskName,
+                    'total_duration_minutes' => 0,
+                    'batches' => 0,
+                ]);
+            }
+
+            $current = $taskTotals->get($taskName);
+            $current['total_duration_minutes'] += $durationMinutes * $batchesRequired;
+            $current['batches'] += $batchesRequired;
+
+            $taskTotals->put($taskName, $current);
+        }
     }
 }

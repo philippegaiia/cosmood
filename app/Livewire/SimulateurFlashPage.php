@@ -47,6 +47,11 @@ class SimulateurFlashPage extends Component
     public array $warnings = [];
 
     /**
+     * @var array<int, array<string, mixed>>
+     */
+    public array $taskTotals = [];
+
+    /**
      * @var array<string, float|int>
      */
     public array $totals = [
@@ -58,6 +63,7 @@ class SimulateurFlashPage extends Component
         'total_batches' => 0,
         'total_batch_kg' => 0,
         'total_estimated_cost' => 0,
+        'total_duration_minutes' => 0,
     ];
 
     public function mount(): void
@@ -160,6 +166,7 @@ class SimulateurFlashPage extends Component
 
         $this->productLines = $result['product_lines']->values()->all();
         $this->ingredientTotals = $result['ingredient_totals']->values()->all();
+        $this->taskTotals = $result['task_totals']->values()->all();
         $this->warnings = $result['warnings']->values()->all();
         $this->totals = $result['totals'];
     }

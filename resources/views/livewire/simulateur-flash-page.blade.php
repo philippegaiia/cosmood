@@ -119,7 +119,7 @@
     <flux:card class="mt-6">
         <flux:heading size="md">Synthese</flux:heading>
         
-        <div class="mt-3 grid gap-3 md:grid-cols-4 lg:grid-cols-7">
+        <div class="mt-3 grid gap-3 md:grid-cols-4 lg:grid-cols-8">
             <div class="rounded-lg border border-zinc-200 p-3">
                 <flux:text size="sm">Produits</flux:text>
                 <div class="text-lg font-semibold">
@@ -168,12 +168,19 @@
                     {{ number_format((float) $this->totals['total_estimated_cost'], 2, ',', ' ') }} EUR
                 </div>
             </div>
+
+            <div class="rounded-lg border border-zinc-200 p-3">
+                <flux:text size="sm">Duree totale</flux:text>
+                <div class="text-lg font-semibold">
+                    {{ number_format((float) ($this->totals['total_duration_minutes'] ?? 0), 0, ',', ' ') }} min
+                </div>
+            </div>
         </div>
     </flux:card>
 
     {{-- Ingredients Table --}}
     <flux:card class="mt-6">
-        <flux:heading size="md">Besoins ingredients (comme si tout est commande)</flux:heading>
+        <flux:heading size="md">Besoins ingredients + packaging (comme si tout est commande)</flux:heading>
         
         <div class="mt-4 overflow-x-auto">
             <table class="min-w-full text-sm">
@@ -329,43 +336,44 @@
             </div>
         </flux:card>
 
-        {{-- Tasks Breakdown --}}
+        {{-- Consolidated Tasks Breakdown --}}
         <flux:card class="mt-6">
-            <flux:heading size="md">Detail des taches par produit</flux:heading>
+            <flux:heading size="md">Consolidation des taches (global)</flux:heading>
             
-            <div class="mt-4 space-y-6">
-                @foreach ($this->productLines as $line)
-                    @if (count($line['tasks']) > 0)
-                        <div class="border-b border-zinc-200 pb-4 last:border-0">
-                            <flux:heading size="sm" class="mb-2">{{ $line['product_name'] }}</flux:heading>
-                            <flux:text size="sm" class="text-zinc-500 mb-3">
-                                Duree totale par batch: {{ $line['duration_per_batch_minutes'] }} min | 
-                                Duree totale ({{ $line['batches_required'] }} batches): {{ $line['total_duration_minutes'] }} min
-                            </flux:text>
-                            
-                            <div class="overflow-x-auto">
-                                <table class="min-w-full text-sm">
-                                    <thead>
-                                        <tr class="border-b border-zinc-200 text-left">
-                                            <th class="py-2 pr-4">Tache</th>
-                                            <th class="py-2 pr-4">Duree / batch</th>
-                                            <th class="py-2">Duree totale</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @foreach ($line['tasks'] as $task)
-                                            <tr class="border-b border-zinc-100">
-                                                <td class="py-2 pr-4">{{ $task['name'] }}</td>
-                                                <td class="py-2 pr-4">{{ $task['duration_minutes'] }} min</td>
-                                                <td class="py-2">{{ $task['duration_minutes'] * $line['batches_required'] }} min</td>
-                                            </tr>
-                                        @endforeach
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    @endif
-                @endforeach
+            <div class="mt-4 overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-zinc-200 text-left">
+                            <th class="py-2 pr-4">Tache</th>
+                            <th class="py-2 pr-4">Duree moyenne / batch</th>
+                            <th class="py-2 pr-4">Batches cumules</th>
+                            <th class="py-2">Duree totale</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($this->taskTotals as $task)
+                            @php
+                                $averageDuration = (float) ($task['average_duration_per_batch_minutes'] ?? 0);
+                                $averageDurationDecimals = fmod($averageDuration, 1.0) === 0.0 ? 0 : 2;
+                            @endphp
+                            <tr class="border-b border-zinc-100">
+                                <td class="py-2 pr-4">{{ $task['name'] }}</td>
+                                <td class="py-2 pr-4">{{ number_format($averageDuration, $averageDurationDecimals, ',', ' ') }} min</td>
+                                <td class="py-2 pr-4">{{ number_format((float) ($task['batches'] ?? 0), 0, ',', ' ') }}</td>
+                                <td class="py-2 font-semibold">
+                                    {{ number_format((float) ($task['total_duration_minutes'] ?? 0), 0, ',', ' ') }} min
+                                    ({{ number_format(((float) ($task['total_duration_minutes'] ?? 0)) / 60, 2, ',', ' ') }} h)
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="4" class="py-3 text-zinc-500">
+                                    Aucune tache consolidee pour le moment.
+                                </td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
             </div>
         </flux:card>
     @endif
