@@ -109,7 +109,7 @@ class StockMovementsTable
 
                 Filter::make('date_range')
                     ->label('Période personnalisée')
-                    ->form([
+                    ->schema([
                         \Filament\Forms\Components\DatePicker::make('from')->label('Du'),
                         \Filament\Forms\Components\DatePicker::make('to')->label('Au'),
                     ])

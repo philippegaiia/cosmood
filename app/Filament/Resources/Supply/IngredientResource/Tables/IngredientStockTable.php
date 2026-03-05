@@ -199,7 +199,11 @@ class IngredientStockTable
                         ->icon(Heroicon::Eye)
                         ->color('gray')
                         ->url(fn (Ingredient $record): string => SupplyResource::getUrl('index', [
-                            'tableFilters[ingredient][value]' => $record->id,
+                            'filters' => [
+                                'ingredient' => [
+                                    'value' => $record->id,
+                                ],
+                            ],
                         ])),
 
                     Action::make('create_order')

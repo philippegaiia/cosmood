@@ -107,7 +107,7 @@ class FormulaResource extends Resource
                             ->columnSpanFull()
                             ->schema([
                                 Repeater::make('formulaProducts')
-                                    ->label('')
+                                    ->hiddenLabel()
                                     ->relationship()
                                     ->schema([
                                         Select::make('product_id')

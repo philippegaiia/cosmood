@@ -52,7 +52,7 @@ class ProductionsRelationManager extends RelationManager
             ->filters([
                 Filter::make('production_date_range')
                     ->label(__('Période'))
-                    ->form([
+                    ->schema([
                         DatePicker::make('from')
                             ->label(__('Du')),
                         DatePicker::make('to')

@@ -12,12 +12,12 @@ use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
-use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Forms\Components\ToggleButtons;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Tabs;
@@ -422,8 +422,9 @@ class ProductionForm
                 Section::make('Gestion des items')
                     ->description('Gérez les ingrédients, phases et lots supply de cette production.')
                     ->schema([
-                        Placeholder::make('items_info')
-                            ->content('Cliquez sur le bouton ci-dessous pour ouvrir l\'éditeur de composition.'),
+                        TextEntry::make('items_info')
+                            ->hiddenLabel()
+                            ->state('Cliquez sur le bouton ci-dessous pour ouvrir l\'éditeur de composition.'),
                     ])
                     ->footer([
                         \Filament\Actions\Action::make('manageItems')

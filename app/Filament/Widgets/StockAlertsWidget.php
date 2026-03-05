@@ -77,7 +77,11 @@ class StockAlertsWidget extends BaseWidget
                     ->icon(Heroicon::Eye)
                     ->color('gray')
                     ->url(fn (Ingredient $record): string => SupplyResource::getUrl('index', [
-                        'tableFilters[ingredient][value]' => $record->id,
+                        'filters' => [
+                            'ingredient' => [
+                                'value' => $record->id,
+                            ],
+                        ],
                     ])),
             ])
             ->emptyStateHeading('Aucune alerte stock')

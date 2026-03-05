@@ -182,7 +182,7 @@ class SuppliesTable
                         ->label('Ajuster')
                         ->icon(Heroicon::AdjustmentsHorizontal)
                         ->color('warning')
-                        ->form([
+                        ->schema([
                             \Filament\Forms\Components\TextInput::make('adjustment_quantity')
                                 ->label('Quantité d\'ajustement')
                                 ->numeric()
