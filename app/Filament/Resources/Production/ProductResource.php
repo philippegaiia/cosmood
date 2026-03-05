@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Production;
 use App\Filament\Resources\Production\ProductResource\Pages\CreateProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\ListProducts;
+use App\Filament\Resources\Production\ProductResource\RelationManagers\ProductionsRelationManager;
 use App\Models\Production\Product;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
@@ -281,7 +282,7 @@ class ProductResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
+            ProductionsRelationManager::class,
         ];
     }
 
