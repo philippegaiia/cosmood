@@ -2,24 +2,28 @@
 
 namespace App\Filament\Resources\Production\ProductResource\Pages;
 
-use App\Filament\Resources\Production\ProductResource;
+use App\Filament\Resources\Production\ProductResource\ProductResource;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Schemas\Components\Tabs\Tab;
-use Filament\Schemas\Schema;
-use Filament\Support\Icons\Heroicon;
 
 class EditProduct extends EditRecord
 {
     protected static string $resource = ProductResource::class;
 
+    public function getTitle(): string
+    {
+        return __('Modifier').' '.$this->record->name;
+    }
+
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make(),
-            ForceDeleteAction::make(),
+            DeleteAction::make()
+                ->visible(fn (): bool => ! $this->record->hasProductionHistory()),
+            ForceDeleteAction::make()
+                ->visible(fn (): bool => ! $this->record->hasProductionHistory()),
             RestoreAction::make(),
         ];
     }
@@ -29,20 +33,9 @@ class EditProduct extends EditRecord
         return true;
     }
 
-    public function getContentTabComponent(): Tab
+    public function getContentTabLabel(): ?string
     {
-        return Tab::make('Détails')
-            ->icon(Heroicon::DocumentText);
-    }
-
-    public function content(Schema $schema): Schema
-    {
-        return $schema
-            ->components([
-                $this->getFormContentComponent()->columnSpanFull(),
-                $this->getRelationManagersContentComponent()->columnSpanFull(),
-            ])
-            ->columns(1);
+        return __('Détail');
     }
 
     protected function afterSave(): void

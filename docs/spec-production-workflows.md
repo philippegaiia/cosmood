@@ -114,6 +114,12 @@ Recompute behavior:
 - Bulk delete / force-delete actions must exclude finished productions.
 - Non-finished production deletion must rollback reservations and staged consumptions before soft delete.
 - Production items cannot be deleted once a production is finished.
+- Production items are permanently deleted (no soft delete behavior for operator flows).
+- Production items with active allocations (`reserved` or `consumed`) cannot be deleted; they must be deallocated first.
+- Deleting a split child item from the editor merges it back into its nearest active parent to preserve coefficient/quantity balance.
+- Deleting a parent item that still has split children is blocked until split children are merged or removed.
+- Items with consumed allocations are immutable in the editor (no split, no deallocation, no merge-to-delete workflow).
+- For existing items, `ingredient` and `phase` are immutable server-side (UI and backend) to preserve traceability invariants.
 - Production record deletion remains separate from cancellation and should stay exceptional due to traceability impact.
 
 ### Wave interaction guardrail

@@ -506,6 +506,8 @@ describe('createSplitItem', function () {
         // Split: 20kg remaining out of 50kg = 40% of original coefficient
         expect((float) $originalItem->fresh()->percentage_of_oils)->toBe(30.0) // 50 * (30/50)
             ->and((float) $splitItem->percentage_of_oils)->toBe(20.0) // 50 * (20/50)
+            ->and((float) $originalItem->fresh()->required_quantity)->toBe(30.0)
+            ->and((float) $splitItem->fresh()->required_quantity)->toBe(20.0)
             ->and($splitItem->split_from_item_id)->toBe($originalItem->id)
             ->and($splitItem->split_root_item_id)->toBe($originalItem->id)
             ->and($splitItem->sort)->toBe(2);
@@ -541,6 +543,179 @@ describe('createSplitItem', function () {
         // Verify coefficients are proportional
         expect((float) $rootItem->fresh()->percentage_of_oils)->toBe(20.0) // 50 * (20/50)
             ->and((float) $splitItem1->fresh()->percentage_of_oils)->toBe(10.0) // 30 * (10/30)
-            ->and((float) $splitItem2->percentage_of_oils)->toBe(20.0); // 30 * (20/30)
+            ->and((float) $splitItem2->percentage_of_oils)->toBe(20.0) // 30 * (20/30)
+            ->and((float) $rootItem->fresh()->required_quantity)->toBe(20.0)
+            ->and((float) $splitItem1->fresh()->required_quantity)->toBe(10.0)
+            ->and((float) $splitItem2->fresh()->required_quantity)->toBe(20.0);
     });
+
+    it('prevents duplicate split when there is no remaining quantity', function () {
+        $production = Production::factory()->create(['planned_quantity' => 100.0]);
+        $ingredient = Ingredient::factory()->create();
+
+        $rootItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'percentage_of_oils' => 50.0,
+            'required_quantity' => 50.0,
+        ]);
+
+        $supply = Supply::factory()->inStock(30.0)->create();
+        $this->service->allocate($rootItem, $supply, 30.0);
+
+        $this->service->createSplitItem($rootItem);
+
+        $this->service->createSplitItem($rootItem->fresh());
+    })->throws(\InvalidArgumentException::class, 'No unallocated quantity to split');
+
+    it('prevents split when there is no allocated quantity', function () {
+        $production = Production::factory()->create(['planned_quantity' => 100.0]);
+        $ingredient = Ingredient::factory()->create();
+
+        $rootItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'percentage_of_oils' => 50.0,
+            'required_quantity' => 50.0,
+        ]);
+
+        $this->service->createSplitItem($rootItem);
+    })->throws(\InvalidArgumentException::class, 'Cannot split an item without allocated quantity');
+
+    it('prevents split when allocations are consumed', function () {
+        $production = Production::factory()->create(['planned_quantity' => 100.0]);
+        $ingredient = Ingredient::factory()->create();
+
+        $rootItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'percentage_of_oils' => 50.0,
+            'required_quantity' => 50.0,
+        ]);
+
+        $supply = Supply::factory()->inStock(30.0)->create();
+        $this->service->allocate($rootItem, $supply, 30.0);
+        $this->service->consume($rootItem->fresh());
+
+        $this->service->createSplitItem($rootItem->fresh());
+    })->throws(\InvalidArgumentException::class, 'Cannot split an item with consumed allocations');
+});
+
+describe('mergeSplitItem', function () {
+    it('merges into nearest active ancestor when immediate parent is deleted', function () {
+        $production = Production::factory()->create(['planned_quantity' => 100.0]);
+        $ingredient = Ingredient::factory()->create();
+
+        $rootItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'percentage_of_oils' => 50.0,
+            'required_quantity' => 50.0,
+            'sort' => 1,
+        ]);
+
+        $supply1 = Supply::factory()->inStock(20.0)->create();
+        $this->service->allocate($rootItem, $supply1, 20.0);
+        $splitItem1 = $this->service->createSplitItem($rootItem);
+
+        $supply2 = Supply::factory()->inStock(10.0)->create();
+        $this->service->allocate($splitItem1, $supply2, 10.0);
+        $splitItem2 = $this->service->createSplitItem($splitItem1);
+
+        ProductionItem::query()
+            ->whereKey($splitItem1->id)
+            ->update(['deleted_at' => now()]);
+
+        $mergedParent = $this->service->mergeSplitItem($splitItem2);
+
+        expect($mergedParent->id)->toBe($rootItem->id)
+            ->and((float) $rootItem->fresh()->percentage_of_oils)->toBe(40.0)
+            ->and((float) $rootItem->fresh()->required_quantity)->toBe(40.0)
+            ->and(ProductionItem::withTrashed()->find($splitItem2->id))->toBeNull();
+    });
+
+    it('reparents direct children before deleting merged split item', function () {
+        $production = Production::factory()->create(['planned_quantity' => 100.0]);
+        $ingredient = Ingredient::factory()->create();
+
+        $rootItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'percentage_of_oils' => 50.0,
+            'required_quantity' => 50.0,
+            'sort' => 1,
+        ]);
+
+        $supply1 = Supply::factory()->inStock(20.0)->create();
+        $this->service->allocate($rootItem, $supply1, 20.0);
+        $splitItem1 = $this->service->createSplitItem($rootItem);
+
+        $supply2 = Supply::factory()->inStock(10.0)->create();
+        $this->service->allocate($splitItem1, $supply2, 10.0);
+        $splitItem2 = $this->service->createSplitItem($splitItem1);
+
+        $mergedParent = $this->service->mergeSplitItem($splitItem1);
+
+        expect($mergedParent->id)->toBe($rootItem->id)
+            ->and((float) $rootItem->fresh()->percentage_of_oils)->toBe(30.0)
+            ->and((float) $rootItem->fresh()->required_quantity)->toBe(30.0)
+            ->and(ProductionItem::withTrashed()->find($splitItem1->id))->toBeNull();
+
+        $reparentedChild = ProductionItem::find($splitItem2->id);
+
+        expect($reparentedChild)->not->toBeNull()
+            ->and($reparentedChild->split_from_item_id)->toBe($rootItem->id)
+            ->and($reparentedChild->split_root_item_id)->toBe($rootItem->id);
+    });
+
+    it('keeps split item standalone when no active parent exists', function () {
+        $production = Production::factory()->create(['planned_quantity' => 100.0]);
+        $ingredient = Ingredient::factory()->create();
+
+        $rootItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'percentage_of_oils' => 50.0,
+            'required_quantity' => 50.0,
+            'sort' => 1,
+        ]);
+
+        $supply1 = Supply::factory()->inStock(20.0)->create();
+        $this->service->allocate($rootItem, $supply1, 20.0);
+        $splitItem = $this->service->createSplitItem($rootItem);
+
+        ProductionItem::query()
+            ->whereKey($rootItem->id)
+            ->update(['deleted_at' => now()]);
+
+        $result = $this->service->mergeSplitItem($splitItem);
+
+        expect($result->id)->toBe($splitItem->id)
+            ->and($result->split_from_item_id)->toBeNull()
+            ->and($result->split_root_item_id)->toBeNull()
+            ->and(ProductionItem::find($splitItem->id))->not->toBeNull();
+    });
+
+    it('prevents merging a split item with consumed allocations', function () {
+        $production = Production::factory()->create(['planned_quantity' => 100.0]);
+        $ingredient = Ingredient::factory()->create();
+
+        $rootItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'percentage_of_oils' => 50.0,
+            'required_quantity' => 50.0,
+            'sort' => 1,
+        ]);
+
+        $supply1 = Supply::factory()->inStock(20.0)->create();
+        $this->service->allocate($rootItem, $supply1, 20.0);
+        $splitItem = $this->service->createSplitItem($rootItem);
+
+        $supply2 = Supply::factory()->inStock(30.0)->create();
+        $this->service->allocate($splitItem, $supply2, 30.0);
+        $this->service->consume($splitItem->fresh());
+
+        $this->service->mergeSplitItem($splitItem->fresh());
+    })->throws(\InvalidArgumentException::class, 'Cannot merge a split item with consumed allocations');
 });

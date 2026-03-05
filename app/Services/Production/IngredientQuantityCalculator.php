@@ -58,7 +58,14 @@ class IngredientQuantityCalculator
         FormulaItemCalculationMode $calculationMode,
     ): float {
         if ($calculationMode === FormulaItemCalculationMode::QuantityPerUnit) {
-            return round(((float) ($expectedUnits ?? 0)) * $coefficient, 3);
+            $quantity = round(((float) ($expectedUnits ?? 0)) * $coefficient, 3);
+            $nearestInteger = round($quantity);
+
+            if (abs($quantity - $nearestInteger) <= 0.01) {
+                return (float) $nearestInteger;
+            }
+
+            return $quantity;
         }
 
         return round(($coefficient / 100) * $batchSizeKg, 3);

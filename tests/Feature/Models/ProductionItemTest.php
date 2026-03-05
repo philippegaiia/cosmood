@@ -241,4 +241,24 @@ describe('ProductionItem Model', function () {
         expect($item->getCalculatedQuantityKg())->toBe(288.0)
             ->and($item->getEstimatedCost())->toBe(129.6);
     });
+
+    it('snaps unit-based required quantity to nearest integer when floating drift is negligible', function () {
+        $production = Production::factory()->create([
+            'planned_quantity' => 26,
+            'expected_units' => 54.998,
+        ]);
+        $ingredient = Ingredient::factory()->unitBased()->create();
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => null,
+            'supply_id' => null,
+            'phase' => Phases::Packaging->value,
+            'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
+            'percentage_of_oils' => 1,
+        ]);
+
+        expect($item->getCalculatedQuantityKg())->toBe(55.0);
+    });
 });

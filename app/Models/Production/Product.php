@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 
 class Product extends Model
 {
@@ -24,6 +25,15 @@ class Product extends Model
             'launch_date' => 'date',
             'net_weight' => 'decimal:3',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::deleting(function (Product $product): void {
+            if ($product->hasProductionHistory()) {
+                throw new InvalidArgumentException(__('Impossible de supprimer ce produit car il est lié à des productions.'));
+            }
+        });
     }
 
     public function productCategory(): BelongsTo
@@ -76,6 +86,11 @@ class Product extends Model
     public function productions(): HasMany
     {
         return $this->hasMany(Production::class);
+    }
+
+    public function hasProductionHistory(): bool
+    {
+        return $this->productions()->withTrashed()->exists();
     }
 
     public function setDefaultFormula(?int $formulaId): void

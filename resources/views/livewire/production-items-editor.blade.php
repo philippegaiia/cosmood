@@ -86,13 +86,13 @@
                             <div>
                                 <flux:text class="text-xs text-zinc-500">{{ $this->getCalculationModeLabel($item) }}</flux:text>
                                 <flux:text class="font-medium {{ $this->isQuantityPerUnit($item) ? 'text-zinc-600' : '' }}">
-                                    {{ number_format($item['percentage_of_oils'], 3) }}
+                                    {{ $this->formatCoefficient($item, $item['percentage_of_oils']) }}
                                 </flux:text>
                             </div>
                             <div>
                                 <flux:text class="text-xs text-zinc-500">Quantité requise</flux:text>
                                 <flux:text class="font-semibold">
-                                    {{ number_format($requiredQty, 3) }} {{ $this->getUnitSuffix($item) }}
+                                    {{ $this->formatQuantity($item, $requiredQty) }} {{ $this->getUnitSuffix($item) }}
                                 </flux:text>
                             </div>
                             <div class="col-span-2">
@@ -101,7 +101,7 @@
                                     @foreach($item['allocations'] as $allocation)
                                         <div class="flex items-center gap-2">
                                             <flux:text class="font-medium">{{ $allocation['supply_batch_number'] ?? 'N/A' }}</flux:text>
-                                            <flux:text class="text-zinc-500">({{ number_format($allocation['quantity'], 3) }})</flux:text>
+                                            <flux:text class="text-zinc-500">({{ $this->formatQuantity($item, $allocation['quantity']) }})</flux:text>
                                         </div>
                                     @endforeach
                                 @else
@@ -124,9 +124,9 @@
                                 <flux:button variant="ghost" size="sm" icon="ellipsis-horizontal" />
                                 <flux:menu>
                                     <flux:menu.item wire:click="editItem({{ $index }})" icon="pencil-square">
-                                        Modifier
+                                        {{ __('Allouer') }}
                                     </flux:menu.item>
-                                    @if($hasAllocation)
+                                    @if(!empty($item['has_reserved_allocations']))
                                         <flux:menu.item wire:click="deallocateItem({{ $index }})" wire:confirm="Désallouer cet item ?" icon="x-mark" color="warning">
                                             Désallouer
                                         </flux:menu.item>
@@ -140,10 +140,13 @@
                         </div>
                     </div>
 
-                    @if($isPartial)
+                    @if($isPartial && empty($item['has_split_children']))
                         <flux:callout icon="exclamation-triangle" color="amber" class="mt-3">
                             <flux:callout.text>
-                                <strong>Allocation partielle:</strong> {{ number_format($allocatedQty, 3) }} kg alloué(s) sur {{ number_format($requiredQty, 3) }} kg requis (manque {{ number_format($requiredQty - $allocatedQty, 3) }} kg)
+                                <strong>{{ __('Allocation partielle:') }}</strong>
+                                {{ $this->formatQuantity($item, $allocatedQty) }} {{ $this->getUnitSuffix($item) }} {{ __('alloué(s) sur') }}
+                                {{ $this->formatQuantity($item, $requiredQty) }} {{ $this->getUnitSuffix($item) }} {{ __('requis (manque') }}
+                                {{ $this->formatQuantity($item, $requiredQty - $allocatedQty) }} {{ $this->getUnitSuffix($item) }})
                             </flux:callout.text>
                         </flux:callout>
                     @endif
@@ -169,107 +172,123 @@
     @endif
 
     <flux:modal wire:model.self="showEditModal" class="max-w-2xl">
-        @if($editingItem)
+        @if($editingItem !== null)
+            @php
+                $currentItem = $editingItem;
+                $isEditingExistingItem = $editingIndex !== null && !empty($items[$editingIndex]['id']);
+            @endphp
             <div class="space-y-6">
-                <flux:heading size="lg">
-                    {{ $editingIndex !== null ? 'Modifier l\'item' : 'Nouvel item' }}
-                </flux:heading>
+            <flux:heading size="lg">
+                {{ $editingIndex !== null ? 'Modifier l\'item' : 'Nouvel item' }}
+            </flux:heading>
 
+            <div>
+                <flux:label>Ingrédient *</flux:label>
+                <flux:select wire:model.live="editingItem.ingredient_id" placeholder="Sélectionner un ingrédient" :disabled="$isEditingExistingItem">
+                    @foreach($ingredientOptions as $id => $name)
+                        <flux:select.option value="{{ $id }}">{{ $name }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+                @if($isEditingExistingItem)
+                    <flux:text class="text-xs text-zinc-500 mt-1">{{ __('L\'ingrédient ne peut pas être modifié après création.') }}</flux:text>
+                @endif
+            </div>
+
+            <div>
+                <flux:label>Phase *</flux:label>
+                <flux:select wire:model="editingItem.phase" :disabled="$isEditingExistingItem">
+                    @foreach($this->phaseOptions as $value => $label)
+                        <flux:select.option value="{{ $value }}">{{ $label }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+                @if($isEditingExistingItem)
+                    <flux:text class="text-xs text-zinc-500 mt-1">{{ __('La phase ne peut pas être modifiée après création.') }}</flux:text>
+                @endif
+            </div>
+
+            <div>
+                <flux:label>
+                    {{ $currentItem['ingredient_id'] ? $this->getCalculationModeLabel($currentItem) : 'Coefficient' }} *
+                </flux:label>
+                <flux:input
+                    wire:key="coefficient-input-{{ $editingIndex ?? 'new' }}-{{ $currentItem['ingredient_id'] ?? 'none' }}-{{ $isEditingExistingItem ? 'edit' : 'create' }}"
+                    wire:model.live="editingItem.percentage_of_oils"
+                    type="number" 
+                    step="{{ $this->getCoefficientInputStep($currentItem) }}" 
+                    min="0" 
+                    :readonly="!empty($currentItem['ingredient_id']) && $this->isQuantityPerUnit($currentItem) && $isEditingExistingItem"
+                />
+                @if(!empty($currentItem['ingredient_id']))
+                    <flux:text class="text-xs text-zinc-500 mt-1">{{ __('Mode') }}: {{ $this->getCalculationModeLabel($currentItem) }} · {{ __('Unité') }}: {{ $this->getUnitSuffix($currentItem) }}</flux:text>
+                @endif
+                @if(!empty($currentItem['ingredient_id']) && $this->isQuantityPerUnit($currentItem) && $isEditingExistingItem)
+                    <flux:text class="text-xs text-zinc-500 mt-1">Valeur déterminée par l'ingrédient</flux:text>
+                @endif
+            </div>
+
+            @if(!empty($currentItem['ingredient_id']))
                 <div>
-                    <flux:label>Ingrédient *</flux:label>
-                    <flux:select wire:model.live="selectedIngredientId" placeholder="Sélectionner un ingrédient">
-                        @foreach($ingredientOptions as $id => $name)
-                            <flux:select.option value="{{ $id }}">{{ $name }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-                </div>
+                    <flux:label>Lot supply (allocation)</flux:label>
+                    @php
+                        $supplies = $this->availableSupplies;
+                    @endphp
+                    @if($supplies->isEmpty())
+                        <flux:callout icon="exclamation-triangle" color="amber">
+                            <flux:callout.heading>Aucun lot disponible</flux:callout.heading>
+                            <flux:callout.text>
+                                Aucun lot en stock pour cet ingrédient.
+                            </flux:callout.text>
+                        </flux:callout>
+                    @else
+                        <flux:select wire:model.live="selectedSupplyId">
+                            <flux:select.option value="">Choisir un lot...</flux:select.option>
+                            @foreach($supplies as $supply)
+                                <flux:select.option value="{{ $supply['id'] }}">
+                                    {{ $supply['supplier_name'] ?? 'N/A' }} | {{ $supply['batch_number'] }} | {{ $supply['delivery_date'] ?? '-' }} — dispo: {{ number_format($supply['available'], 3) }} {{ $supply['unit'] }}
+                                </flux:select.option>
+                            @endforeach
+                        </flux:select>
 
-                <div>
-                    <flux:label>Phase *</flux:label>
-                    <flux:select wire:model="editingItem.phase">
-                        @foreach($this->phaseOptions as $value => $label)
-                            <flux:select.option value="{{ $value }}">{{ $label }}</flux:select.option>
-                        @endforeach
-                    </flux:select>
-                </div>
-
-                <div>
-                    <flux:label>
-                        {{ $editingItem['ingredient_id'] ? $this->getCalculationModeLabel($editingItem) : 'Coefficient' }} *
-                    </flux:label>
-                    <flux:input 
-                        wire:model="editingItem.percentage_of_oils" 
-                        type="number" 
-                        step="0.001" 
-                        min="0" 
-                        @if(!empty($editingItem['ingredient_id']) && $this->isQuantityPerUnit($editingItem) && $editingIndex !== null && !empty($items[$editingIndex]['id'])) readonly @endif
-                    />
-                    @if(!empty($editingItem['ingredient_id']) && $this->isQuantityPerUnit($editingItem) && $editingIndex !== null && !empty($items[$editingIndex]['id']))
-                        <flux:text class="text-xs text-zinc-500 mt-1">Valeur déterminée par l'ingrédient</flux:text>
-                    @endif
-                </div>
-
-                @if(!empty($editingItem['ingredient_id']))
-                    <div>
-                        <flux:label>Lot supply (allocation)</flux:label>
-                        @php
-                            $supplies = $this->availableSupplies;
-                        @endphp
-                        @if($supplies->isEmpty())
-                            <flux:callout icon="exclamation-triangle" color="amber">
-                                <flux:callout.heading>Aucun lot disponible</flux:callout.heading>
-                                <flux:callout.text>
-                                    Aucun lot en stock pour cet ingrédient.
-                                </flux:callout.text>
-                            </flux:callout>
-                        @else
-                            <flux:select wire:model.live="selectedSupplyId">
-                                <flux:select.option value="">Choisir un lot...</flux:select.option>
-                                @foreach($supplies as $supply)
-                                    <flux:select.option value="{{ $supply['id'] }}">
-                                        {{ $supply['supplier_name'] ?? 'N/A' }} | {{ $supply['batch_number'] }} | {{ $supply['delivery_date'] ?? '-' }} — dispo: {{ number_format($supply['available'], 3) }} {{ $supply['unit'] }}
-                                    </flux:select.option>
-                                @endforeach
-                            </flux:select>
-
-                            @if(!empty($selectedSupplyId))
-                                @php
-                                    $editAvailability = $this->checkAvailability($editingItem);
-                                @endphp
-                                @if(!$editAvailability['is_sufficient'])
-                                    <flux:callout icon="exclamation-triangle" color="amber" class="mt-2">
-                                        <flux:callout.text>
-                                            Stock insuffisant: besoin de {{ number_format($editAvailability['required'], 3) }}, disponible {{ number_format($editAvailability['available'], 3) }}. Allocation partielle possible.
-                                        </flux:callout.text>
-                                    </flux:callout>
-                                @else
-                                    <flux:callout icon="check-circle" color="green" class="mt-2">
-                                        <flux:callout.text>
-                                            Stock suffisant ({{ number_format($editAvailability['available'], 3) }} {{ $editAvailability['unit'] }})
-                                        </flux:callout.text>
-                                    </flux:callout>
-                                @endif
+                        @if(!empty($selectedSupplyId))
+                            @php
+                                $editAvailability = $this->checkAvailability($currentItem);
+                            @endphp
+                            @if(!$editAvailability['is_sufficient'])
+                                <flux:callout icon="exclamation-triangle" color="amber" class="mt-2">
+                                    <flux:callout.text>
+                                        {{ __('Stock insuffisant: besoin de') }} {{ $this->formatQuantity($currentItem, $editAvailability['required']) }} {{ $this->getUnitSuffix($currentItem) }},
+                                        {{ __('disponible') }} {{ $this->formatQuantity($currentItem, $editAvailability['available']) }} {{ $this->getUnitSuffix($currentItem) }}.
+                                        {{ __('Allocation partielle possible.') }}
+                                    </flux:callout.text>
+                                </flux:callout>
+                            @else
+                                <flux:callout icon="check-circle" color="green" class="mt-2">
+                                    <flux:callout.text>
+                                        Stock suffisant ({{ $this->formatQuantity($currentItem, $editAvailability['available']) }} {{ $editAvailability['unit'] }})
+                                    </flux:callout.text>
+                                </flux:callout>
                             @endif
                         @endif
-                    </div>
-                @endif
-
-                @if(!empty($editingItem['ingredient_id']))
-                    <flux:callout icon="calculator" color="zinc">
-                        <flux:callout.heading>Quantité calculée</flux:callout.heading>
-                        <flux:callout.text>
-                            <strong>{{ number_format($this->calculateQuantity($editingItem), 3) }} {{ $this->getUnitSuffix($editingItem) }}</strong>
-                        </flux:callout.text>
-                    </flux:callout>
-                @endif
-
-                <div class="flex gap-6">
-                    <flux:checkbox wire:model="editingItem.organic" label="Bio" />
+                    @endif
                 </div>
+            @endif
 
-                <div class="flex justify-end gap-3 pt-4">
-                    <flux:button wire:click="saveItem" variant="primary">Enregistrer</flux:button>
-                </div>
+            @if(!empty($currentItem['ingredient_id']))
+                <flux:callout icon="calculator" color="zinc">
+                    <flux:callout.heading>Quantité calculée</flux:callout.heading>
+                    <flux:callout.text>
+                        <strong>{{ $this->formatQuantity($currentItem, $this->calculateQuantity($currentItem)) }} {{ $this->getUnitSuffix($currentItem) }}</strong>
+                    </flux:callout.text>
+                </flux:callout>
+            @endif
+
+            <div class="flex gap-6">
+                <flux:checkbox wire:model="editingItem.organic" label="Bio" />
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4">
+                <flux:button wire:click="saveItem" variant="primary">Enregistrer</flux:button>
+            </div>
             </div>
         @endif
     </flux:modal>

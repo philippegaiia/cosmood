@@ -22,6 +22,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 
 class IngredientResource extends Resource
@@ -163,7 +164,11 @@ class IngredientResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('ingredient_category_id')
+                    ->label(__('Catégorie'))
+                    ->relationship('ingredient_category', 'name')
+                    ->searchable()
+                    ->preload(),
             ])
             ->recordActions([
                 ActionGroup::make([

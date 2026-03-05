@@ -17,12 +17,19 @@ class ListIngredients extends ListRecords
     public function getTabs(): array
     {
         return [
-            'reference' => Tab::make('Vue référence')
-                ->modifyQueryUsing(fn (Builder $query): Builder => $query),
+            'active' => Tab::make(__('Ingrédients actifs'))
+                ->badge(fn (): int => Ingredient::query()->where('is_active', true)->count())
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('is_active', true)),
 
-            'stock' => Tab::make('Stock')
+            'inactive' => Tab::make(__('Ingrédients inactifs'))
+                ->badge(fn (): int => Ingredient::query()->where('is_active', false)->count())
+                ->badgeColor('gray')
+                ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('is_active', false)),
+
+            'stock' => Tab::make(__('Stock'))
                 ->badge(function (): int {
                     return Ingredient::query()
+                        ->where('is_active', true)
                         ->where('stock_min', '>', 0)
                         ->get()
                         ->filter(fn ($i) => $i->getTotalAvailableStock() <= $i->stock_min)
@@ -34,7 +41,7 @@ class ListIngredients extends ListRecords
 
     public function getDefaultActiveTab(): string|int|null
     {
-        return 'reference';
+        return 'active';
     }
 
     /**

@@ -53,6 +53,18 @@ class ProductionItem extends Model
             if ($production?->status === ProductionStatus::Finished) {
                 throw new InvalidArgumentException('Production items cannot be deleted once production is finished.');
             }
+
+            if (! $item->isForceDeleting()) {
+                throw new InvalidArgumentException('Production items must be permanently deleted.');
+            }
+
+            $hasActiveAllocations = $item->allocations()
+                ->whereIn('status', ['reserved', 'consumed'])
+                ->exists();
+
+            if ($hasActiveAllocations) {
+                throw new InvalidArgumentException('Production items with active allocations cannot be deleted.');
+            }
         });
     }
 

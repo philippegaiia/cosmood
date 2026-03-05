@@ -298,57 +298,87 @@ class ProductionAllocationService
      */
     public function createSplitItem(ProductionItem $originalItem): ProductionItem
     {
-        $unallocatedQuantity = $originalItem->getUnallocatedQuantity();
+        return DB::transaction(function () use ($originalItem): ProductionItem {
+            $lockedOriginalItem = ProductionItem::query()
+                ->whereKey($originalItem->id)
+                ->lockForUpdate()
+                ->first();
 
-        if ($unallocatedQuantity <= 0) {
-            throw new \InvalidArgumentException('No unallocated quantity to split.');
-        }
+            if (! $lockedOriginalItem) {
+                throw new \InvalidArgumentException('Original item not found.');
+            }
 
-        $originalRequired = $originalItem->required_quantity ?? $originalItem->getCalculatedQuantityKg();
+            $hasConsumedAllocations = $lockedOriginalItem->allocations()
+                ->where('status', 'consumed')
+                ->exists();
 
-        if ($originalRequired <= 0) {
-            throw new \InvalidArgumentException('Original item has no required quantity.');
-        }
+            if ($hasConsumedAllocations) {
+                throw new \InvalidArgumentException('Cannot split an item with consumed allocations.');
+            }
 
-        // Calculate proportional coefficients
-        $originalCoefficient = (float) $originalItem->percentage_of_oils;
-        $allocatedQuantity = $originalItem->getTotalAllocatedQuantity();
+            $originalRequiredQuantity = round($this->calculateRequiredQuantity($lockedOriginalItem), 3);
 
-        $newOriginalCoefficient = round(($allocatedQuantity / $originalRequired) * $originalCoefficient, 5);
-        $splitCoefficient = round(($unallocatedQuantity / $originalRequired) * $originalCoefficient, 5);
+            if ($originalRequiredQuantity <= 0) {
+                throw new \InvalidArgumentException('Original item has no required quantity.');
+            }
 
-        // Determine root item
-        $rootItemId = $originalItem->split_root_item_id ?? $originalItem->id;
+            $allocatedQuantity = round($lockedOriginalItem->getTotalAllocatedQuantity(), 3);
 
-        return DB::transaction(function () use ($originalItem, $splitCoefficient, $newOriginalCoefficient, $rootItemId): ProductionItem {
-            // Create split item
+            if ($allocatedQuantity <= 0) {
+                throw new \InvalidArgumentException('Cannot split an item without allocated quantity.');
+            }
+
+            $unallocatedQuantity = round(max(0, $originalRequiredQuantity - $allocatedQuantity), 3);
+
+            if ($unallocatedQuantity <= 0) {
+                throw new \InvalidArgumentException('No unallocated quantity to split.');
+            }
+
+            $originalCoefficient = (float) $lockedOriginalItem->percentage_of_oils;
+            $newOriginalCoefficient = round(($allocatedQuantity / $originalRequiredQuantity) * $originalCoefficient, 5);
+            $splitCoefficient = round($originalCoefficient - $newOriginalCoefficient, 5);
+
+            if ($splitCoefficient <= 0) {
+                throw new \InvalidArgumentException('No remaining coefficient to split.');
+            }
+
+            $rootItemId = $lockedOriginalItem->split_root_item_id ?? $lockedOriginalItem->id;
+
+            $lockedOriginalItem->update([
+                'percentage_of_oils' => $newOriginalCoefficient,
+                'required_quantity' => round($this->calculateRequiredQuantity($lockedOriginalItem, $newOriginalCoefficient), 3),
+            ]);
+
+            $lockedOriginalItem->updateAllocationStatus();
+
             $newItem = ProductionItem::create([
-                'production_id' => $originalItem->production_id,
-                'ingredient_id' => $originalItem->ingredient_id,
-                'supplier_listing_id' => $originalItem->supplier_listing_id,
-                'phase' => $originalItem->phase,
+                'production_id' => $lockedOriginalItem->production_id,
+                'ingredient_id' => $lockedOriginalItem->ingredient_id,
+                'supplier_listing_id' => $lockedOriginalItem->supplier_listing_id,
+                'phase' => $lockedOriginalItem->phase,
                 'percentage_of_oils' => $splitCoefficient,
-                'calculation_mode' => $originalItem->calculation_mode,
-                'organic' => $originalItem->organic,
+                'required_quantity' => 0,
+                'calculation_mode' => $lockedOriginalItem->calculation_mode,
+                'organic' => $lockedOriginalItem->organic,
                 'is_supplied' => false,
-                'procurement_status' => $originalItem->procurement_status,
+                'procurement_status' => $lockedOriginalItem->procurement_status,
                 'allocation_status' => \App\Enums\AllocationStatus::Unassigned,
-                'sort' => $originalItem->sort + 1,
-                'split_from_item_id' => $originalItem->id,
+                'sort' => $lockedOriginalItem->sort + 1,
+                'split_from_item_id' => $lockedOriginalItem->id,
                 'split_root_item_id' => $rootItemId,
             ]);
 
-            // Update original coefficient
-            $originalItem->update(['percentage_of_oils' => $newOriginalCoefficient]);
+            $newItem->update([
+                'required_quantity' => round($this->calculateRequiredQuantity($newItem, $splitCoefficient), 3),
+            ]);
 
-            // Shift subsequent items
             ProductionItem::query()
-                ->where('production_id', $originalItem->production_id)
+                ->where('production_id', $lockedOriginalItem->production_id)
                 ->where('sort', '>=', $newItem->sort)
                 ->where('id', '!=', $newItem->id)
                 ->increment('sort');
 
-            return $newItem;
+            return $newItem->fresh();
         });
     }
 
@@ -359,36 +389,118 @@ class ProductionAllocationService
      */
     public function mergeSplitItem(ProductionItem $splitItem): ProductionItem
     {
-        if (! $splitItem->isSplitChild()) {
-            throw new \InvalidArgumentException('Item is not a split child.');
-        }
+        return DB::transaction(function () use ($splitItem): ProductionItem {
+            $lockedSplitItem = ProductionItem::query()
+                ->whereKey($splitItem->id)
+                ->lockForUpdate()
+                ->first();
 
-        $parentItem = $splitItem->splitParent;
+            if (! $lockedSplitItem) {
+                throw new \InvalidArgumentException('Split item not found.');
+            }
 
-        if (! $parentItem) {
-            throw new \InvalidArgumentException('Parent item not found.');
-        }
+            if (! $lockedSplitItem->isSplitChild()) {
+                throw new \InvalidArgumentException('Item is not a split child.');
+            }
 
-        return DB::transaction(function () use ($splitItem, $parentItem): ProductionItem {
-            // Release any allocations on the split item
-            $this->releaseAll($splitItem);
+            $splitHasConsumedAllocations = $lockedSplitItem->allocations()
+                ->where('status', 'consumed')
+                ->exists();
 
-            // Merge coefficient back to parent
+            if ($splitHasConsumedAllocations) {
+                throw new \InvalidArgumentException('Cannot merge a split item with consumed allocations.');
+            }
+
+            $mergeTarget = $this->resolveActiveMergeTarget($lockedSplitItem);
+
+            if ($mergeTarget) {
+                $targetHasConsumedAllocations = $mergeTarget->allocations()
+                    ->where('status', 'consumed')
+                    ->exists();
+
+                if ($targetHasConsumedAllocations) {
+                    throw new \InvalidArgumentException('Cannot merge into an item with consumed allocations.');
+                }
+            }
+
+            $this->releaseAll($lockedSplitItem);
+
+            if (! $mergeTarget) {
+                $lockedSplitItem->update([
+                    'split_from_item_id' => null,
+                    'split_root_item_id' => null,
+                ]);
+
+                $lockedSplitItem->updateAllocationStatus();
+
+                return $lockedSplitItem;
+            }
+
             $newParentCoefficient = round(
-                (float) $parentItem->percentage_of_oils + (float) $splitItem->percentage_of_oils,
+                (float) $mergeTarget->percentage_of_oils + (float) $lockedSplitItem->percentage_of_oils,
                 5
             );
 
-            $parentItem->update(['percentage_of_oils' => $newParentCoefficient]);
+            $newRootItemId = $mergeTarget->split_root_item_id ?? $mergeTarget->id;
 
-            // Delete the split item
-            $splitItem->delete();
+            ProductionItem::query()
+                ->where('split_from_item_id', $lockedSplitItem->id)
+                ->update([
+                    'split_from_item_id' => $mergeTarget->id,
+                    'split_root_item_id' => $newRootItemId,
+                ]);
 
-            // Update parent's allocation status
-            $parentItem->updateAllocationStatus();
+            $mergeTarget->update([
+                'percentage_of_oils' => $newParentCoefficient,
+                'required_quantity' => round($this->calculateRequiredQuantity($mergeTarget, $newParentCoefficient), 3),
+            ]);
 
-            return $parentItem;
+            $lockedSplitItem->forceDelete();
+
+            $mergeTarget->updateAllocationStatus();
+
+            return $mergeTarget->fresh();
         });
+    }
+
+    private function calculateRequiredQuantity(ProductionItem $item, ?float $coefficient = null): float
+    {
+        $production = $item->relationLoaded('production')
+            ? $item->production
+            : Production::query()->select(['id', 'planned_quantity', 'expected_units'])->find($item->production_id);
+
+        $calculator = app(IngredientQuantityCalculator::class);
+
+        return $calculator->calculate(
+            coefficient: (float) ($coefficient ?? $item->percentage_of_oils),
+            batchSizeKg: (float) ($production?->planned_quantity ?? 0),
+            expectedUnits: $production?->expected_units,
+            calculationMode: $item->resolveCalculationMode(),
+        );
+    }
+
+    private function resolveActiveMergeTarget(ProductionItem $splitItem): ?ProductionItem
+    {
+        $nextParentId = $splitItem->split_from_item_id;
+        $visitedParentIds = [];
+
+        while ($nextParentId !== null && ! in_array($nextParentId, $visitedParentIds, true)) {
+            $visitedParentIds[] = $nextParentId;
+
+            $candidateParent = ProductionItem::withTrashed()->find($nextParentId);
+
+            if (! $candidateParent) {
+                return null;
+            }
+
+            if (! $candidateParent->trashed()) {
+                return $candidateParent;
+            }
+
+            $nextParentId = $candidateParent->split_from_item_id;
+        }
+
+        return null;
     }
 
     /**
