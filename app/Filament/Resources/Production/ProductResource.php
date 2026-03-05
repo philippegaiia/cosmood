@@ -17,14 +17,15 @@ use Filament\Actions\ReplicateAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\MarkdownEditor;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
-use Filament\Schemas\Components\Grid;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Components\Grid as SchemaGrid;
+use Filament\Schemas\Components\Section as SchemaSection;
+use Filament\Schemas\Components\Tabs as SchemaTabs;
+use Filament\Schemas\Components\Tabs\Tab as SchemaTab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
@@ -50,78 +51,81 @@ class ProductResource extends Resource
     {
         return $schema
             ->components([
-                Tabs::make('ProductTabs')
+                SchemaTabs::make('tabs')
                     ->tabs([
-                        Tab::make('Détails')
+                        SchemaTab::make('details')
+                            ->label('Détails')
+                            ->icon(Heroicon::DocumentText)
                             ->schema([
-                                Grid::make(3)
+                                SchemaSection::make('Classification')
                                     ->schema([
-                                        // Column 1: Classification
-                                        Section::make('Classification')
+                                        SchemaGrid::make(2)
                                             ->schema([
                                                 Select::make('product_category_id')
                                                     ->label('Catégorie')
                                                     ->relationship('productCategory', 'name')
                                                     ->native(false)
                                                     ->live()
-                                                    ->afterStateUpdated(fn (Set $set) => $set('product_type_id', null))
-                                                    ->required(),
-
+                                                    ->afterStateUpdated(function (Set $set): void {
+                                                        $set('product_type_id', null);
+                                                    })
+                                                    ->required()
+                                                    ->columnSpan(1),
                                                 Select::make('product_type_id')
                                                     ->label('Type de produit')
-                                                    ->options(fn (Get $get): array => self::getProductTypeOptionsForCategory((int) ($get('product_category_id') ?? 0)))
+                                                    ->options(function (Get $get): array {
+                                                        return self::getProductTypeOptionsForCategory((int) ($get('product_category_id') ?? 0));
+                                                    })
                                                     ->searchable()
                                                     ->preload()
                                                     ->native(false)
-                                                    ->placeholder(fn (Get $get): string => blank($get('product_category_id')) ? 'Choisissez d\'abord une catégorie' : 'Sélectionnez un type')
-                                                    ->disabled(fn (Get $get): bool => blank($get('product_category_id')))
-                                                    ->required(),
-                                            ])
-                                            ->columnSpan(1),
+                                                    ->placeholder(function (Get $get): string {
+                                                        if (blank($get('product_category_id'))) {
+                                                            return 'Choisissez d\'abord une catégorie';
+                                                        }
 
-                                        // Column 2: Identité
-                                        Section::make('Identité')
+                                                        return 'Sélectionnez un type';
+                                                    })
+                                                    ->disabled(fn (Get $get): bool => blank($get('product_category_id')))
+                                                    ->required()
+                                                    ->columnSpan(1),
+                                            ]),
+                                    ])
+                                    ->columns(2),
+
+                                SchemaSection::make('Identité')
+                                    ->schema([
+                                        SchemaGrid::make(3)
                                             ->schema([
                                                 TextInput::make('name')
-                                                    ->label('Nom')
                                                     ->required()
                                                     ->maxLength(255)
-                                                    ->columnSpanFull(),
-
-                                                Grid::make(2)
-                                                    ->schema([
-                                                        TextInput::make('code')
-                                                            ->label('Code')
-                                                            ->maxLength(255),
-
-                                                        TextInput::make('wp_code')
-                                                            ->label('Code WP')
-                                                            ->maxLength(255),
-                                                    ]),
-                                            ])
-                                            ->columnSpan(1),
-
-                                        // Column 3: Statut
-                                        Section::make('Statut')
-                                            ->schema([
+                                                    ->columnSpan(2),
+                                                TextInput::make('code')
+                                                    ->maxLength(255)
+                                                    ->columnSpan(1),
+                                                TextInput::make('wp_code')
+                                                    ->label('Code WP')
+                                                    ->maxLength(255)
+                                                    ->columnSpan(1),
                                                 Toggle::make('is_active')
                                                     ->label('Actif')
                                                     ->onColor('success')
                                                     ->offColor('warning')
-                                                    ->default(true),
-
+                                                    ->required()
+                                                    ->columnSpan(1),
                                                 DatePicker::make('launch_date')
                                                     ->label('Date de lancement')
                                                     ->native(false)
-                                                    ->required(),
-                                            ])
-                                            ->columnSpan(1),
-                                    ]),
+                                                    ->required()
+                                                    ->columnSpan(1),
+                                            ]),
+                                    ])
+                                    ->columns(1),
 
-                                Grid::make(3)
+                                SchemaSection::make('Formule & Packaging')
                                     ->schema([
-                                        // Column 1: Formula & Packaging
-                                        Section::make('Formule & Packaging')
+                                        SchemaGrid::make(2)
                                             ->schema([
                                                 Select::make('default_formula_id')
                                                     ->label('Formule par défaut')
@@ -142,8 +146,8 @@ class ProductResource extends Resource
                                                             $set('default_formula_id', $record->defaultFormula()?->id);
                                                         }
                                                     })
-                                                    ->dehydrated(false),
-
+                                                    ->dehydrated(false)
+                                                    ->columnSpan(1),
                                                 Select::make('packaging_ids')
                                                     ->label('Packaging')
                                                     ->multiple()
@@ -157,28 +161,26 @@ class ProductResource extends Resource
                                                             $set('packaging_ids', $packagingIds);
                                                         }
                                                     })
-                                                    ->dehydrated(false),
-                                            ])
-                                            ->columnSpan(1),
+                                                    ->dehydrated(false)
+                                                    ->columnSpan(1),
+                                            ]),
+                                    ])
+                                    ->columns(1),
 
-                                        // Column 2: Poids & Dimensions
-                                        Section::make('Poids & Dimensions')
+                                SchemaSection::make('Poids & Dimensions')
+                                    ->schema([
+                                        SchemaGrid::make(3)
                                             ->schema([
                                                 TextInput::make('net_weight')
                                                     ->label('Poids net (kg)')
                                                     ->numeric()
                                                     ->step(0.001)
-                                                    ->required(),
-
+                                                    ->required()
+                                                    ->columnSpan(1),
                                                 TextInput::make('ean_code')
                                                     ->label('Code EAN')
-                                                    ->maxLength(255),
-                                            ])
-                                            ->columnSpan(1),
-
-                                        // Column 3: Ingrédient fabriqué
-                                        Section::make('Production')
-                                            ->schema([
+                                                    ->maxLength(255)
+                                                    ->columnSpan(1),
                                                 Select::make('produced_ingredient_id')
                                                     ->label('Ingrédient fabriqué')
                                                     ->relationship(
@@ -189,24 +191,31 @@ class ProductResource extends Resource
                                                     ->searchable()
                                                     ->preload()
                                                     ->nullable()
-                                                    ->helperText('Si ce produit crée un ingrédient'),
-                                            ])
-                                            ->columnSpan(1),
-                                    ]),
+                                                    ->helperText('Si ce produit crée un ingrédient')
+                                                    ->columnSpan(1),
+                                            ]),
+                                    ])
+                                    ->columns(1),
 
-                                MarkdownEditor::make('description')
-                                    ->label('Description')
-                                    ->maxLength(65535)
-                                    ->columnSpanFull(),
+                                SchemaSection::make('Description')
+                                    ->schema([
+                                        MarkdownEditor::make('description')
+                                            ->maxLength(65535)
+                                            ->columnSpanFull(),
+                                    ])
+                                    ->columns(1)
+                                    ->collapsed(),
                             ]),
 
-                        Tab::make('Productions')
+                        SchemaTab::make('productions')
+                            ->label('Productions')
+                            ->icon(Heroicon::ClipboardDocumentList)
                             ->schema([
-                                \Filament\Forms\Components\Placeholder::make('productions_info')
-                                    ->label('Productions liées')
-                                    ->content('Les productions de ce produit apparaîtront ici.'),
-                            ])
-                            ->visibleOn('edit'),
+                                Placeholder::make('productions_info')
+                                    ->label('')
+                                    ->content('Les productions liées à ce produit apparaissent dans l\'onglet "Productions" en bas de page.')
+                                    ->visibleOnEdit(),
+                            ]),
                     ])
                     ->persistTabInQueryString(),
             ]);
@@ -219,7 +228,8 @@ class ProductResource extends Resource
                 TextColumn::make('name')
                     ->searchable()
                     ->sortable(),
-                TextColumn::make('product_category.name')
+                TextColumn::make('productCategory.name')
+                    ->label('Catégorie')
                     ->sortable(),
                 TextColumn::make('productType.name')
                     ->label('Type')
