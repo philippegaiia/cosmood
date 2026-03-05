@@ -26,6 +26,8 @@ class ProductionsRelationManager extends RelationManager
                 \Filament\Tables\Columns\TextColumn::make('status')
                     ->label('Statut')
                     ->badge()
+                    ->formatStateUsing(fn ($state): string => $state?->getLabel() ?? '-')
+                    ->color(fn ($state): string|array|null => $state?->getColor() ?? 'gray')
                     ->sortable(),
                 \Filament\Tables\Columns\TextColumn::make('planned_quantity')
                     ->label('Quantité planifiée')

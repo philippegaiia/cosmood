@@ -7,6 +7,9 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Resources\Pages\EditRecord;
+use Filament\Schemas\Components\Tabs\Tab;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 
 class EditProduct extends EditRecord
 {
@@ -19,6 +22,27 @@ class EditProduct extends EditRecord
             ForceDeleteAction::make(),
             RestoreAction::make(),
         ];
+    }
+
+    public function hasCombinedRelationManagerTabsWithContent(): bool
+    {
+        return true;
+    }
+
+    public function getContentTabComponent(): Tab
+    {
+        return Tab::make('Détails')
+            ->icon(Heroicon::DocumentText);
+    }
+
+    public function content(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                $this->getFormContentComponent()->columnSpanFull(),
+                $this->getRelationManagersContentComponent()->columnSpanFull(),
+            ])
+            ->columns(1);
     }
 
     protected function afterSave(): void
