@@ -69,6 +69,17 @@ This document describes the current production-side business rules implemented i
 - Updating `production_date` keeps existing task auto-reschedule behavior via observer.
 - A bulk action on production list allows the same replan logic without requiring wave membership.
 
+## Procurement Planning Views
+
+- Wave edit now includes an `Approvisionnement` tab with strict and advisory planning values per ingredient.
+- Strict default semantics:
+  - `besoin restant` is computed from non-allocated quantity only,
+  - `à passer` is based on not-ordered quantities,
+  - stock and shortages are advisory (not automatic commitments).
+- A dedicated page `Pilotage achats` consolidates all active waves (`Approved`, `InProgress`) by ingredient.
+- Global table includes wave breakdown per ingredient to identify which wave drives each need.
+- Open supplier orders are shown as advisory inbound quantities and are not treated as exclusive to a single wave.
+
 ## Production Form UX Rules
 
 - "Flux de production" section stays visible (not collapsed).

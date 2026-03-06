@@ -131,6 +131,14 @@ describe('ProductionWave - Relationships', function () {
         ])->assertSeeLivewire(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class);
     });
 
+    it('shows the approvisionnement tab on edit wave page', function () {
+        $wave = ProductionWave::factory()->create();
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class, [
+            'record' => $wave->id,
+        ])->assertSee('Approvisionnement');
+    });
+
     it('lists only productions attached to the current wave in relation manager', function () {
         $wave = ProductionWave::factory()->create();
         $otherWave = ProductionWave::factory()->create();
