@@ -3,12 +3,16 @@
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
+use App\Models\Production\Formula;
+use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionItemAllocation;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
+use Illuminate\Support\Str;
 
 describe('Production Model', function () {
     it('can be created with factory', function () {
@@ -194,6 +198,49 @@ describe('Production Model', function () {
 
         $production->productionItems()->update([
             'procurement_status' => ProcurementStatus::Received,
+        ]);
+
+        expect($production->fresh()->getSupplyCoverageState())->toBe('received');
+    });
+
+    it('marks production as covered when all items are fully allocated', function () {
+        $product = Product::factory()->create();
+        $formula = Formula::query()->create([
+            'name' => 'Formula fully allocated coverage',
+            'slug' => Str::slug('formula-coverage-'.Str::uuid()),
+            'code' => 'FRM-'.Str::upper(Str::random(8)),
+            'is_active' => true,
+        ]);
+
+        $production = Production::query()->create([
+            'product_id' => $product->id,
+            'formula_id' => $formula->id,
+            'batch_number' => 'T95001',
+            'slug' => 'batch-coverage-allocated',
+            'status' => ProductionStatus::Planned,
+            'sizing_mode' => SizingMode::OilWeight,
+            'planned_quantity' => 12,
+            'expected_units' => 100,
+            'production_date' => now()->toDateString(),
+            'ready_date' => now()->addDays(2)->toDateString(),
+            'organic' => true,
+        ]);
+
+        $supply = Supply::factory()->inStock(100)->create();
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'required_quantity' => 12,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $item->id,
+            'supply_id' => $supply->id,
+            'quantity' => 12,
+            'status' => 'reserved',
+            'reserved_at' => now(),
         ]);
 
         expect($production->fresh()->getSupplyCoverageState())->toBe('received');

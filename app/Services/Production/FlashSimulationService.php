@@ -21,7 +21,7 @@ class FlashSimulationService
     /**
      * @param  array<int, array{product_id: int|string|null, desired_units?: int|float|string|null, units?: int|float|string|null, batch_size_preset_id?: int|string|null}>  $lines
      * @return array{
-     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_preset_name: string|null, duration_per_batch_minutes: int, total_duration_minutes: int, tasks: array<int, array{name: string, duration_minutes: int}>}>,
+     *     product_lines: \Illuminate\Support\Collection<int, array{product_id: int, product_name: string, formula_name: string, desired_units: float, units: float, units_per_batch: float, batches_required: int, produced_units: float, extra_units: float, batch_size_kg: float, oils_kg: float, estimated_cost: float, batch_size_preset_id: int|null, batch_preset_name: string|null, duration_per_batch_minutes: int, total_duration_minutes: int, tasks: array<int, array{name: string, duration_minutes: int}>}>,
      *     ingredient_totals: \Illuminate\Support\Collection<int, array{ingredient_id: int, ingredient_name: string, required_quantity: float, base_unit: string, unit_price: float, estimated_cost: float}>,
      *     task_totals: \Illuminate\Support\Collection<int, array{name: string, duration_per_batch_minutes: float, average_duration_per_batch_minutes: float, total_duration_minutes: int, batches: int}>,
      *     warnings: \Illuminate\Support\Collection<int, string>,
@@ -196,6 +196,7 @@ class FlashSimulationService
                 'oils_kg' => $oilsWeightKg,
                 'estimated_cost' => round($lineEstimatedCost, 2),
                 'cost_per_unit' => $producedUnits > 0 ? round($lineEstimatedCost / $producedUnits, 4) : 0,
+                'batch_size_preset_id' => $batchConfiguration['batch_size_preset_id'],
                 'batch_preset_name' => $batchConfiguration['batch_preset_name'],
                 'duration_per_batch_minutes' => $durationPerBatch,
                 'total_duration_minutes' => $totalDuration,
@@ -276,7 +277,7 @@ class FlashSimulationService
     /**
      * Resolves units-per-batch and oils-per-batch from selected preset or product type defaults.
      *
-     * @return array{units_per_batch: float, batch_size_kg: float, batch_preset_name: string|null}
+     * @return array{units_per_batch: float, batch_size_kg: float, batch_size_preset_id: int|null, batch_preset_name: string|null}
      */
     private function resolveBatchConfiguration(Product $product, ?int $batchSizePresetId): array
     {
@@ -286,6 +287,7 @@ class FlashSimulationService
             return [
                 'units_per_batch' => 0,
                 'batch_size_kg' => 0,
+                'batch_size_preset_id' => null,
                 'batch_preset_name' => null,
             ];
         }
@@ -312,6 +314,7 @@ class FlashSimulationService
         return [
             'units_per_batch' => (float) ($preset?->expected_units ?? $productType->expected_units_output ?? 0),
             'batch_size_kg' => (float) ($preset?->batch_size ?? $productType->default_batch_size ?? 0),
+            'batch_size_preset_id' => $preset?->id,
             'batch_preset_name' => $preset?->name,
         ];
     }

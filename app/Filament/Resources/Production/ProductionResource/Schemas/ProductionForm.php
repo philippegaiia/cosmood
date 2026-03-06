@@ -98,7 +98,7 @@ class ProductionForm
             ->columnSpanFull()
             ->columns([
                 'default' => 1,
-                'md' => 3,
+                'md' => 4,
             ])
             ->schema([
                 Select::make('production_wave_id')
@@ -108,6 +108,21 @@ class ProductionForm
                     ->preload()
                     ->live()
                     ->placeholder('Aucune (production autonome)')
+                    ->nullable(),
+                Select::make('production_line_id')
+                    ->label('Ligne de production')
+                    ->relationship(
+                        name: 'productionLine',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn (Builder $query): Builder => $query
+                            ->where('is_active', true)
+                            ->orderBy('sort_order')
+                            ->orderBy('name'),
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->placeholder('Affectation automatique')
+                    ->helperText('Utilise la ligne par défaut du type produit si vide.')
                     ->nullable(),
                 TextInput::make('batch_number')
                     ->label('Réf. planification')
@@ -484,6 +499,7 @@ class ProductionForm
                 $set('sizing_mode', $productType->sizing_mode->value);
                 $set('planned_quantity', $productType->default_batch_size);
                 $set('expected_units', $productType->expected_units_output);
+                $set('production_line_id', $productType->default_production_line_id);
             }
         }
     }
@@ -511,6 +527,7 @@ class ProductionForm
         $set('sizing_mode', $productType->sizing_mode->value);
         $set('planned_quantity', $productType->default_batch_size);
         $set('expected_units', $productType->expected_units_output);
+        $set('production_line_id', $productType->default_production_line_id);
 
         $productionDate = $get('production_date');
         if ($productionDate) {

@@ -4,7 +4,9 @@
 
 The simulator provides fast planning estimates for ingredients and oils load based on fixed production batch formats.
 
-It is non-persistent and used for planning decisions, not for creating production records.
+By default it is non-persistent and used for planning decisions.
+
+An optional conversion flow can persist one simulation into a production wave with generated production batches.
 
 It does not reserve or consume inventory; reservation/consumption happens only through the production lifecycle.
 
@@ -61,6 +63,31 @@ Example:
 - Print action (`Print`) to export current simulator view through browser print.
 - Results are advisory for wave/batch sizing and procurement estimation, not stock commitment.
 
+## Optional Persistence: Create Wave from Simulation
+
+The simulator can now generate persistent planning records:
+
+- Creates one `ProductionWave` (status `draft`) from current simulation lines.
+- Generates one `Production` per computed batch (`batches_required`).
+- Keeps standard production side effects through observers:
+  - production items generation,
+  - QC checks generation,
+  - task generation.
+
+Planner options exposed from simulator:
+
+- wave name,
+- planning start date,
+- skip weekends,
+- skip holidays,
+- fallback daily capacity when no production line is assigned.
+
+Scheduling behavior:
+
+- Date allocation is computed per production line capacity when product types define a default line.
+- Different lines are planned independently in parallel (e.g. soap line and deodorant lab same day).
+- Products without line assignment use fallback daily capacity.
+
 ## UX / Technical Constraints
 
 - Dynamic row controls rely on stable `wire:key` to avoid Livewire/Flux DOM reuse issues.
@@ -71,6 +98,8 @@ Example:
 
 - Livewire component: `app/Livewire/SimulateurFlashPage.php`
 - Service logic: `app/Services/Production/FlashSimulationService.php`
+- Wave conversion service: `app/Services/Production/FlashSimulationWavePlanner.php`
+- Planning scheduler service: `app/Services/Production/WaveProductionPlanningService.php`
 - UI template: `resources/views/livewire/simulateur-flash-page.blade.php`
 - Filament page wrapper: `app/Filament/Pages/SimulateurFlash.php`
 

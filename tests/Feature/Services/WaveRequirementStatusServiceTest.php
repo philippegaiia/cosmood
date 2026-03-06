@@ -3,6 +3,9 @@
 use App\Enums\OrderStatus;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
+use App\Enums\SizingMode;
+use App\Models\Production\Formula;
+use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
@@ -176,4 +179,43 @@ it('does not update items belonging to cancelled productions', function () {
     waveRequirementStatusService()->syncForWave($wave);
 
     expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
+});
+
+it('keeps manually marked items as ordered without supplier order', function () {
+    $wave = ProductionWave::factory()->create();
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formula manual ordered',
+        'slug' => 'formula-manual-ordered',
+        'code' => 'FRM-WAVE-001',
+        'is_active' => true,
+    ]);
+
+    $production = Production::query()->create([
+        'production_wave_id' => $wave->id,
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'batch_number' => 'T93001',
+        'slug' => 'batch-manual-ordered',
+        'status' => ProductionStatus::Planned,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 20,
+        'expected_units' => 100,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+    ]);
+    $ingredient = Ingredient::factory()->create();
+
+    $item = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'required_quantity' => 10,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+        'is_order_marked' => true,
+    ]);
+
+    waveRequirementStatusService()->syncForWave($wave);
+
+    expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
 });

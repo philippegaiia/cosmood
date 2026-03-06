@@ -131,6 +131,15 @@
                                             Désallouer
                                         </flux:menu.item>
                                     @endif
+                                    @if(!empty($item['is_order_marked']))
+                                        <flux:menu.item wire:click="unmarkItemOrdered({{ $index }})" icon="minus-circle" color="warning">
+                                            {{ __('Retirer marque commande') }}
+                                        </flux:menu.item>
+                                    @else
+                                        <flux:menu.item wire:click="markItemOrdered({{ $index }})" icon="check-circle" color="info">
+                                            {{ __('Marquer commande') }}
+                                        </flux:menu.item>
+                                    @endif
                                     <flux:menu.separator />
                                     <flux:menu.item wire:click="removeItem({{ $index }})" wire:confirm="Supprimer cet item ?" icon="trash" color="danger">
                                         Supprimer
@@ -154,6 +163,9 @@
                     <div class="mt-3 flex gap-2">
                         @if($item['organic'])
                             <flux:badge color="green" size="sm">Bio</flux:badge>
+                        @endif
+                        @if(!empty($item['is_order_marked']))
+                            <flux:badge color="blue" size="sm">{{ __('Commande marquée') }}</flux:badge>
                         @endif
                     </div>
                 </flux:card>

@@ -7,6 +7,7 @@ use App\Models\Production\Production;
 use App\Services\Production\PermanentBatchNumberService;
 use App\Services\Production\PlanningBatchNumberService;
 use App\Services\Production\StatusColorScheme;
+use App\Services\Production\WaveProductionPlanningService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
@@ -15,6 +16,9 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -67,6 +71,11 @@ class ProductionsTable
                     ->badge()
                     ->placeholder('Autonome')
                     ->sortable(),
+                TextColumn::make('productionLine.name')
+                    ->label('Ligne')
+                    ->badge()
+                    ->placeholder('Non affectée')
+                    ->sortable(),
                 TextColumn::make('composite_status')
                     ->label('État')
                     ->state(fn (Production $record): string => StatusColorScheme::forProduction($record)['label'])
@@ -108,6 +117,9 @@ class ProductionsTable
                 SelectFilter::make('status')
                     ->label('Statut')
                     ->options(ProductionStatus::class),
+                SelectFilter::make('production_line_id')
+                    ->label('Ligne')
+                    ->relationship('productionLine', 'name'),
             ])
             ->recordActions([
                 Action::make('duplicate')
@@ -131,6 +143,48 @@ class ProductionsTable
                     ->icon(Heroicon::OutlinedPrinter)
                     ->url(fn (Collection $selectedRecords): string => self::getBulkDocumentsUrl($selectedRecords))
                     ->openUrlInNewTab(),
+                BulkAction::make('rescheduleSelected')
+                    ->label('Replanifier sélection')
+                    ->icon(Heroicon::OutlinedCalendarDays)
+                    ->schema([
+                        DatePicker::make('start_date')
+                            ->label('Nouveau départ')
+                            ->native(false)
+                            ->required()
+                            ->default(now()->toDateString()),
+                        TextInput::make('fallback_daily_capacity')
+                            ->label('Capacité / jour sans ligne')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(4)
+                            ->required(),
+                        Toggle::make('skip_weekends')
+                            ->label('Ignorer weekends')
+                            ->default(true),
+                        Toggle::make('skip_holidays')
+                            ->label('Ignorer jours fériés')
+                            ->default(true),
+                    ])
+                    ->deselectRecordsAfterCompletion()
+                    ->action(function (Collection $records, array $data): void {
+                        $summary = app(WaveProductionPlanningService::class)->rescheduleProductions(
+                            productions: $records,
+                            startDate: (string) $data['start_date'],
+                            skipWeekends: (bool) ($data['skip_weekends'] ?? true),
+                            skipHolidays: (bool) ($data['skip_holidays'] ?? true),
+                            fallbackDailyCapacity: max(1, (int) ($data['fallback_daily_capacity'] ?? 4)),
+                        );
+
+                        Notification::make()
+                            ->title('Productions replanifiées')
+                            ->body(sprintf(
+                                '%d replanifiée(s), %d ignorée(s).',
+                                (int) $summary['rescheduled_count'],
+                                (int) $summary['skipped_count'],
+                            ))
+                            ->success()
+                            ->send();
+                    }),
                 BulkActionGroup::make([
                     DeleteBulkAction::make()
                         ->authorizeIndividualRecords(fn (Production $record): bool => $record->status !== ProductionStatus::Finished),
@@ -139,7 +193,7 @@ class ProductionsTable
                     RestoreBulkAction::make(),
                 ]),
             ])
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('productionItems'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['productionItems', 'productionLine']))
             ->defaultSort('created_at', 'desc');
     }
 

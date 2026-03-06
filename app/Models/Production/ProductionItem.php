@@ -30,6 +30,7 @@ class ProductionItem extends Model
         return [
             'organic' => 'boolean',
             'is_supplied' => 'boolean',
+            'is_order_marked' => 'boolean',
             'required_quantity' => 'decimal:3',
             'calculation_mode' => FormulaItemCalculationMode::class,
             'procurement_status' => ProcurementStatus::class,
@@ -186,6 +187,23 @@ class ProductionItem extends Model
     public function isFullyAllocated(): bool
     {
         return round($this->getUnallocatedQuantity(), 3) <= 0;
+    }
+
+    public function isCoveredByProcurementSignal(): bool
+    {
+        if ($this->isFullyAllocated()) {
+            return true;
+        }
+
+        if ($this->is_order_marked) {
+            return true;
+        }
+
+        return in_array($this->procurement_status, [
+            ProcurementStatus::Ordered,
+            ProcurementStatus::Confirmed,
+            ProcurementStatus::Received,
+        ], true);
     }
 
     /**

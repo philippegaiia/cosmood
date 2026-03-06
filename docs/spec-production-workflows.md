@@ -45,6 +45,30 @@ This document describes the current production-side business rules implemented i
   - `final_mass`: final batch mass kg basis.
 - Unit-based lines always derive quantity from `expected_units`, independent from these kg semantics.
 
+## Production Lines and Capacity Planning
+
+- `ProductionLine` models physical execution lanes (e.g. soap line, deodorant lab).
+- Each line has:
+  - `daily_batch_capacity`,
+  - `is_active`,
+  - `sort_order`.
+- `ProductType.default_production_line_id` defines the default line for newly planned batches.
+- `Production.production_line_id` remains editable per batch for operator override.
+- Batch scheduling uses per-line capacities in parallel:
+  - capacities are independent by line,
+  - line-less productions use fallback daily capacity.
+
+## Automatic Replanning
+
+- Waves can be replanned from a new start date with soft options:
+  - skip weekends,
+  - skip holidays,
+  - fallback daily capacity for unassigned line batches.
+- Editing `planned_start_date` on the wave edit page automatically triggers the same replanning logic.
+- Replanning updates only `planned` and `confirmed` productions.
+- Updating `production_date` keeps existing task auto-reschedule behavior via observer.
+- A bulk action on production list allows the same replan logic without requiring wave membership.
+
 ## Production Form UX Rules
 
 - "Flux de production" section stays visible (not collapsed).
@@ -126,6 +150,9 @@ Recompute behavior:
 
 - Wave procurement and requirement status synchronization ignore requirements belonging to cancelled productions.
 - This prevents cancelled batches from inflating wave purchase planning.
+- Manual procurement mark is supported on production items (`is_order_marked`):
+  - keeps an item in `ordered` state even without linked supplier order,
+  - fully allocated items are treated as covered (`received`) for coverage traffic light.
 
 ## Print / PDF Documents
 

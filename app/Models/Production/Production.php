@@ -106,6 +106,11 @@ class Production extends Model implements Eventable
         return $this->belongsTo(ProductionWave::class, 'production_wave_id');
     }
 
+    public function productionLine(): BelongsTo
+    {
+        return $this->belongsTo(ProductionLine::class);
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
@@ -197,7 +202,7 @@ class Production extends Model implements Eventable
 
     public function getSupplyCoverageState(): string
     {
-        $this->loadMissing('productionItems');
+        $this->loadMissing('productionItems.allocations');
 
         $items = $this->productionItems;
 
@@ -209,27 +214,29 @@ class Production extends Model implements Eventable
             ? self::resolveMasterbatchReplacedPhase($this)
             : null;
 
+        $hasOrdered = false;
+
         foreach ($items as $item) {
             if ($replacedPhase !== null && $item->phase === $replacedPhase) {
+                continue;
+            }
+
+            if ($item->isCoveredByProcurementSignal()) {
+                if (! $item->isFullyAllocated() && in_array($item->procurement_status, [ProcurementStatus::Ordered, ProcurementStatus::Confirmed], true)) {
+                    $hasOrdered = true;
+                }
+
                 continue;
             }
 
             if ($item->procurement_status === ProcurementStatus::NotOrdered) {
                 return 'missing';
             }
+
+            $hasOrdered = true;
         }
 
-        foreach ($items as $item) {
-            if ($replacedPhase !== null && $item->phase === $replacedPhase) {
-                continue;
-            }
-
-            if (in_array($item->procurement_status, [ProcurementStatus::Ordered, ProcurementStatus::Confirmed], true)) {
-                return 'ordered';
-            }
-        }
-
-        return 'received';
+        return $hasOrdered ? 'ordered' : 'received';
     }
 
     public function getSupplyCoverageLabel(): string

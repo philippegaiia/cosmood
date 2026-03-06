@@ -341,3 +341,81 @@ it('allows editing coefficient for a new kg-based item', function (): void {
         ->and($savedItem->calculation_mode?->value)->toBe(FormulaItemCalculationMode::PercentOfOils->value)
         ->and((float) $savedItem->required_quantity)->toBe(7.5);
 });
+
+it('allows manually marking an item as ordered', function (): void {
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formule mark ordered',
+        'slug' => 'formule-mark-ordered',
+        'code' => 'FRM-DEL-007',
+        'is_active' => true,
+    ]);
+
+    $production = Production::query()->create([
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'slug' => 'batch-mark-ordered',
+        'batch_number' => 'T90007',
+        'status' => ProductionStatus::Planned,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 100,
+        'expected_units' => 100,
+    ]);
+
+    $ingredient = Ingredient::factory()->create();
+
+    $item = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+        'is_order_marked' => false,
+    ]);
+
+    Livewire::test(ProductionItemsEditor::class, ['productionId' => $production->id])
+        ->call('markItemOrdered', 0);
+
+    expect($item->fresh()->is_order_marked)->toBeTrue()
+        ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
+});
+
+it('allows removing manual ordered mark on an item', function (): void {
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formule unmark ordered',
+        'slug' => 'formule-unmark-ordered',
+        'code' => 'FRM-DEL-008',
+        'is_active' => true,
+    ]);
+
+    $production = Production::query()->create([
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'slug' => 'batch-unmark-ordered',
+        'batch_number' => 'T90008',
+        'status' => ProductionStatus::Planned,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 100,
+        'expected_units' => 100,
+    ]);
+
+    $ingredient = Ingredient::factory()->create();
+
+    $item = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'procurement_status' => ProcurementStatus::Ordered,
+        'is_order_marked' => true,
+    ]);
+
+    Livewire::test(ProductionItemsEditor::class, ['productionId' => $production->id])
+        ->call('unmarkItemOrdered', 0);
+
+    expect($item->fresh()->is_order_marked)->toBeFalse()
+        ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
+});

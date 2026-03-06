@@ -43,6 +43,10 @@ class WaveRequirementStatusService
                     $requiredQuantity = (float) ($item->required_quantity > 0 ? $item->required_quantity : $item->getCalculatedQuantityKg());
 
                     if ($item->isFullyAllocated()) {
+                        if ($item->procurement_status !== ProcurementStatus::Received) {
+                            $item->update(['procurement_status' => ProcurementStatus::Received]);
+                        }
+
                         $remainingOrdered = max(0, $remainingOrdered - $requiredQuantity);
                         $remainingReceived = max(0, $remainingReceived - $requiredQuantity);
 
@@ -54,6 +58,8 @@ class WaveRequirementStatusService
                     if ($remainingReceived >= $requiredQuantity) {
                         $nextStatus = ProcurementStatus::Received;
                     } elseif ($remainingOrdered >= $requiredQuantity) {
+                        $nextStatus = ProcurementStatus::Ordered;
+                    } elseif ($item->is_order_marked) {
                         $nextStatus = ProcurementStatus::Ordered;
                     }
 

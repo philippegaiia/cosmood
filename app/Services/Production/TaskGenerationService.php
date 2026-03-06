@@ -115,6 +115,12 @@ class TaskGenerationService
             ])
             ->all();
 
+        /**
+         * Load tasks explicitly because this method is also reached from observers
+         * after date updates, where lazy loading is blocked in non-production.
+         */
+        $production->loadMissing('productionTasks');
+
         $tasks = $production->productionTasks
             ->whereNotNull('production_task_type_id')
             ->sortBy(fn (ProductionTask $task): array => [

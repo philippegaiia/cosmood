@@ -1,9 +1,16 @@
 <?php
 
+use App\Enums\ProductionStatus;
+use App\Enums\SizingMode;
+use App\Models\Production\Formula;
+use App\Models\Production\Product;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionTask;
+use App\Models\Production\ProductionTaskType;
 use App\Models\Production\ProductType;
 use App\Models\Production\TaskTemplate;
 use App\Models\Production\TaskTemplateItem;
+use App\Models\Production\TaskTemplateTaskType;
 use App\Models\User;
 use App\Services\Production\TaskGenerationService;
 use Carbon\Carbon;
@@ -244,6 +251,88 @@ describe('TaskGenerationService', function () {
             $manualTask = $manualTask->fresh();
             expect($manualTask->scheduled_date->format('Y-m-d'))->toBe('2026-03-20')
                 ->and($manualTask->is_manual_schedule)->toBeTrue();
+        });
+
+        it('reschedules without lazy loading violations when production tasks are not preloaded', function () {
+            $taskType = ProductionTaskType::factory()->create([
+                'duration' => 90,
+            ]);
+
+            $template = TaskTemplate::query()->create([
+                'name' => 'Template lazy load guard',
+            ]);
+
+            TaskTemplateTaskType::query()->create([
+                'task_template_id' => $template->id,
+                'production_task_type_id' => $taskType->id,
+                'sort_order' => 1,
+                'offset_days' => 1,
+                'skip_weekends' => true,
+                'duration_override' => null,
+            ]);
+
+            $service = new class($template) extends TaskGenerationService
+            {
+                public function __construct(private readonly TaskTemplate $template) {}
+
+                public function getTaskTemplateForProduction(Production $production): ?TaskTemplate
+                {
+                    return $this->template;
+                }
+            };
+
+            $product = Product::factory()->create();
+
+            $formula = Formula::query()->create([
+                'name' => 'Formula lazy load guard',
+                'slug' => 'formula-lazy-load-guard',
+                'code' => 'FRM-LAZY-001',
+                'is_active' => true,
+            ]);
+
+            $production = Production::withoutEvents(function () use ($product, $formula): Production {
+                return Production::query()->create([
+                    'product_id' => $product->id,
+                    'formula_id' => $formula->id,
+                    'batch_number' => 'T98001',
+                    'slug' => 'batch-lazy-load-guard',
+                    'status' => ProductionStatus::Confirmed,
+                    'sizing_mode' => SizingMode::OilWeight,
+                    'planned_quantity' => 10,
+                    'expected_units' => 100,
+                    'production_date' => '2026-03-10',
+                    'ready_date' => '2026-03-12',
+                    'organic' => true,
+                ]);
+            });
+
+            ProductionTask::query()->create([
+                'production_id' => $production->id,
+                'task_template_item_id' => null,
+                'name' => 'Task A',
+                'description' => null,
+                'production_task_type_id' => $taskType->id,
+                'source' => 'template',
+                'sequence_order' => 1,
+                'scheduled_date' => '2026-03-01',
+                'date' => '2026-03-01',
+                'duration_minutes' => 90,
+                'is_finished' => false,
+                'is_manual_schedule' => false,
+                'cancelled_at' => null,
+                'cancelled_reason' => null,
+                'notes' => null,
+            ]);
+
+            expect($production->relationLoaded('productionTasks'))->toBeFalse();
+
+            $service->rescheduleTasks($production);
+
+            $scheduledDate = ProductionTask::query()
+                ->where('production_id', $production->id)
+                ->value('scheduled_date');
+
+            expect(Carbon::parse($scheduledDate)->toDateString())->toBe('2026-03-11');
         });
 
         it('can reset manual schedule to automatic', function () {

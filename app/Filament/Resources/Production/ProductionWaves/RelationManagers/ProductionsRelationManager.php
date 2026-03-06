@@ -39,6 +39,11 @@ class ProductionsRelationManager extends RelationManager
                     ->label('Date production')
                     ->date('d/m/Y')
                     ->sortable(),
+                TextColumn::make('productionLine.name')
+                    ->label('Ligne')
+                    ->badge()
+                    ->placeholder('Non affectée')
+                    ->sortable(),
                 TextColumn::make('ready_date')
                     ->label('Date prêt')
                     ->date('d/m/Y')
@@ -46,7 +51,7 @@ class ProductionsRelationManager extends RelationManager
             ])
             ->recordUrl(fn (Production $record): string => ProductionResource::getUrl('edit', ['record' => $record]))
             ->openRecordUrlInNewTab()
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('product'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['product', 'productionLine']))
             ->defaultSort('production_date', 'asc');
     }
 }

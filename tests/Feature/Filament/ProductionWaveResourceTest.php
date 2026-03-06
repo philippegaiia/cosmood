@@ -1,21 +1,61 @@
 <?php
 
 use App\Enums\ProcurementStatus;
+use App\Enums\ProductionStatus;
+use App\Enums\SizingMode;
 use App\Enums\WaveStatus;
+use App\Models\Production\Formula;
+use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionLine;
+use App\Models\Production\ProductionTaskType;
 use App\Models\Production\ProductionWave;
+use App\Models\Production\ProductType;
+use App\Models\Production\TaskTemplate;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
     $this->actingAs($this->user);
 });
+
+function createWavePageProduction(ProductionWave $wave, ProductionLine $line, ProductionStatus $status, string $batchNumber, string $productionDate, ?int $productTypeId = null): Production
+{
+    $product = Product::factory()->create([
+        'product_type_id' => $productTypeId,
+    ]);
+
+    $formula = Formula::query()->create([
+        'name' => 'Formula '.Str::uuid(),
+        'slug' => Str::slug('formula-'.Str::uuid()),
+        'code' => 'FRM-'.Str::upper(Str::random(8)),
+        'is_active' => true,
+    ]);
+
+    return Production::query()->create([
+        'production_wave_id' => $wave->id,
+        'production_line_id' => $line->id,
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'batch_number' => $batchNumber,
+        'slug' => Str::slug($batchNumber.'-'.Str::uuid()),
+        'status' => $status,
+        'product_type_id' => $productTypeId,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 10,
+        'expected_units' => 100,
+        'production_date' => $productionDate,
+        'ready_date' => now()->addDays(2)->toDateString(),
+        'organic' => true,
+    ]);
+}
 
 describe('ProductionWave Model', function () {
     it('can be created with factory', function () {
@@ -228,6 +268,117 @@ describe('ProductionWaveResource - table actions', function () {
         Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
             ->callAction(TestAction::make('procurementPlan')->table($wave))
             ->assertHasNoErrors();
+    });
+
+    it('replans wave productions from selected start date', function () {
+        $line = ProductionLine::factory()->soapLine()->create([
+            'daily_batch_capacity' => 2,
+        ]);
+
+        $wave = ProductionWave::factory()->approved()->create();
+
+        $product = Product::factory()->create();
+        $formula = Formula::query()->create([
+            'name' => 'Formula wave replan',
+            'slug' => Str::slug('formula-wave-replan-'.Str::uuid()),
+            'code' => 'FRM-'.Str::upper(Str::random(8)),
+            'is_active' => true,
+        ]);
+
+        $first = Production::query()->create([
+            'production_wave_id' => $wave->id,
+            'production_line_id' => $line->id,
+            'product_id' => $product->id,
+            'formula_id' => $formula->id,
+            'batch_number' => 'T94001',
+            'slug' => 'batch-wave-replan-1',
+            'status' => ProductionStatus::Planned,
+            'sizing_mode' => SizingMode::OilWeight,
+            'planned_quantity' => 10,
+            'expected_units' => 100,
+            'production_date' => '2026-03-01',
+            'ready_date' => '2026-03-03',
+            'organic' => true,
+        ]);
+
+        $second = Production::query()->create([
+            'production_wave_id' => $wave->id,
+            'production_line_id' => $line->id,
+            'product_id' => $product->id,
+            'formula_id' => $formula->id,
+            'batch_number' => 'T94002',
+            'slug' => 'batch-wave-replan-2',
+            'status' => ProductionStatus::Confirmed,
+            'sizing_mode' => SizingMode::OilWeight,
+            'planned_quantity' => 10,
+            'expected_units' => 100,
+            'production_date' => '2026-03-02',
+            'ready_date' => '2026-03-04',
+            'organic' => true,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+            ->callAction(TestAction::make('replanWave')->table($wave), [
+                'start_date' => '2026-03-09',
+                'fallback_daily_capacity' => 4,
+                'skip_weekends' => true,
+                'skip_holidays' => true,
+            ])
+            ->assertHasNoErrors();
+
+        expect($first->fresh()->production_date?->toDateString())->toBe('2026-03-09')
+            ->and($second->fresh()->production_date?->toDateString())->toBe('2026-03-09');
+    });
+
+    it('recalculates wave planning when planned start date is edited on wave page', function () {
+        $line = ProductionLine::factory()->soapLine()->create([
+            'daily_batch_capacity' => 1,
+        ]);
+
+        $productType = ProductType::factory()->create();
+
+        $template = TaskTemplate::query()->create([
+            'name' => 'Template wave replan',
+        ]);
+
+        $template->productTypes()->attach($productType->id, [
+            'is_default' => true,
+        ]);
+
+        $taskType = ProductionTaskType::factory()->create([
+            'duration' => 60,
+        ]);
+
+        $template->taskTypes()->attach($taskType->id, [
+            'sort_order' => 1,
+            'offset_days' => 0,
+            'skip_weekends' => true,
+            'duration_override' => null,
+        ]);
+
+        $wave = ProductionWave::factory()->approved()->create([
+            'planned_start_date' => '2026-03-01',
+            'planned_end_date' => '2026-03-05',
+        ]);
+
+        $first = createWavePageProduction($wave, $line, ProductionStatus::Planned, 'T94101', '2026-03-01', $productType->id);
+        $second = createWavePageProduction($wave, $line, ProductionStatus::Confirmed, 'T94102', '2026-03-02', $productType->id);
+
+        expect($first->fresh()->productionTasks)->not->toBeEmpty()
+            ->and($second->fresh()->productionTasks)->not->toBeEmpty();
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class, [
+            'record' => $wave->id,
+        ])
+            ->set('data.planned_start_date', '2026-03-09')
+            ->set('data.planned_end_date', '2026-03-20')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect($first->fresh()->production_date?->toDateString())->toBe('2026-03-09')
+            ->and($second->fresh()->production_date?->toDateString())->toBe('2026-03-10')
+            ->and($wave->fresh()->planned_start_date?->toDateString())->toBe('2026-03-09')
+            ->and($wave->fresh()->planned_end_date?->toDateString())->toBe('2026-03-10');
     });
 
 });

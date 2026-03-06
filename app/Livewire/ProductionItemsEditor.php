@@ -4,6 +4,7 @@ namespace App\Livewire;
 
 use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Settings;
@@ -12,6 +13,7 @@ use App\Models\Supply\Supply;
 use App\Services\Production\IngredientQuantityCalculator;
 use App\Services\Production\MasterbatchService;
 use App\Services\Production\ProductionAllocationService;
+use App\Services\Production\WaveRequirementStatusService;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
@@ -164,6 +166,7 @@ class ProductionItemsEditor extends Component
             'calculation_mode' => $item->calculation_mode,
             'organic' => (bool) $item->organic,
             'required_quantity' => (float) $item->required_quantity,
+            'is_order_marked' => (bool) $item->is_order_marked,
             'allocation_status' => $item->allocation_status?->value,
             'allocations' => $allocations->map(fn ($a) => [
                 'id' => $a->id,
@@ -918,6 +921,82 @@ class ProductionItemsEditor extends Component
         }
 
         $this->dispatch('item-removed');
+    }
+
+    public function markItemOrdered(int $index): void
+    {
+        if (! isset($this->items[$index])) {
+            return;
+        }
+
+        $item = ProductionItem::query()
+            ->with(['production.wave'])
+            ->find((int) ($this->items[$index]['id'] ?? 0));
+
+        if (! $item) {
+            return;
+        }
+
+        $item->update([
+            'is_order_marked' => true,
+            'procurement_status' => $item->isFullyAllocated()
+                ? ProcurementStatus::Received
+                : ProcurementStatus::Ordered,
+        ]);
+
+        if ($item->production?->wave) {
+            app(WaveRequirementStatusService::class)->syncForWave($item->production->wave);
+        }
+
+        Notification::make()
+            ->title(__('Commande marquée'))
+            ->body(__('L\'item est marqué comme commandé.'))
+            ->success()
+            ->send();
+
+        $production = Production::query()->find($this->productionId);
+
+        if ($production) {
+            $this->loadItems($production);
+        }
+    }
+
+    public function unmarkItemOrdered(int $index): void
+    {
+        if (! isset($this->items[$index])) {
+            return;
+        }
+
+        $item = ProductionItem::query()
+            ->with(['production.wave'])
+            ->find((int) ($this->items[$index]['id'] ?? 0));
+
+        if (! $item) {
+            return;
+        }
+
+        $item->update([
+            'is_order_marked' => false,
+            'procurement_status' => $item->isFullyAllocated()
+                ? ProcurementStatus::Received
+                : ProcurementStatus::NotOrdered,
+        ]);
+
+        if ($item->production?->wave) {
+            app(WaveRequirementStatusService::class)->syncForWave($item->production->wave);
+        }
+
+        Notification::make()
+            ->title(__('Marquage retiré'))
+            ->body(__('Le marquage commande a été retiré.'))
+            ->success()
+            ->send();
+
+        $production = Production::query()->find($this->productionId);
+
+        if ($production) {
+            $this->loadItems($production);
+        }
     }
 
     public function importMasterbatchTraceability(): void

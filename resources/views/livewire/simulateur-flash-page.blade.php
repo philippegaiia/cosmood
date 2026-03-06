@@ -113,6 +113,52 @@
                 </flux:callout.text>
             </flux:callout>
         @endif
+
+        <flux:separator />
+
+        <div class="space-y-4">
+            <flux:heading size="md">{{ __('Creer une vague depuis la simulation') }}</flux:heading>
+
+            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div class="space-y-1">
+                    <flux:text size="sm">{{ __('Nom de la vague') }}</flux:text>
+                    <flux:input wire:model="waveName" type="text" />
+                </div>
+
+                <div class="space-y-1">
+                    <flux:text size="sm">{{ __('Date de debut') }}</flux:text>
+                    <flux:input wire:model="waveStartDate" type="date" />
+                </div>
+
+                <div class="space-y-1">
+                    <flux:text size="sm">{{ __('Capacite / jour (sans ligne)') }}</flux:text>
+                    <flux:input wire:model="plannerFallbackDailyCapacity" type="number" min="1" step="1" />
+                </div>
+
+                <div class="space-y-1">
+                    <flux:text size="sm">{{ __('Options calendrier') }}</flux:text>
+                    <div class="mt-2 flex flex-col gap-2">
+                        <flux:checkbox wire:model="plannerSkipWeekends" label="{{ __('Ignorer weekends') }}" />
+                        <flux:checkbox wire:model="plannerSkipHolidays" label="{{ __('Ignorer jours feries') }}" />
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-1">
+                <flux:text size="sm">{{ __('Notes vague (optionnel)') }}</flux:text>
+                <textarea
+                    wire:model="waveNotes"
+                    rows="2"
+                    class="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm"
+                ></textarea>
+            </div>
+
+            <div class="flex justify-end print:hidden">
+                <flux:button wire:click="createWaveFromSimulation" variant="primary">
+                    {{ __('Creer la vague et les batches') }}
+                </flux:button>
+            </div>
+        </div>
     </flux:card>
 
     {{-- Summary Section --}}

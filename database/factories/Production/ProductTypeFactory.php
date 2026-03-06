@@ -4,6 +4,7 @@ namespace Database\Factories\Production;
 
 use App\Enums\SizingMode;
 use App\Models\Production\ProductCategory;
+use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductType;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -20,6 +21,7 @@ class ProductTypeFactory extends Factory
             'name' => $name,
             'slug' => Str::slug($name),
             'product_category_id' => ProductCategory::factory(),
+            'default_production_line_id' => null,
             'qc_template_id' => null,
             'sizing_mode' => SizingMode::OilWeight,
             'default_batch_size' => $this->faker->randomFloat(3, 10, 50),
@@ -60,6 +62,13 @@ class ProductTypeFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'product_category_id' => $category->id,
+        ]);
+    }
+
+    public function withDefaultProductionLine(?ProductionLine $line = null): static
+    {
+        return $this->state(fn (): array => [
+            'default_production_line_id' => $line?->id ?? ProductionLine::factory(),
         ]);
     }
 }

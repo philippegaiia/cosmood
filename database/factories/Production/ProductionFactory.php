@@ -7,6 +7,7 @@ use App\Enums\SizingMode;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -20,6 +21,7 @@ class ProductionFactory extends Factory
     {
         return [
             'production_wave_id' => null,
+            'production_line_id' => null,
             'product_id' => Product::factory(),
             'formula_id' => Formula::factory(),
             'product_type_id' => null,
@@ -114,9 +116,17 @@ class ProductionFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'product_type_id' => $productType->id,
+            'production_line_id' => $productType->default_production_line_id,
             'sizing_mode' => $productType->sizing_mode,
             'planned_quantity' => $productType->default_batch_size,
             'expected_units' => $productType->expected_units_output,
+        ]);
+    }
+
+    public function onProductionLine(?ProductionLine $line = null): static
+    {
+        return $this->state(fn (): array => [
+            'production_line_id' => $line?->id ?? ProductionLine::factory(),
         ]);
     }
 }

@@ -40,11 +40,20 @@ class ProductionItemFactory extends Factory
             'calculation_mode' => FormulaItemCalculationMode::PercentOfOils->value,
             'required_quantity' => $this->faker->randomFloat(3, 1, 50),
             'procurement_status' => ProcurementStatus::NotOrdered->value,
+            'is_order_marked' => false,
             'allocation_status' => AllocationStatus::Unassigned->value,
             'organic' => true,
             'is_supplied' => false,
             'sort' => $this->faker->numberBetween(1, 20),
         ];
+    }
+
+    public function markedOrdered(): static
+    {
+        return $this->state(fn (): array => [
+            'is_order_marked' => true,
+            'procurement_status' => ProcurementStatus::Ordered->value,
+        ]);
     }
 
     public function supplied(): static

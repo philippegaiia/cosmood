@@ -2,9 +2,12 @@
 
 namespace App\Livewire;
 
+use App\Filament\Resources\Production\ProductionWaves\ProductionWaveResource;
 use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Product;
 use App\Services\Production\FlashSimulationService;
+use App\Services\Production\FlashSimulationWavePlanner;
+use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Str;
 use Livewire\Component;
@@ -66,6 +69,18 @@ class SimulateurFlashPage extends Component
         'total_duration_minutes' => 0,
     ];
 
+    public string $waveName = '';
+
+    public ?string $waveStartDate = null;
+
+    public bool $plannerSkipWeekends = true;
+
+    public bool $plannerSkipHolidays = true;
+
+    public int $plannerFallbackDailyCapacity = 4;
+
+    public ?string $waveNotes = null;
+
     public function mount(): void
     {
         $products = Product::query()
@@ -115,6 +130,9 @@ class SimulateurFlashPage extends Component
             ->toArray();
 
         $this->lines = [$this->makeLine()];
+
+        $this->waveName = 'Vague '.now()->format('d/m/Y H:i');
+        $this->waveStartDate = now()->addWeeks(2)->toDateString();
 
         $this->recalculate();
     }
@@ -169,6 +187,61 @@ class SimulateurFlashPage extends Component
         $this->taskTotals = $result['task_totals']->values()->all();
         $this->warnings = $result['warnings']->values()->all();
         $this->totals = $result['totals'];
+    }
+
+    public function createWaveFromSimulation(): mixed
+    {
+        if (count($this->productLines) === 0 || (int) ($this->totals['total_batches'] ?? 0) <= 0) {
+            Notification::make()
+                ->title(__('Aucun batch à planifier'))
+                ->body(__('Ajoutez au moins un produit avec une quantité supérieure à zéro.'))
+                ->warning()
+                ->send();
+
+            return null;
+        }
+
+        $validated = $this->validate([
+            'waveName' => ['required', 'string', 'max:255'],
+            'waveStartDate' => ['required', 'date'],
+            'plannerFallbackDailyCapacity' => ['required', 'integer', 'min:1', 'max:50'],
+            'plannerSkipWeekends' => ['boolean'],
+            'plannerSkipHolidays' => ['boolean'],
+            'waveNotes' => ['nullable', 'string'],
+        ]);
+
+        try {
+            $wave = app(FlashSimulationWavePlanner::class)->createWaveFromSimulation(
+                lines: $this->lines,
+                options: [
+                    'name' => $validated['waveName'],
+                    'start_date' => $validated['waveStartDate'],
+                    'notes' => $validated['waveNotes'] ?? null,
+                    'skip_weekends' => (bool) ($validated['plannerSkipWeekends'] ?? true),
+                    'skip_holidays' => (bool) ($validated['plannerSkipHolidays'] ?? true),
+                    'fallback_daily_capacity' => (int) ($validated['plannerFallbackDailyCapacity'] ?? 4),
+                ],
+            );
+
+            Notification::make()
+                ->title(__('Vague créée'))
+                ->body(__('La vague :name a été générée avec :count batch(es).', [
+                    'name' => $wave->name,
+                    'count' => (string) $wave->productions()->count(),
+                ]))
+                ->success()
+                ->send();
+
+            return $this->redirect(ProductionWaveResource::getUrl('edit', ['record' => $wave]));
+        } catch (\InvalidArgumentException $exception) {
+            Notification::make()
+                ->title(__('Impossible de créer la vague'))
+                ->body($exception->getMessage())
+                ->danger()
+                ->send();
+
+            return null;
+        }
     }
 
     /**

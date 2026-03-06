@@ -56,6 +56,19 @@ class ProductTypeForm
                             ->preload()
                             ->nullable()
                             ->helperText('Choisissez le modèle QC partagé par ce type de produit.'),
+                        Select::make('default_production_line_id')
+                            ->label('Ligne de production par défaut')
+                            ->relationship(
+                                name: 'defaultProductionLine',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn ($query) => $query
+                                    ->where('is_active', true)
+                                    ->orderBy('sort_order')
+                                    ->orderBy('name'),
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->nullable(),
                         Toggle::make('is_active')
                             ->label('Actif')
                             ->default(true),

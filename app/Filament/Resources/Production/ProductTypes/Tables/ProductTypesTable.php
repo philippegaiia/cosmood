@@ -11,6 +11,7 @@ use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class ProductTypesTable
 {
@@ -28,6 +29,11 @@ class ProductTypesTable
                     ->sortable(),
                 TextColumn::make('qcTemplate.name')
                     ->label('Modèle QC')
+                    ->badge()
+                    ->placeholder('-')
+                    ->sortable(),
+                TextColumn::make('defaultProductionLine.name')
+                    ->label('Ligne défaut')
                     ->badge()
                     ->placeholder('-')
                     ->sortable(),
@@ -66,6 +72,7 @@ class ProductTypesTable
                     RestoreBulkAction::make(),
                 ]),
             ])
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['productCategory', 'qcTemplate', 'defaultProductionLine']))
             ->defaultSort('name');
     }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Production\ProductionWaves\Tables;
 
 use App\Models\Production\ProductionWave;
 use App\Services\Production\WaveProcurementService;
+use App\Services\Production\WaveProductionPlanningService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
@@ -11,9 +12,13 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\RepeatableEntry\TableColumn;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
@@ -114,6 +119,59 @@ class ProductionWavesTable
                     ->visible(fn (ProductionWave $record): bool => ! $record->isCancelled() && ! $record->isCompleted())
                     ->action(function (ProductionWave $record): void {
                         $record->cancel();
+                    }),
+                Action::make('replanWave')
+                    ->label('Replanifier')
+                    ->icon(Heroicon::OutlinedCalendarDays)
+                    ->color('info')
+                    ->visible(fn (ProductionWave $record): bool => ! $record->isCancelled() && ! $record->isCompleted() && (int) ($record->productions_count ?? 0) > 0)
+                    ->schema([
+                        DatePicker::make('start_date')
+                            ->label('Nouveau départ')
+                            ->native(false)
+                            ->required()
+                            ->default(fn (ProductionWave $record): string => $record->planned_start_date?->toDateString() ?? now()->toDateString()),
+                        TextInput::make('fallback_daily_capacity')
+                            ->label('Capacité / jour sans ligne')
+                            ->numeric()
+                            ->minValue(1)
+                            ->default(4)
+                            ->required(),
+                        Toggle::make('skip_weekends')
+                            ->label('Ignorer weekends')
+                            ->default(true),
+                        Toggle::make('skip_holidays')
+                            ->label('Ignorer jours fériés')
+                            ->default(true),
+                    ])
+                    ->action(function (ProductionWave $record, array $data): void {
+                        $summary = app(WaveProductionPlanningService::class)->rescheduleWaveProductions(
+                            wave: $record,
+                            startDate: (string) $data['start_date'],
+                            skipWeekends: (bool) ($data['skip_weekends'] ?? true),
+                            skipHolidays: (bool) ($data['skip_holidays'] ?? true),
+                            fallbackDailyCapacity: max(1, (int) ($data['fallback_daily_capacity'] ?? 4)),
+                        );
+
+                        if ($summary['planned_count'] === 0) {
+                            Notification::make()
+                                ->title('Aucune production replanifiée')
+                                ->warning()
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title('Vague replanifiée')
+                            ->body(sprintf(
+                                '%d batch(es) replanifiés du %s au %s.',
+                                (int) $summary['planned_count'],
+                                (string) ($summary['planned_start_date'] ?? '-'),
+                                (string) ($summary['planned_end_date'] ?? '-'),
+                            ))
+                            ->success()
+                            ->send();
                     }),
                 Action::make('procurementPlan')
                     ->label('Plan achats')

@@ -53,6 +53,11 @@ class ProductType extends Model
         return $this->belongsTo(QcTemplate::class);
     }
 
+    public function defaultProductionLine(): BelongsTo
+    {
+        return $this->belongsTo(ProductionLine::class, 'default_production_line_id');
+    }
+
     public function taskTemplates(): BelongsToMany
     {
         return $this->belongsToMany(TaskTemplate::class, 'product_type_task_template')
