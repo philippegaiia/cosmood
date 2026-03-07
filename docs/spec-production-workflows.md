@@ -65,20 +65,54 @@ This document describes the current production-side business rules implemented i
   - skip holidays,
   - fallback daily capacity for unassigned line batches.
 - Editing `planned_start_date` on the wave edit page automatically triggers the same replanning logic.
+- Replanning is allowed only while wave is `draft` or `approved`.
+- Replanning is blocked for `in_progress`, `completed`, and `cancelled` waves.
 - Replanning updates only `planned` and `confirmed` productions.
 - Updating `production_date` keeps existing task auto-reschedule behavior via observer.
 - A bulk action on production list allows the same replan logic without requiring wave membership.
 
 ## Procurement Planning Views
 
+- Wave creation is always initialized as `draft` (no planned end date required at creation time).
 - Wave edit now includes an `Approvisionnement` tab with strict and advisory planning values per ingredient.
+- Wave list includes a procurement coverage signal (`Prête`, `Partielle`, `À sécuriser`) based on advisory shortage first.
 - Strict default semantics:
   - `besoin restant` is computed from non-allocated quantity only,
   - `à passer` is based on not-ordered quantities,
   - stock and shortages are advisory (not automatic commitments).
+- Received quantities remain visible in planning (`reçu stock`) so ingredients already moved to stock are still shown in wave and global procurement views.
+- Coverage display separates `commandé ferme`, `brouillon PO`, and `reçu stock`.
 - A dedicated page `Pilotage achats` consolidates all active waves (`Approved`, `InProgress`) by ingredient.
 - Global table includes wave breakdown per ingredient to identify which wave drives each need.
 - Open supplier orders are shown as advisory inbound quantities and are not treated as exclusive to a single wave.
+- Procurement details distinguish `commandé ferme` (passed+) from `brouillon PO` quantities.
+- A wave-level bulk action can mark `Non commandé` items as manually ordered (`is_order_marked`) for selected ingredients.
+
+### Open-order commitment model
+
+- Supplier order lines include `committed_quantity_kg` (planning commitment in kg).
+- When an order has a wave reference, this committed quantity is treated as `engagé PO` for that wave.
+- Validation rule: `committed_quantity_kg` cannot exceed ordered quantity in kg (`quantity * unit_weight`).
+- Supplier orders prefill `delivery_date` from supplier lead time (`estimated_delivery_days`, default 8 days).
+- Remaining open quantity becomes a shared provisional pool:
+  - `shared provisional = open ordered kg - total committed kg`.
+- Shared provisional assignment is advisory and prioritized by earliest wave need date.
+- Over-commitment is allowed (real-life purchasing constraints) and surfaced as a warning value (`excès engagement`).
+- Supplier lot numbers entered on order items can repeat across orders; uniqueness is enforced at stock reception by suffixing (`LOT`, `LOT-1`, `LOT-2`) with case-insensitive matching and uppercase normalization.
+- Hybrid rule:
+  - procurement item statuses stay indicative,
+  - planning views expose explicit warnings when coverage depends on non-committed provisional pool.
+
+Example (factory case):
+
+- Wave A needs `100 kg` sunflower oil.
+- Buyer orders `1 IBC = 920 kg` on a PO linked to Wave A.
+- PO line commitment is set to `100 kg` (`committed_quantity_kg = 100`).
+- Planning result:
+  - Wave A sees `engagé PO = 100 kg` (covered by commitment).
+  - Shared provisional pool is `820 kg` (`920 - 100`).
+  - Wave B (later date) can consume this shared provisional pool in planning view (priority by earliest need date),
+    without pre-receipt stock allocation.
 
 ## Production Form UX Rules
 
@@ -105,6 +139,7 @@ This document describes the current production-side business rules implemented i
 
 - `production_date` is a planning/anchor date used for scheduling tasks and capacity.
 - `ongoing` is a manual operational action (operator/manager), not an automatic date job.
+- Transition to `ongoing` is blocked until all required production items are fully allocated.
 - `ready_date` remains an availability date (soap default +35 days, others +2 days unless overridden).
 
 ### Observer side effects by status
@@ -156,14 +191,28 @@ Recompute behavior:
 - Items with consumed allocations are immutable in the editor (no split, no deallocation, no merge-to-delete workflow).
 - For existing items, `ingredient` and `phase` are immutable server-side (UI and backend) to preserve traceability invariants.
 - Production record deletion remains separate from cancellation and should stay exceptional due to traceability impact.
+- Wave hard deletion (`vague + productions`) is guarded and blocked when:
+  - wave is `in_progress` or `completed`,
+  - at least one production is `ongoing` or `finished`,
+  - reserved/consumed allocations remain,
+  - committed PO quantities remain on wave-linked supplier order lines,
+  - produced supplies exist from wave productions.
+- Hard-delete blocker for committed PO lines includes order references to guide cleanup (remove commitments or unlink wave reference first).
+- Reserved allocations must be manually deallocated by production before hard deletion.
 
 ### Wave interaction guardrail
 
 - Wave procurement and requirement status synchronization ignore requirements belonging to cancelled productions.
 - This prevents cancelled batches from inflating wave purchase planning.
+- Wave statuses remain manual, but advisory warnings are shown when:
+  - linked productions have started while wave is still `approved`,
+  - all linked productions are terminal while wave is still `in_progress`.
+- Wave completion is blocked until all linked productions are `finished` or `cancelled`.
+- Productions can be linked only to `draft` or `approved` waves; use orphan productions for late/manual additions.
 - Manual procurement mark is supported on production items (`is_order_marked`):
   - keeps an item in `ordered` state even without linked supplier order,
   - fully allocated items are treated as covered (`received`) for coverage traffic light.
+- In production item allocation modal, available supply options include the originating wave reference when available (`Vague: nom (slug)`) to help operator lot selection priority.
 
 ## Print / PDF Documents
 
@@ -263,6 +312,8 @@ For regular productions using a masterbatch:
 - Select `masterbatch_lot_id` in Execution tab
 - Click "Importer traçabilité MB" to copy supply lots from the masterbatch
 - Items in the replaced phase are collapsed and traceability is inherited
+- Imported traceability is idempotent (re-import does not duplicate active allocations)
+- Traceability allocation uses standard allocation service (movement accounting remains consistent)
 
 ### Form Tab Visibility
 

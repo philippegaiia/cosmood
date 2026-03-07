@@ -19,6 +19,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -40,10 +41,13 @@ use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
 class SupplierOrderResource extends Resource
 {
+    private const FALLBACK_ESTIMATED_DELIVERY_DAYS = 8;
+
     protected static ?string $model = SupplierOrder::class;
 
     protected static string|\UnitEnum|null $navigationGroup = 'Achats';
@@ -65,12 +69,34 @@ class SupplierOrderResource extends Resource
                             ->disabledOn('edit')
                             ->searchable()
                             ->preload()
-                            ->afterStateUpdated(function (Get $get, Set $set, ?string $state, $record) {
-                                $prefix = now()->year;
-                                $supplierCode = Supplier::findOrFail($state)->code;
-                                $serie = $get('serial_number');
+                            ->live()
+                            ->afterStateUpdated(function (Get $get, Set $set, ?string $state): void {
+                                if (blank($state)) {
+                                    return;
+                                }
 
-                                $set('order_ref', $prefix.'-'.$supplierCode.'-'.$serie);
+                                $supplier = Supplier::query()->find($state);
+
+                                if (! $supplier) {
+                                    return;
+                                }
+
+                                $prefix = now()->year;
+                                $supplierCode = $supplier->code;
+                                $serialNumber = $get('serial_number');
+
+                                if (filled($serialNumber)) {
+                                    $set('order_ref', $prefix.'-'.$supplierCode.'-'.$serialNumber);
+                                }
+
+                                $deliveryDate = self::resolveEstimatedDeliveryDate(
+                                    supplier: $supplier,
+                                    orderDate: $get('order_date'),
+                                );
+
+                                if ($deliveryDate !== null) {
+                                    $set('delivery_date', $deliveryDate);
+                                }
                             })
                             ->native(false)
                             ->required()
@@ -87,7 +113,7 @@ class SupplierOrderResource extends Resource
                             ->nullable(),
 
                         TextInput::make('serial_number')
-                            // ->hidden()
+                            ->hidden()
                             ->disabledOn('edit')
                             ->numeric()
                             ->default(function () {
@@ -105,21 +131,50 @@ class SupplierOrderResource extends Resource
                             ->disabled()
                             ->dehydrated(),
 
-                        ToggleButtons::make('order_status')
-                            ->options(OrderStatus::class)
-                            ->inline()
-                            ->live()
-                            ->default(OrderStatus::Draft)
-                            ->columns(3),
+                        Fieldset::make('Statut commande')
+                            ->schema([
+                                ToggleButtons::make('order_status')
+                                    ->hiddenLabel()
+                                    ->options(OrderStatus::class)
+                                    ->inline()
+                                    ->live()
+                                    ->default(OrderStatus::Draft)
+                                    ->columnSpanFull(),
+                            ]),
 
                         Fieldset::make('Dates')
                             ->schema([
                                 DatePicker::make('order_date')
+                                    ->label('Date Commande')
                                     ->required()
                                     ->default(now())
+                                    ->live()
+                                    ->afterStateUpdated(function (Get $get, Set $set, ?string $state): void {
+                                        $supplierId = $get('supplier_id');
+
+                                        if (blank($supplierId)) {
+                                            return;
+                                        }
+
+                                        $supplier = Supplier::query()->find($supplierId);
+
+                                        if (! $supplier) {
+                                            return;
+                                        }
+
+                                        $deliveryDate = self::resolveEstimatedDeliveryDate(
+                                            supplier: $supplier,
+                                            orderDate: $state,
+                                        );
+
+                                        if ($deliveryDate !== null) {
+                                            $set('delivery_date', $deliveryDate);
+                                        }
+                                    })
                                     ->native(false)
                                     ->weekStartsOnMonday(),
                                 DatePicker::make('delivery_date')
+                                    ->helperText(__('Prérempli depuis le délai fournisseur, modifiable manuellement.'))
                                     ->afterOrEqual('order_date')
                                     ->native(false)
                                     ->weekStartsOnMonday(),
@@ -128,17 +183,21 @@ class SupplierOrderResource extends Resource
                         Fieldset::make('Documents')
                             ->schema([
                                 TextInput::make('confirmation_number')
+                                    ->label('Numéro de confirmation')
                                     ->maxLength(50)
                                     ->columnSpan(1),
                                 TextInput::make('invoice_number')
+                                    ->label('Numéro facture')
                                     ->maxLength(50)
                                     ->columnSpan(1),
                                 TextInput::make('bl_number')
+                                    ->label('Numéro bon de livraison')
                                     ->maxLength(50)
                                     ->columnSpan(1),
                             ])->columns(3),
 
                         TextInput::make('freight_cost')
+                            ->label('Coût de transport')
                             ->numeric(),
 
                         Section::make('Informations sur la Commande')
@@ -200,7 +259,6 @@ class SupplierOrderResource extends Resource
                                 TextInput::make('batch_number')
                                     ->label('No. Lot')
                                     // ->live()
-                                    ->unique(SupplierOrderItem::class)
                                     ->columnSpan(2),
 
                                 DatePicker::make('expiry_date')
@@ -216,13 +274,49 @@ class SupplierOrderResource extends Resource
                                         return $get('quantity') * $get('unit_weight');
                                     })->columnSpan(1),
 
-                                TextInput::make('is_in_supplies')
-                                    ->label('Etat')
-                                    ->readonly()
-                                    ->dehydrated()
+                                TextInput::make('committed_quantity_kg')
+                                    ->label('Engagé vague (kg)')
+                                    ->numeric()
                                     ->live()
-                                    ->default('Attente')
+                                    ->default(0)
+                                    ->minValue(0)
+                                    ->maxValue(fn (Get $get): float => round((float) ($get('quantity') ?? 0) * max(1.0, (float) ($get('unit_weight') ?? 1)), 3))
+                                    ->step(0.001)
+                                    ->rule(function (Get $get): \Closure {
+                                        return function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
+                                            $orderedKg = round((float) ($get('quantity') ?? 0) * max(1.0, (float) ($get('unit_weight') ?? 1)), 3);
+                                            $committedKg = round((float) ($value ?? 0), 3);
+
+                                            if ($committedKg > $orderedKg) {
+                                                $fail(__('La quantité engagée (:committed kg) ne peut pas dépasser la quantité commandée (:ordered kg).', [
+                                                    'committed' => number_format($committedKg, 3, ',', ' '),
+                                                    'ordered' => number_format($orderedKg, 3, ',', ' '),
+                                                ]));
+                                            }
+                                        };
+                                    })
+                                    ->helperText(function (Get $get): string {
+                                        $waveId = $get('../../production_wave_id');
+
+                                        if (! $waveId) {
+                                            return __('Définir une référence vague pour engager une quantité planifiée.');
+                                        }
+
+                                        $orderedKg = (float) ($get('quantity') ?? 0) * max(1.0, (float) ($get('unit_weight') ?? 1));
+                                        $committedKg = (float) ($get('committed_quantity_kg') ?? 0);
+
+                                        if ($committedKg > $orderedKg) {
+                                            return __('La quantité engagée ne peut pas dépasser la quantité commandée.');
+                                        }
+
+                                        return __('Quantité planifiée engagée pour la vague liée à cette commande.');
+                                    })
+                                    ->visible(fn (Get $get): bool => filled($get('../../production_wave_id')))
                                     ->columnSpan(2),
+
+                                Hidden::make('is_in_supplies')
+                                    ->dehydrated()
+                                    ->default('Attente'),
 
                             ])->columns(18)
                             ->defaultItems(0)
@@ -348,7 +442,7 @@ class SupplierOrderResource extends Resource
                                         ]);
 
                                         try {
-                                            app(InventoryMovementService::class)->receiveOrderItemIntoStock(
+                                            $supply = app(InventoryMovementService::class)->receiveOrderItemIntoStock(
                                                 $supplierOrderItem,
                                                 (string) $record->order_ref,
                                                 (string) $deliveryDate,
@@ -357,6 +451,7 @@ class SupplierOrderResource extends Resource
 
                                             Notification::make()
                                                 ->title('Nouvelle création d\'inventaire')
+                                                ->body(__('Lot final créé: :batch', ['batch' => (string) $supply->batch_number]))
                                                 ->success()
                                                 ->send();
                                         } catch (\RuntimeException $exception) {
@@ -482,6 +577,23 @@ class SupplierOrderResource extends Resource
                     RestoreBulkAction::make(),
                 ]),
             ]);
+    }
+
+    private static function resolveEstimatedDeliveryDate(Supplier $supplier, ?string $orderDate): ?string
+    {
+        if (blank($orderDate)) {
+            return null;
+        }
+
+        $leadDays = (int) ($supplier->estimated_delivery_days ?? self::FALLBACK_ESTIMATED_DELIVERY_DAYS);
+
+        if ($leadDays < 0) {
+            $leadDays = self::FALLBACK_ESTIMATED_DELIVERY_DAYS;
+        }
+
+        return Carbon::parse($orderDate)
+            ->addDays($leadDays)
+            ->toDateString();
     }
 
     public static function getRelations(): array

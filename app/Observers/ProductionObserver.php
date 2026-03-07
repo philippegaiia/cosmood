@@ -10,6 +10,7 @@ use App\Services\Production\ProductionAllocationService;
 use App\Services\Production\ProductionItemGenerationService;
 use App\Services\Production\ProductionQcGenerationService;
 use App\Services\Production\TaskGenerationService;
+use App\Services\Production\WaveRequirementStatusService;
 
 class ProductionObserver
 {
@@ -35,6 +36,7 @@ class ProductionObserver
         private readonly PermanentBatchNumberService $permanentBatchNumberService,
         private readonly ManufacturedIngredientStockService $manufacturedIngredientStockService,
         private readonly ProductionAllocationService $allocationService,
+        private readonly WaveRequirementStatusService $waveRequirementStatusService,
     ) {}
 
     public function created(Production $production): void
@@ -55,6 +57,7 @@ class ProductionObserver
         }
 
         $this->handleAllocationLifecycle($production);
+        $this->syncWaveRequirementStatuses([$production->production_wave_id]);
     }
 
     public function updated(Production $production): void
@@ -88,11 +91,26 @@ class ProductionObserver
         if ($statusChanged) {
             $this->handleAllocationLifecycle($production);
         }
+
+        $waveIdsToSync = [$production->production_wave_id];
+
+        if ($production->wasChanged('production_wave_id')) {
+            $waveIdsToSync[] = $production->getRawOriginal('production_wave_id');
+        }
+
+        if ($production->wasChanged('status') || $production->wasChanged('production_wave_id') || $production->wasChanged('production_date') || $production->wasChanged('masterbatch_lot_id')) {
+            $this->syncWaveRequirementStatuses($waveIdsToSync);
+        }
     }
 
     public function deleting(Production $production): void
     {
         $this->allocationService->releaseForProduction($production);
+    }
+
+    public function deleted(Production $production): void
+    {
+        $this->syncWaveRequirementStatuses([$production->production_wave_id]);
     }
 
     private function handleAllocationLifecycle(Production $production): void
@@ -111,5 +129,25 @@ class ProductionObserver
             ProductionStatus::Cancelled => $this->allocationService->releaseForProduction($production),
             default => null,
         };
+    }
+
+    /**
+     * @param  array<int, int|string|null>  $waveIds
+     */
+    private function syncWaveRequirementStatuses(array $waveIds): void
+    {
+        collect($waveIds)
+            ->filter(fn (mixed $waveId): bool => (int) $waveId > 0)
+            ->map(fn (mixed $waveId): int => (int) $waveId)
+            ->unique()
+            ->each(function (int $waveId): void {
+                $wave = \App\Models\Production\ProductionWave::query()->find($waveId);
+
+                if (! $wave) {
+                    return;
+                }
+
+                $this->waveRequirementStatusService->syncForWave($wave);
+            });
     }
 }

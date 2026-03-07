@@ -3,8 +3,13 @@
 namespace App\Filament\Resources\Production\ProductionResource\RelationManagers;
 
 use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
 use App\Models\Production\ProductionItem;
+use App\Services\Production\WaveRequirementStatusService;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\Summarizers\Summarizer;
 use Filament\Tables\Columns\TextColumn;
@@ -70,12 +75,49 @@ class ProductionItemsRelationManager extends RelationManager
                     ->label('Approvisionné')
                     ->boolean()
                     ->state(fn (ProductionItem $record): bool => $record->is_supplied || $record->supply_id !== null),
+                TextColumn::make('is_order_marked')
+                    ->label(__('Commande passée'))
+                    ->state(fn (ProductionItem $record): string => $record->is_order_marked ? __('Oui') : __('Non'))
+                    ->badge()
+                    ->color(fn (ProductionItem $record): string => $record->is_order_marked ? 'info' : 'gray'),
                 TextColumn::make('supply_batch_number')
                     ->label('Lot supply')
                     ->placeholder('Non sélectionné'),
                 TextColumn::make('supplierListing.name')
                     ->label('Listing fournisseur')
                     ->toggleable(isToggledHiddenByDefault: true),
+            ])
+            ->recordActions([
+                Action::make('toggleOrderMark')
+                    ->label(fn (ProductionItem $record): string => $record->is_order_marked
+                        ? __('Retirer marque commande')
+                        : __('Marquer commande'))
+                    ->icon(fn (ProductionItem $record): Heroicon => $record->is_order_marked
+                        ? Heroicon::OutlinedMinusCircle
+                        : Heroicon::OutlinedCheckCircle)
+                    ->color(fn (ProductionItem $record): string => $record->is_order_marked ? 'warning' : 'info')
+                    ->requiresConfirmation()
+                    ->action(function (ProductionItem $record): void {
+                        $record->loadMissing('production.wave');
+
+                        $nextMarkState = ! $record->is_order_marked;
+
+                        $record->update([
+                            'is_order_marked' => $nextMarkState,
+                            'procurement_status' => $record->isFullyAllocated()
+                                ? ProcurementStatus::Received
+                                : ($nextMarkState ? ProcurementStatus::Ordered : ProcurementStatus::NotOrdered),
+                        ]);
+
+                        if ($record->production?->wave) {
+                            app(WaveRequirementStatusService::class)->syncForWave($record->production->wave);
+                        }
+
+                        Notification::make()
+                            ->title($nextMarkState ? __('Commande marquée') : __('Marquage retiré'))
+                            ->success()
+                            ->send();
+                    }),
             ])
             ->modifyQueryUsing(fn (EloquentBuilder $query): EloquentBuilder => $query->with(['ingredient', 'supplierListing', 'supply', 'production']))
             ->defaultSort('sort');

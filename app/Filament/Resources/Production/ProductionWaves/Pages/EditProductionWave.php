@@ -3,16 +3,32 @@
 namespace App\Filament\Resources\Production\ProductionWaves\Pages;
 
 use App\Filament\Resources\Production\ProductionWaves\ProductionWaveResource;
+use App\Services\Production\WaveDeletionService;
 use App\Services\Production\WaveProductionPlanningService;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
+use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 
 class EditProductionWave extends EditRecord
 {
     protected static string $resource = ProductionWaveResource::class;
+
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        $advisoryMessage = $this->record->getStatusAdvisoryMessage();
+
+        if (! $advisoryMessage) {
+            return;
+        }
+
+        Notification::make()
+            ->title(__('Synchronisation suggérée'))
+            ->body($advisoryMessage)
+            ->warning()
+            ->send();
+    }
 
     protected function afterSave(): void
     {
@@ -23,6 +39,16 @@ class EditProductionWave extends EditRecord
         $this->record->refresh();
 
         if (! $this->record->planned_start_date) {
+            return;
+        }
+
+        if ($this->record->isInProgress() || $this->record->isCompleted() || $this->record->isCancelled()) {
+            Notification::make()
+                ->title(__('Replanification bloquée'))
+                ->body(__('Une vague en cours, terminée ou annulée ne peut pas être replanifiée.'))
+                ->warning()
+                ->send();
+
             return;
         }
 
@@ -55,9 +81,31 @@ class EditProductionWave extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            DeleteAction::make(),
-            ForceDeleteAction::make(),
-            RestoreAction::make(),
+            Action::make('hardDeleteWave')
+                ->label('Supprimer définitivement')
+                ->icon('heroicon-o-trash')
+                ->color('danger')
+                ->requiresConfirmation()
+                ->visible(fn (): bool => ! $this->record->isInProgress() && ! $this->record->isCompleted())
+                ->modalDescription('Supprime définitivement la vague et ses productions. Les allocations doivent être désallouées et les engagements PO retirés manuellement.')
+                ->action(function (): void {
+                    try {
+                        app(WaveDeletionService::class)->hardDeleteWaveWithProductions($this->record);
+
+                        Notification::make()
+                            ->title(__('Vague supprimée définitivement'))
+                            ->success()
+                            ->send();
+
+                        $this->redirect(ProductionWaveResource::getUrl('index'));
+                    } catch (\InvalidArgumentException $exception) {
+                        Notification::make()
+                            ->title(__('Suppression impossible'))
+                            ->body($exception->getMessage())
+                            ->danger()
+                            ->send();
+                    }
+                }),
         ];
     }
 }

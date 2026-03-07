@@ -5,10 +5,12 @@ namespace App\Models\Production;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Pivot;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class FormulaProduct extends Pivot
 {
     use HasFactory;
+    use SoftDeletes;
 
     protected $table = 'formula_product';
 

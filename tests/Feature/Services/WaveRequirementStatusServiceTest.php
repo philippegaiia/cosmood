@@ -219,3 +219,104 @@ it('keeps manually marked items as ordered without supplier order', function () 
 
     expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
 });
+
+it('re-synchronizes previous wave when a supplier order is re-linked', function () {
+    $waveA = ProductionWave::factory()->create();
+    $waveB = ProductionWave::factory()->create();
+    $production = Production::factory()->forWave($waveA)->create();
+    $ingredient = Ingredient::factory()->create();
+    $supplier = Supplier::factory()->create();
+    $listing = SupplierListing::factory()->create([
+        'supplier_id' => $supplier->id,
+        'ingredient_id' => $ingredient->id,
+        'unit_weight' => 25,
+    ]);
+
+    $item = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'required_quantity' => 25,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+    ]);
+
+    $order = SupplierOrder::factory()->create([
+        'supplier_id' => $supplier->id,
+        'production_wave_id' => $waveA->id,
+        'order_status' => OrderStatus::Passed,
+    ]);
+
+    SupplierOrderItem::factory()->create([
+        'supplier_order_id' => $order->id,
+        'supplier_listing_id' => $listing->id,
+        'quantity' => 1,
+        'unit_weight' => 25,
+    ]);
+
+    waveRequirementStatusService()->syncForWave($waveA);
+
+    expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
+
+    $order->update([
+        'production_wave_id' => $waveB->id,
+    ]);
+
+    expect($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
+});
+
+it('returns ingredient options for wave order-mark action', function () {
+    $wave = ProductionWave::factory()->create();
+    $production = Production::factory()->forWave($wave)->create();
+    $ingredientA = Ingredient::factory()->create(['name' => 'Huile coco']);
+    $ingredientB = Ingredient::factory()->create(['name' => 'Soude']);
+
+    ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredientA->id,
+    ]);
+
+    ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredientB->id,
+    ]);
+
+    $options = waveRequirementStatusService()->getIngredientOptionsForWave($wave);
+
+    expect($options)->toHaveKey($ingredientA->id)
+        ->and($options)->toHaveKey($ingredientB->id);
+});
+
+it('marks only not ordered items for selected wave ingredients', function () {
+    $wave = ProductionWave::factory()->create();
+    $production = Production::factory()->forWave($wave)->create();
+    $ingredientA = Ingredient::factory()->create();
+    $ingredientB = Ingredient::factory()->create();
+
+    $itemToMark = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredientA->id,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+        'is_order_marked' => false,
+    ]);
+
+    $itemAlreadyOrdered = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredientA->id,
+        'procurement_status' => ProcurementStatus::Ordered,
+        'is_order_marked' => false,
+    ]);
+
+    $itemOtherIngredient = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredientB->id,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+        'is_order_marked' => false,
+    ]);
+
+    $updated = waveRequirementStatusService()->markNotOrderedItemsAsOrderedForIngredients($wave, [$ingredientA->id]);
+
+    expect($updated)->toBe(1)
+        ->and($itemToMark->fresh()->is_order_marked)->toBeTrue()
+        ->and($itemToMark->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered)
+        ->and($itemAlreadyOrdered->fresh()->is_order_marked)->toBeFalse()
+        ->and($itemOtherIngredient->fresh()->is_order_marked)->toBeFalse();
+});

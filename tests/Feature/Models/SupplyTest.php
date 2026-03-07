@@ -37,7 +37,7 @@ describe('Supply Model', function () {
             'allocated_quantity' => 15.0,
         ]);
 
-        expect($supply->getAvailableQuantity())->toBe(25.0);
+        expect($supply->getAvailableQuantity())->toBe(40.0);
     });
 
     it('calculates total quantity', function () {
@@ -60,7 +60,7 @@ describe('Supply Model', function () {
         $supply = Supply::factory()->partiallyAllocated(50.0, 20.0)->create();
 
         expect((float) $supply->allocated_quantity)->toBe(20.0)
-            ->and($supply->getAvailableQuantity())->toBe(30.0);
+            ->and($supply->getAvailableQuantity())->toBe(50.0);
     });
 
     it('can be out of stock', function () {

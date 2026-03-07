@@ -4,6 +4,7 @@ use App\Filament\Widgets\ProductionCalendarWidget;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionTask;
 use App\Models\User;
+use Guava\Calendar\ValueObjects\FetchInfo;
 use Illuminate\Support\Carbon;
 use Livewire\Livewire;
 
@@ -17,7 +18,7 @@ it('renders production calendar page', function () {
         ->assertSuccessful();
 });
 
-it('returns production and task events for the visible range', function () {
+it('returns task events for the visible range', function () {
     $production = Production::factory()->create([
         'batch_number' => 'B-CAL-001',
         'production_date' => Carbon::today(),
@@ -29,12 +30,27 @@ it('returns production and task events for the visible range', function () {
         'scheduled_date' => Carbon::today(),
     ]);
 
-    $events = collect(app(ProductionCalendarWidget::class)->fetchEvents([
-        'start' => Carbon::today()->startOfMonth()->toDateString(),
-        'end' => Carbon::today()->endOfMonth()->toDateString(),
-    ]));
+    $widget = new class extends ProductionCalendarWidget
+    {
+        public function fetchEventsForTest(FetchInfo $info): iterable
+        {
+            return $this->getEvents($info);
+        }
+    };
 
-    expect($events->pluck('title')->join('|'))
-        ->toContain('B-CAL-001')
-        ->toContain('Melange cuve');
+    $events = collect($widget->fetchEventsForTest(new FetchInfo([
+        'startStr' => Carbon::today()->startOfMonth()->toDateString(),
+        'endStr' => Carbon::today()->endOfMonth()->toDateString(),
+    ])));
+
+    $labels = $events
+        ->map(fn ($event): ?string => match (true) {
+            $event instanceof Production => $event->batch_number,
+            $event instanceof ProductionTask => $event->name,
+            default => null,
+        })
+        ->filter()
+        ->join('|');
+
+    expect($labels)->toContain('Melange cuve');
 });

@@ -5,6 +5,7 @@ namespace App\Models\Production;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
+use App\Enums\WaveStatus;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use Carbon\Carbon;
@@ -27,6 +28,10 @@ class Production extends Model implements Eventable
     protected static function booted(): void
     {
         static::saving(function (Production $production): void {
+            if ($production->isDirty('production_wave_id') && $production->production_wave_id !== null) {
+                self::assertWaveIsAssignable($production);
+            }
+
             if ($production->isDirty('ready_date') && filled($production->ready_date)) {
                 return;
             }
@@ -52,6 +57,10 @@ class Production extends Model implements Eventable
         });
 
         static::updating(function (Production $production): void {
+            if ($production->isDirty('masterbatch_lot_id') && $production->masterbatch_lot_id !== null) {
+                self::assertMasterbatchLotIsFinished($production);
+            }
+
             if (! $production->isDirty('status')) {
                 return;
             }
@@ -72,6 +81,10 @@ class Production extends Model implements Eventable
                     $from->value,
                     $to->value,
                 ));
+            }
+
+            if ($from !== ProductionStatus::Ongoing && $to === ProductionStatus::Ongoing) {
+                self::assertItemsAllocatedBeforeOngoing($production);
             }
 
             if ($from !== ProductionStatus::Finished && $to === ProductionStatus::Finished) {
@@ -257,6 +270,25 @@ class Production extends Model implements Eventable
         };
     }
 
+    public function hasManualOrderMarkedItems(): bool
+    {
+        return $this->getManualOrderMarkedItemsCount() > 0;
+    }
+
+    public function getManualOrderMarkedItemsCount(): int
+    {
+        $this->loadMissing('productionItems');
+
+        $replacedPhase = $this->masterbatch_lot_id
+            ? self::resolveMasterbatchReplacedPhase($this)
+            : null;
+
+        return $this->productionItems
+            ->when($replacedPhase !== null, fn ($items) => $items->where('phase', '!=', $replacedPhase))
+            ->where('is_order_marked', true)
+            ->count();
+    }
+
     /**
      * @return array<string, array<int, ProductionStatus>>
      */
@@ -359,6 +391,23 @@ class Production extends Model implements Eventable
     }
 
     /**
+     * Ensures all required production items are fully allocated before starting production.
+     */
+    private static function assertItemsAllocatedBeforeOngoing(Production $production): void
+    {
+        $unallocatedIngredientNames = $production->getUnallocatedIngredientNamesForOngoing();
+
+        if ($unallocatedIngredientNames === []) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'Cannot set production to ongoing: unallocated items for %s.',
+            implode(', ', $unallocatedIngredientNames),
+        ));
+    }
+
+    /**
      * Returns ingredient names missing lot assignment for finish transition.
      *
      * If a masterbatch is linked, items in the replaced phase are exempt because
@@ -388,6 +437,29 @@ class Production extends Model implements Eventable
             ->all();
     }
 
+    /**
+     * Returns ingredient names still unallocated for ongoing transition.
+     *
+     * @return array<int, string>
+     */
+    public function getUnallocatedIngredientNamesForOngoing(int $limit = 5): array
+    {
+        $replacedPhase = self::resolveMasterbatchReplacedPhase($this);
+
+        return $this->productionItems()
+            ->with(['ingredient:id,name', 'allocations'])
+            ->when($replacedPhase !== null, function ($query) use ($replacedPhase): void {
+                $query->where('phase', '!=', $replacedPhase);
+            })
+            ->get()
+            ->filter(fn (ProductionItem $item): bool => ! $item->isFullyAllocated())
+            ->map(fn (ProductionItem $item): string => (string) ($item->ingredient?->name ?: 'Item #'.$item->id))
+            ->unique()
+            ->take($limit)
+            ->values()
+            ->all();
+    }
+
     private static function resolveMasterbatchReplacedPhase(Production $production): ?string
     {
         if (! $production->masterbatch_lot_id) {
@@ -408,6 +480,36 @@ class Production extends Model implements Eventable
             'additives' => '30',
             default => (string) $masterbatch->replaces_phase,
         };
+    }
+
+    private static function assertMasterbatchLotIsFinished(Production $production): void
+    {
+        $masterbatch = self::query()
+            ->select(['id', 'is_masterbatch', 'status'])
+            ->find($production->masterbatch_lot_id);
+
+        if (! $masterbatch || ! $masterbatch->is_masterbatch) {
+            throw new InvalidArgumentException('Selected lot is not a valid masterbatch production.');
+        }
+
+        if ($masterbatch->status !== ProductionStatus::Finished) {
+            throw new InvalidArgumentException('Masterbatch lot must be finished before assignment.');
+        }
+    }
+
+    private static function assertWaveIsAssignable(Production $production): void
+    {
+        $wave = ProductionWave::query()
+            ->select(['id', 'status'])
+            ->find($production->production_wave_id);
+
+        if (! $wave) {
+            throw new InvalidArgumentException('Selected wave does not exist.');
+        }
+
+        if (! in_array($wave->status, [WaveStatus::Draft, WaveStatus::Approved], true)) {
+            throw new InvalidArgumentException('Productions can only be linked to draft or approved waves.');
+        }
     }
 
     /**

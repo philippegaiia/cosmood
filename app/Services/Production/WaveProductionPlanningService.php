@@ -3,6 +3,7 @@
 namespace App\Services\Production;
 
 use App\Enums\ProductionStatus;
+use App\Enums\WaveStatus;
 use App\Models\Production\Holiday;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionLine;
@@ -86,6 +87,10 @@ class WaveProductionPlanningService
         bool $skipHolidays = true,
         int $fallbackDailyCapacity = 4,
     ): array {
+        if (in_array($wave->status, [WaveStatus::InProgress, WaveStatus::Completed, WaveStatus::Cancelled], true)) {
+            throw new \InvalidArgumentException(__('La replanification est bloquée pour les vagues en cours, terminées ou annulées.'));
+        }
+
         $productions = $wave->productions()
             ->orderBy('production_date')
             ->orderBy('id')

@@ -24,6 +24,7 @@ class SupplierOrderItem extends Model
             'quantity' => 'decimal:3',
             'unit_price' => 'decimal:2',
             'allocated_quantity' => 'decimal:3',
+            'committed_quantity_kg' => 'decimal:3',
             'expiry_date' => 'date',
             'moved_to_stock_at' => 'datetime',
         ];
@@ -31,6 +32,22 @@ class SupplierOrderItem extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (SupplierOrderItem $item): void {
+            $orderedQuantityKg = $item->getOrderedQuantityKg();
+            $committedQuantityKg = round((float) ($item->committed_quantity_kg ?? 0), 3);
+
+            if ($committedQuantityKg < 0) {
+                throw new \InvalidArgumentException(__('La quantité engagée ne peut pas être négative.'));
+            }
+
+            if ($committedQuantityKg > $orderedQuantityKg) {
+                throw new \InvalidArgumentException(__('La quantité engagée (:committed kg) ne peut pas dépasser la quantité commandée (:ordered kg).', [
+                    'committed' => number_format($committedQuantityKg, 3, ',', ' '),
+                    'ordered' => number_format($orderedQuantityKg, 3, ',', ' '),
+                ]));
+            }
+        });
+
         static::saved(function (SupplierOrderItem $item): void {
             $item->syncWaveRequirementStatuses();
         });
@@ -68,6 +85,15 @@ class SupplierOrderItem extends Model
     public function getRemainingQuantity(): float
     {
         return max(0, $this->quantity - ($this->allocated_quantity ?? 0));
+    }
+
+    public function getOrderedQuantityKg(): float
+    {
+        $quantity = (float) ($this->quantity ?? 0);
+        $unitWeight = (float) ($this->unit_weight ?? 0);
+        $unitMultiplier = $unitWeight > 0 ? $unitWeight : 1;
+
+        return round($quantity * $unitMultiplier, 3);
     }
 
     public function isInSupplies(): bool

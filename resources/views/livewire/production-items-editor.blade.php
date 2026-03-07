@@ -39,7 +39,9 @@
                 @php
                     $allocationStatus = App\Enums\AllocationStatus::tryFrom($item['allocation_status'] ?? null);
                     $hasAllocation = !empty($item['allocations']);
-                    $requiredQty = $item['required_quantity'] ?? $this->calculateQuantity($item);
+                    $requiredQty = ((float) ($item['required_quantity'] ?? 0) > 0)
+                        ? (float) $item['required_quantity']
+                        : $this->calculateQuantity($item);
                     $allocatedQty = $item['total_allocated'] ?? 0;
                     $isPartial = $allocationStatus === App\Enums\AllocationStatus::Partial;
                 @endphp
@@ -168,6 +170,18 @@
                             <flux:badge color="blue" size="sm">{{ __('Commande marquée') }}</flux:badge>
                         @endif
                     </div>
+
+                    <div class="mt-2">
+                        @if(!empty($item['is_order_marked']))
+                            <flux:button wire:click="unmarkItemOrdered({{ $index }})" variant="ghost" size="xs">
+                                {{ __('Retirer marque commande') }}
+                            </flux:button>
+                        @else
+                            <flux:button wire:click="markItemOrdered({{ $index }})" variant="ghost" size="xs">
+                                {{ __('Marquer commande') }}
+                            </flux:button>
+                        @endif
+                    </div>
                 </flux:card>
 
                 @php
@@ -252,14 +266,14 @@
                             </flux:callout.text>
                         </flux:callout>
                     @else
-                        <flux:select wire:model.live="selectedSupplyId">
-                            <flux:select.option value="">Choisir un lot...</flux:select.option>
-                            @foreach($supplies as $supply)
-                                <flux:select.option value="{{ $supply['id'] }}">
-                                    {{ $supply['supplier_name'] ?? 'N/A' }} | {{ $supply['batch_number'] }} | {{ $supply['delivery_date'] ?? '-' }} — dispo: {{ number_format($supply['available'], 3) }} {{ $supply['unit'] }}
-                                </flux:select.option>
-                            @endforeach
-                        </flux:select>
+                            <flux:select wire:model.live="selectedSupplyId">
+                                <flux:select.option value="">Choisir un lot...</flux:select.option>
+                                @foreach($supplies as $supply)
+                                    <flux:select.option value="{{ $supply['id'] }}">
+                                        {{ $supply['supplier_name'] ?? 'N/A' }} | {{ $supply['batch_number'] }} | {{ $supply['delivery_date'] ?? '-' }} | {{ $supply['wave_name'] ? 'Vague: '.$supply['wave_name'] : 'Vague: -' }} — dispo: {{ number_format($supply['available'], 3) }} {{ $supply['unit'] }}
+                                    </flux:select.option>
+                                @endforeach
+                            </flux:select>
 
                         @if(!empty($selectedSupplyId))
                             @php

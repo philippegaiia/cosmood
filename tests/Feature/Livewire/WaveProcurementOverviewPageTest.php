@@ -95,6 +95,7 @@ it('renders global procurement lines for active waves', function (): void {
 
     Livewire::test(WaveProcurementOverviewPage::class)
         ->assertSee('Pilotage achats - vagues actives')
+        ->assertSee('Aide colonnes approvisionnement')
         ->assertSee('Huile Ricin')
         ->assertSee('Huile Olive');
 });

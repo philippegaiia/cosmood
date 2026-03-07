@@ -145,3 +145,50 @@ it('receives unit-based supplier order items without kg conversion', function ()
         ->and((float) $movement->quantity)->toBe(300.0)
         ->and($movement->unit)->toBe('u');
 });
+
+it('normalizes duplicate supplier batch numbers to uppercase with sequential suffixes', function () {
+    $user = User::factory()->create();
+    $ingredient = Ingredient::factory()->create();
+    $listing = SupplierListing::factory()->create([
+        'ingredient_id' => $ingredient->id,
+    ]);
+
+    Supply::factory()->create([
+        'supplier_listing_id' => $listing->id,
+        'batch_number' => 'COCOCAU',
+        'quantity_in' => 10,
+        'quantity_out' => 0,
+        'is_in_stock' => true,
+    ]);
+
+    $firstDuplicateItem = SupplierOrderItem::factory()->create([
+        'supplier_listing_id' => $listing->id,
+        'quantity' => 1,
+        'unit_weight' => 25,
+        'batch_number' => 'cococau',
+    ]);
+
+    $secondDuplicateItem = SupplierOrderItem::factory()->create([
+        'supplier_listing_id' => $listing->id,
+        'quantity' => 1,
+        'unit_weight' => 25,
+        'batch_number' => '  COCOCAU  ',
+    ]);
+
+    $firstSupply = inventoryMovementService()->receiveOrderItemIntoStock(
+        $firstDuplicateItem,
+        'PO-TEST-0101',
+        now()->toDateString(),
+        $user,
+    );
+
+    $secondSupply = inventoryMovementService()->receiveOrderItemIntoStock(
+        $secondDuplicateItem,
+        'PO-TEST-0102',
+        now()->toDateString(),
+        $user,
+    );
+
+    expect($firstSupply->batch_number)->toBe('COCOCAU-1')
+        ->and($secondSupply->batch_number)->toBe('COCOCAU-2');
+});

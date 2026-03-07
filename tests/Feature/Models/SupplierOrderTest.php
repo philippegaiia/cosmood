@@ -98,4 +98,20 @@ describe('SupplierOrder Model', function () {
 
         expect((float) $ingredient->fresh()->price)->toBe(12.4);
     });
+
+    it('auto-generates serial number and order reference on create when missing', function () {
+        $supplier = Supplier::factory()->create([
+            'code' => 'CAU',
+        ]);
+
+        $order = SupplierOrder::query()->create([
+            'supplier_id' => $supplier->id,
+            'order_status' => OrderStatus::Draft,
+            'order_date' => now()->toDateString(),
+        ]);
+
+        expect($order->serial_number)->not->toBeNull()
+            ->and($order->serial_number)->toBeInt()
+            ->and($order->order_ref)->toContain('-CAU-');
+    });
 });

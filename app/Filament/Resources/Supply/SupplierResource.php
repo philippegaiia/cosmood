@@ -90,6 +90,15 @@ class SupplierResource extends Resource
                             ->maxLength(100)
                             ->columnSpan(2),
 
+                        TextInput::make('estimated_delivery_days')
+                            ->label(__('Délai livraison estimé (jours)'))
+                            ->numeric()
+                            ->default(8)
+                            ->minValue(0)
+                            ->step(1)
+                            ->helperText(__('Valeur utilisée pour préremplir la date de livraison commande.'))
+                            ->columnSpan(2),
+
                         Toggle::make('is_active')
                             ->label('Actif')
                             ->inline(false)
@@ -261,6 +270,10 @@ class SupplierResource extends Resource
                             ->columnSpan(1),
 
                         TextEntry::make('customer_code')
+                            ->columnSpan(1),
+
+                        TextEntry::make('estimated_delivery_days')
+                            ->label(__('Délai livraison (jours)'))
                             ->columnSpan(1),
 
                         TextEntry::make('address1')

@@ -54,4 +54,38 @@ describe('SupplierOrderItem Model', function () {
         expect($item->isInSupplies())->toBeTrue()
             ->and($item->is_in_supplies)->toBe('Stock');
     });
+
+    it('rejects commitments above ordered quantity', function () {
+        expect(function (): void {
+            SupplierOrderItem::factory()->create([
+                'quantity' => 1,
+                'unit_weight' => 10,
+                'committed_quantity_kg' => 12,
+            ]);
+        })->toThrow(\InvalidArgumentException::class, 'ne peut pas dépasser la quantité commandée');
+    });
+
+    it('allows commitments equal to ordered quantity', function () {
+        $item = SupplierOrderItem::factory()->create([
+            'quantity' => 2,
+            'unit_weight' => 15,
+            'committed_quantity_kg' => 30,
+        ]);
+
+        expect((float) $item->committed_quantity_kg)->toBe(30.0)
+            ->and((float) $item->getOrderedQuantityKg())->toBe(30.0);
+    });
+
+    it('allows duplicate supplier batch numbers across order items', function () {
+        $firstItem = SupplierOrderItem::factory()->create([
+            'batch_number' => 'COCOCAU',
+        ]);
+
+        $secondItem = SupplierOrderItem::factory()->create([
+            'batch_number' => 'COCOCAU',
+        ]);
+
+        expect($firstItem->batch_number)->toBe('COCOCAU')
+            ->and($secondItem->batch_number)->toBe('COCOCAU');
+    });
 });

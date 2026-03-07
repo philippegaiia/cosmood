@@ -3,7 +3,6 @@
 namespace Database\Factories\Production;
 
 use App\Models\Production\Formula;
-use App\Models\Production\Product;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -17,7 +16,6 @@ class FormulaFactory extends Factory
         $slug = Str::slug($name.'-'.$this->faker->unique()->numberBetween(1, 999999));
 
         return [
-            'product_id' => Product::factory(),
             'name' => $name,
             'slug' => $slug,
             'code' => strtoupper($this->faker->unique()->bothify('FML-######')),

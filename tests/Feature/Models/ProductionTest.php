@@ -102,12 +102,46 @@ describe('Production Model', function () {
 
     it('allows valid status transitions', function () {
         $production = Production::factory()->planned()->create();
+        $ingredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(100)->create();
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $item->id,
+            'supply_id' => $supply->id,
+            'quantity' => 10,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
 
         $production->update(['status' => ProductionStatus::Confirmed]);
         $production->update(['status' => ProductionStatus::Ongoing]);
         $production->update(['status' => ProductionStatus::Finished]);
 
         expect($production->fresh()->status)->toBe(ProductionStatus::Finished);
+    });
+
+    it('blocks transition to ongoing when at least one production item is not allocated', function () {
+        $production = Production::factory()->confirmed()->create();
+        $ingredient = Ingredient::factory()->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 12,
+            'procurement_status' => ProcurementStatus::Ordered,
+            'supply_id' => null,
+        ]);
+
+        expect(fn () => $production->update(['status' => ProductionStatus::Ongoing]))
+            ->toThrow(InvalidArgumentException::class, 'Cannot set production to ongoing: unallocated items');
     });
 
     it('prevents deleting finished productions', function () {

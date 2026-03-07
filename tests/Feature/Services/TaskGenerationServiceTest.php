@@ -469,7 +469,8 @@ describe('TaskGenerationService', function () {
     describe('getTaskTemplateForProduction', function () {
         it('finds default template for product type', function () {
             $productType = ProductType::factory()->create();
-            $template = TaskTemplate::factory()->forProductType($productType)->default()->create();
+            $template = TaskTemplate::factory()->create();
+            $template->productTypes()->attach($productType->id, ['is_default' => true]);
 
             $production = Production::factory()->create([
                 'product_type_id' => $productType->id,
@@ -491,9 +492,7 @@ describe('TaskGenerationService', function () {
 
         it('falls back to a global default template', function () {
             $productType = ProductType::factory()->create();
-            $globalTemplate = TaskTemplate::factory()->default()->create([
-                'product_type_id' => null,
-            ]);
+            $globalTemplate = TaskTemplate::factory()->create();
 
             $production = Production::factory()->create([
                 'product_type_id' => $productType->id,

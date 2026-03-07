@@ -15,6 +15,15 @@ class Formula extends Model
 
     protected $guarded = [];
 
+    private ?int $legacyProductId = null;
+
+    protected static function booted(): void
+    {
+        static::created(function (self $formula): void {
+            $formula->syncLegacyProductLink();
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -52,8 +61,34 @@ class Formula extends Model
         return $this->hasMany(Production::class);
     }
 
+    public function setProductIdAttribute(mixed $value): void
+    {
+        $this->legacyProductId = $value !== null ? (int) $value : null;
+    }
+
+    public function getProductIdAttribute(): ?int
+    {
+        return $this->defaultProduct()?->id ?? $this->products()->value('products.id');
+    }
+
+    public function getProductAttribute(): ?Product
+    {
+        return $this->defaultProduct() ?? $this->products()->first();
+    }
+
     public function isMasterbatchFormula(): bool
     {
         return $this->replaces_phase !== null;
+    }
+
+    private function syncLegacyProductLink(): void
+    {
+        if ($this->legacyProductId === null) {
+            return;
+        }
+
+        $this->products()->syncWithoutDetaching([
+            $this->legacyProductId => ['is_default' => true],
+        ]);
     }
 }

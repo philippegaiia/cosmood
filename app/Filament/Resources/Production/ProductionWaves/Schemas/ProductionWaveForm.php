@@ -58,7 +58,8 @@ class ProductionWaveForm
                             ->options(WaveStatus::class)
                             ->default(WaveStatus::Draft)
                             ->required()
-                            ->disabled(fn (string $operation) => $operation === 'edit'),
+                            ->disabled(fn (string $operation) => $operation === 'edit')
+                            ->visible(fn (string $operation): bool => $operation === 'edit'),
                         Textarea::make('notes')
                             ->label('Notes')
                             ->columnSpanFull()
@@ -106,12 +107,15 @@ class ProductionWaveForm
                                 $summary = app(WaveProcurementService::class)->getPlanningSummary($record);
 
                                 return sprintf(
-                                    'Besoin restant: %s kg | Déjà commandé: %s kg | Reste à passer: %s kg | Stock dispo (indicatif): %s kg | Manque indicatif: %s kg',
+                                    'Besoin restant: %s kg | Couvert (cmd + reçu): %s kg | Reçu stock: %s kg | Reste à sécuriser: %s kg | Manque indicatif: %s kg | Commandé ferme: %s kg | Brouillon PO: %s kg | Engagé PO: %s kg',
                                     number_format((float) $summary['required_remaining_total'], 3, ',', ' '),
-                                    number_format((float) $summary['ordered_total'], 3, ',', ' '),
-                                    number_format((float) $summary['to_order_total'], 3, ',', ' '),
-                                    number_format((float) $summary['stock_total'], 3, ',', ' '),
+                                    number_format((float) ($summary['covered_total'] ?? 0), 3, ',', ' '),
+                                    number_format((float) ($summary['received_total'] ?? 0), 3, ',', ' '),
+                                    number_format((float) ($summary['to_secure_total'] ?? 0), 3, ',', ' '),
                                     number_format((float) $summary['shortage_total'], 3, ',', ' '),
+                                    number_format((float) ($summary['firm_order_total'] ?? 0), 3, ',', ' '),
+                                    number_format((float) ($summary['draft_order_total'] ?? 0), 3, ',', ' '),
+                                    number_format((float) ($summary['committed_total'] ?? 0), 3, ',', ' '),
                                 );
                             }),
                         RepeatableEntry::make('procurement_lines')
@@ -123,47 +127,69 @@ class ProductionWaveForm
 
                                 return app(WaveProcurementService::class)
                                     ->getPlanningList($record)
-                                    ->map(fn (object $line): array => [
-                                        'ingredient' => (string) ($line->ingredient_name ?? '-'),
-                                        'need_date' => $line->earliest_need_date
-                                            ? \Illuminate\Support\Carbon::parse($line->earliest_need_date)->format('d/m/Y')
-                                            : '-',
-                                        'required_remaining' => number_format((float) ($line->required_remaining_quantity ?? 0), 3, ',', ' ').' kg',
-                                        'to_order' => number_format((float) $line->to_order_quantity, 3, ',', ' ').' kg',
-                                        'ordered' => number_format((float) $line->ordered_quantity, 3, ',', ' ').' kg',
-                                        'stock' => number_format((float) $line->stock_advisory, 3, ',', ' ').' kg',
-                                        'shortage' => number_format((float) $line->advisory_shortage, 3, ',', ' ').' kg',
-                                        'last_price' => (float) $line->ingredient_price > 0
-                                            ? number_format((float) $line->ingredient_price, 2, ',', ' ').' EUR/kg'
-                                            : '-',
-                                        'estimated_cost' => $line->estimated_cost !== null
-                                            ? number_format((float) $line->estimated_cost, 2, ',', ' ').' EUR'
-                                            : '-',
-                                    ])
+                                    ->map(function (object $line): array {
+                                        $required = (float) ($line->required_remaining_quantity ?? 0);
+                                        $toSecure = (float) ($line->to_secure_quantity ?? 0);
+                                        $advisoryShortage = (float) ($line->advisory_shortage ?? 0);
+                                        $covered = max(0, $required - $toSecure);
+                                        $coverageWarning = (string) ($line->coverage_warning ?? '');
+
+                                        if ($advisoryShortage > 0) {
+                                            $signal = __('À sécuriser');
+                                        } elseif ($toSecure > 0) {
+                                            $signal = __('Stock à réserver');
+                                        } elseif ($coverageWarning !== '') {
+                                            $signal = __('Couverture provisoire');
+                                        } else {
+                                            $signal = __('Prête');
+                                        }
+
+                                        return [
+                                            'ingredient' => (string) ($line->ingredient_name ?? '-'),
+                                            'need_date' => $line->earliest_need_date
+                                                ? \Illuminate\Support\Carbon::parse($line->earliest_need_date)->format('d/m/Y')
+                                                : '-',
+                                            'required_remaining' => number_format($required, 3, ',', ' ').' kg',
+                                            'covered' => number_format($covered, 3, ',', ' ').' kg',
+                                            'to_secure' => number_format($toSecure, 3, ',', ' ').' kg',
+                                            'signal' => $signal,
+                                            'source_hint' => $coverageWarning !== ''
+                                                ? $coverageWarning
+                                                : __('Couvert par engagement PO ou stock disponible'),
+                                            'details' => sprintf(
+                                                '%s | %s | %s | %s | %s | %s | %s',
+                                                __('À passer: :value', ['value' => number_format((float) ($line->to_order_quantity ?? 0), 3, ',', ' ').' kg']),
+                                                __('Commandé ferme: :value', ['value' => number_format((float) ($line->firm_open_order_quantity ?? 0), 3, ',', ' ').' kg']),
+                                                __('Brouillon PO: :value', ['value' => number_format((float) ($line->draft_open_order_quantity ?? 0), 3, ',', ' ').' kg']),
+                                                __('Reçu stock: :value', ['value' => number_format((float) ($line->received_quantity ?? 0), 3, ',', ' ').' kg']),
+                                                __('Engagé: :value', ['value' => number_format((float) ($line->committed_open_order_quantity ?? 0), 3, ',', ' ').' kg']),
+                                                __('Provisoire: :value', ['value' => number_format((float) ($line->priority_provisional_quantity ?? 0), 3, ',', ' ').' kg']),
+                                                __('Stock indicatif: :value', ['value' => number_format((float) ($line->stock_advisory ?? 0), 3, ',', ' ').' kg']),
+                                            ),
+                                        ];
+                                    })
                                     ->values()
                                     ->all();
                             })
                             ->table([
                                 TableColumn::make('Ingrédient'),
-                                TableColumn::make('Besoin date'),
+                                TableColumn::make('Date besoin'),
                                 TableColumn::make('Besoin restant'),
-                                TableColumn::make('À passer'),
-                                TableColumn::make('Déjà commandé'),
-                                TableColumn::make('Stock (indicatif)'),
-                                TableColumn::make('Manque (indicatif)'),
-                                TableColumn::make('Dernier prix'),
-                                TableColumn::make('Coût estimé'),
+                                TableColumn::make('Couvert'),
+                                TableColumn::make('Reste à sécuriser'),
+                                TableColumn::make('Signal'),
+                                TableColumn::make('Source'),
+                                TableColumn::make('Détails'),
                             ])
                             ->schema([
                                 TextEntry::make('ingredient'),
                                 TextEntry::make('need_date'),
                                 TextEntry::make('required_remaining'),
-                                TextEntry::make('to_order'),
-                                TextEntry::make('ordered'),
-                                TextEntry::make('stock'),
-                                TextEntry::make('shortage'),
-                                TextEntry::make('last_price'),
-                                TextEntry::make('estimated_cost'),
+                                TextEntry::make('covered'),
+                                TextEntry::make('to_secure'),
+                                TextEntry::make('signal'),
+                                TextEntry::make('source_hint'),
+                                TextEntry::make('details'),
                             ])
                             ->contained(false),
                     ]),

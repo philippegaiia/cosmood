@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Production\ProductionResource\Schemas;
 
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
+use App\Enums\WaveStatus;
 use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
@@ -103,11 +104,22 @@ class ProductionForm
             ->schema([
                 Select::make('production_wave_id')
                     ->label('Vague de production')
-                    ->relationship('wave', 'name')
+                    ->relationship(
+                        name: 'wave',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn (Builder $query): Builder => $query
+                            ->whereIn('status', [
+                                WaveStatus::Draft->value,
+                                WaveStatus::Approved->value,
+                            ])
+                            ->orderByDesc('planned_start_date')
+                            ->orderByDesc('id'),
+                    )
                     ->searchable()
                     ->preload()
                     ->live()
                     ->placeholder('Aucune (production autonome)')
+                    ->helperText(__('Disponible uniquement pour les vagues en brouillon ou approuvées.'))
                     ->nullable(),
                 Select::make('production_line_id')
                     ->label('Ligne de production')

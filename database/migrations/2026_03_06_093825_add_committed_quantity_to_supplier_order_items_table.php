@@ -1,0 +1,33 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    public function up(): void
+    {
+        Schema::table('supplier_order_items', function (Blueprint $table) {
+            $table->decimal('committed_quantity_kg', 12, 3)
+                ->default(0)
+                ->after('allocated_quantity');
+
+            $table->index('committed_quantity_kg');
+        });
+    }
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::table('supplier_order_items', function (Blueprint $table) {
+            $table->dropIndex(['committed_quantity_kg']);
+            $table->dropColumn('committed_quantity_kg');
+        });
+    }
+};

@@ -164,6 +164,12 @@ class ProductionItem extends Model
      */
     public function getTotalAllocatedQuantity(): float
     {
+        if ($this->relationLoaded('allocations')) {
+            return (float) $this->allocations
+                ->whereIn('status', ['reserved', 'consumed'])
+                ->sum('quantity');
+        }
+
         return (float) $this->allocations()
             ->whereIn('status', ['reserved', 'consumed'])
             ->sum('quantity');

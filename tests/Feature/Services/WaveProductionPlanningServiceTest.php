@@ -140,3 +140,15 @@ it('reschedules only planned and confirmed productions for a wave', function ():
         ->and($wave->fresh()->planned_start_date?->toDateString())->toBe('2026-03-09')
         ->and($wave->fresh()->planned_end_date?->toDateString())->toBe('2026-03-09');
 });
+
+it('blocks replanning for in-progress waves', function (): void {
+    $wave = ProductionWave::factory()->inProgress()->create();
+
+    expect(fn () => waveProductionPlanningService()->rescheduleWaveProductions(
+        wave: $wave,
+        startDate: '2026-03-09',
+        skipWeekends: true,
+        skipHolidays: true,
+        fallbackDailyCapacity: 4,
+    ))->toThrow(\InvalidArgumentException::class, 'replanification est bloquée');
+});

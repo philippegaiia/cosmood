@@ -92,4 +92,24 @@ describe('ProductionWave Status Transitions', function () {
 
         expect($wave->fresh()->status)->toBe(WaveStatus::Cancelled);
     });
+
+    it('cannot complete while linked productions are still active', function () {
+        $wave = ProductionWave::factory()->approved()->create();
+        Production::factory()->forWave($wave)->planned()->create();
+        $wave->update(['status' => WaveStatus::InProgress]);
+
+        expect(fn () => $wave->complete())
+            ->toThrow(\InvalidArgumentException::class, 'Impossible de terminer la vague');
+    });
+
+    it('can complete when all linked productions are terminal', function () {
+        $wave = ProductionWave::factory()->approved()->create();
+        Production::factory()->forWave($wave)->finished()->create();
+        Production::factory()->forWave($wave)->cancelled()->create();
+        $wave->update(['status' => WaveStatus::InProgress]);
+
+        $wave->complete();
+
+        expect($wave->fresh()->status)->toBe(WaveStatus::Completed);
+    });
 });

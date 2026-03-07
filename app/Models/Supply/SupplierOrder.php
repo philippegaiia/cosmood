@@ -31,6 +31,22 @@ class SupplierOrder extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (SupplierOrder $order): void {
+            if (blank($order->serial_number)) {
+                $order->serial_number = (int) (self::withTrashed()->max('serial_number') ?? 0) + 1;
+            }
+
+            if (blank($order->order_ref) && filled($order->supplier_id)) {
+                $supplierCode = Supplier::query()
+                    ->whereKey($order->supplier_id)
+                    ->value('code');
+
+                if (filled($supplierCode)) {
+                    $order->order_ref = now()->year.'-'.$supplierCode.'-'.$order->serial_number;
+                }
+            }
+        });
+
         static::updated(function (SupplierOrder $order): void {
             if (! $order->wasChanged('order_status')) {
                 return;
@@ -92,6 +108,18 @@ class SupplierOrder extends Model
 
     public function syncWaveRequirementStatuses(): void
     {
+        if ($this->wasChanged('production_wave_id')) {
+            $originalWaveId = (int) ($this->getRawOriginal('production_wave_id') ?? 0);
+
+            if ($originalWaveId > 0) {
+                $originalWave = ProductionWave::query()->find($originalWaveId);
+
+                if ($originalWave) {
+                    app(WaveRequirementStatusService::class)->syncForWave($originalWave);
+                }
+            }
+        }
+
         $this->loadMissing('wave');
 
         if (! $this->wave) {

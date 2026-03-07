@@ -22,48 +22,92 @@ class TaskGenerationService
     public function generateFromTemplate(Production $production, TaskTemplate $template): void
     {
         // Eager load relationships to prevent lazy loading violations
-        $template->load('taskTemplateTaskTypes.taskType');
-
-        // Get existing task type IDs for this production
-        $existingTaskTypeIds = $production->productionTasks()
-            ->where('source', 'template')
-            ->pluck('production_task_type_id')
-            ->toArray();
+        $template->loadMissing(['taskTemplateTaskTypes.taskType', 'items']);
 
         $lastScheduledDate = null;
 
-        foreach ($template->taskTemplateTaskTypes as $pivot) {
-            $taskType = $pivot->taskType;
+        if ($template->taskTemplateTaskTypes->isNotEmpty()) {
+            $existingTaskTypeIds = $production->productionTasks()
+                ->where('source', 'template')
+                ->pluck('production_task_type_id')
+                ->filter()
+                ->toArray();
 
-            // Skip if this task type already exists for this production
-            if (in_array($taskType->id, $existingTaskTypeIds)) {
+            foreach ($template->taskTemplateTaskTypes as $pivot) {
+                $taskType = $pivot->taskType;
+
+                if (! $taskType || in_array($taskType->id, $existingTaskTypeIds, true)) {
+                    continue;
+                }
+
+                $scheduledDate = $this->calculateScheduledDate(
+                    $production->production_date,
+                    $pivot->offset_days,
+                    $pivot->skip_weekends
+                );
+
+                if ($lastScheduledDate && $scheduledDate->lt($lastScheduledDate)) {
+                    $scheduledDate = $lastScheduledDate->copy();
+                }
+
+                $durationMinutes = $pivot->duration_override ?? $taskType->duration ?? 60;
+
+                ProductionTask::create([
+                    'production_id' => $production->id,
+                    'task_template_item_id' => null,
+                    'name' => $taskType->name,
+                    'description' => null,
+                    'production_task_type_id' => $taskType->id,
+                    'source' => 'template',
+                    'sequence_order' => $pivot->sort_order,
+                    'scheduled_date' => $scheduledDate,
+                    'date' => $scheduledDate,
+                    'duration_minutes' => $durationMinutes,
+                    'is_finished' => false,
+                    'is_manual_schedule' => false,
+                    'cancelled_at' => null,
+                    'cancelled_reason' => null,
+                    'notes' => null,
+                ]);
+
+                $lastScheduledDate = $scheduledDate;
+            }
+
+            return;
+        }
+
+        $existingTemplateItemIds = $production->productionTasks()
+            ->where('source', 'template')
+            ->pluck('task_template_item_id')
+            ->filter()
+            ->toArray();
+
+        foreach ($template->items as $item) {
+            if (in_array($item->id, $existingTemplateItemIds, true)) {
                 continue;
             }
 
             $scheduledDate = $this->calculateScheduledDate(
                 $production->production_date,
-                $pivot->offset_days,
-                $pivot->skip_weekends
+                $item->offset_days,
+                $item->skip_weekends
             );
 
             if ($lastScheduledDate && $scheduledDate->lt($lastScheduledDate)) {
                 $scheduledDate = $lastScheduledDate->copy();
             }
 
-            // Use duration override if set, otherwise use task type's base duration
-            $durationMinutes = $pivot->duration_override ?? $taskType->duration ?? 60;
-
             ProductionTask::create([
                 'production_id' => $production->id,
-                'task_template_item_id' => null,
-                'name' => $taskType->name,
+                'task_template_item_id' => $item->id,
+                'name' => $item->name,
                 'description' => null,
-                'production_task_type_id' => $taskType->id,
+                'production_task_type_id' => null,
                 'source' => 'template',
-                'sequence_order' => $pivot->sort_order,
+                'sequence_order' => $item->sort_order,
                 'scheduled_date' => $scheduledDate,
                 'date' => $scheduledDate,
-                'duration_minutes' => $durationMinutes,
+                'duration_minutes' => $item->duration_minutes,
                 'is_finished' => false,
                 'is_manual_schedule' => false,
                 'cancelled_at' => null,
@@ -97,32 +141,43 @@ class TaskGenerationService
         // Get the template and task type pivot data for lookups
         $template = $this->getTaskTemplateForProduction($production);
 
-        if (! $template) {
-            return;
+        $taskTypeLookup = [];
+        $templateItemLookup = [];
+
+        if ($template) {
+            // Ensure relationships are loaded to prevent lazy loading violations
+            $template->loadMissing(['taskTemplateTaskTypes.taskType', 'items']);
+
+            // Build lookup of task type pivot data by task type ID
+            $taskTypeLookup = $template->taskTemplateTaskTypes
+                ->mapWithKeys(fn ($pivot) => [
+                    $pivot->taskType->id => [
+                        'offset_days' => $pivot->offset_days,
+                        'skip_weekends' => $pivot->skip_weekends,
+                        'sort_order' => $pivot->sort_order,
+                    ],
+                ])
+                ->all();
+
+            $templateItemLookup = $template->items
+                ->mapWithKeys(fn ($item) => [
+                    $item->id => [
+                        'offset_days' => $item->offset_days,
+                        'skip_weekends' => $item->skip_weekends,
+                        'sort_order' => $item->sort_order,
+                    ],
+                ])
+                ->all();
         }
-
-        // Ensure relationships are loaded to prevent lazy loading violations
-        $template->load('taskTemplateTaskTypes.taskType');
-
-        // Build lookup of task type pivot data by task type ID
-        $taskTypeLookup = $template->taskTemplateTaskTypes
-            ->mapWithKeys(fn ($pivot) => [
-                $pivot->taskType->id => [
-                    'offset_days' => $pivot->offset_days,
-                    'skip_weekends' => $pivot->skip_weekends,
-                    'sort_order' => $pivot->sort_order,
-                ],
-            ])
-            ->all();
 
         /**
          * Load tasks explicitly because this method is also reached from observers
          * after date updates, where lazy loading is blocked in non-production.
          */
-        $production->loadMissing('productionTasks');
+        $production->loadMissing(['productionTasks', 'productionTasks.templateItem']);
 
         $tasks = $production->productionTasks
-            ->whereNotNull('production_task_type_id')
+            ->filter(fn (ProductionTask $task): bool => $task->production_task_type_id !== null || $task->task_template_item_id !== null)
             ->sortBy(fn (ProductionTask $task): array => [
                 $task->sequence_order ?? PHP_INT_MAX,
                 $task->id,
@@ -148,8 +203,23 @@ class TaskGenerationService
                 continue;
             }
 
-            // Get task type pivot data from lookup
-            $taskTypeData = $taskTypeLookup[$task->production_task_type_id] ?? null;
+            $taskTypeData = null;
+
+            if ($task->production_task_type_id !== null) {
+                $taskTypeData = $taskTypeLookup[$task->production_task_type_id] ?? null;
+            }
+
+            if ($taskTypeData === null && $task->task_template_item_id !== null) {
+                $taskTypeData = $templateItemLookup[$task->task_template_item_id] ?? null;
+            }
+
+            if ($taskTypeData === null && $task->task_template_item_id !== null && $task->templateItem) {
+                $taskTypeData = [
+                    'offset_days' => $task->templateItem->offset_days,
+                    'skip_weekends' => $task->templateItem->skip_weekends,
+                    'sort_order' => $task->templateItem->sort_order,
+                ];
+            }
 
             if (! $taskTypeData) {
                 if ($task->scheduled_date) {
@@ -309,7 +379,7 @@ class TaskGenerationService
      */
     public function resetToAutoSchedule(ProductionTask $task): void
     {
-        if (! $task->production_task_type_id || $task->is_finished || $task->isCancelled()) {
+        if (($task->production_task_type_id === null && $task->task_template_item_id === null) || $task->is_finished || $task->isCancelled()) {
             return;
         }
 

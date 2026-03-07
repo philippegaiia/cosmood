@@ -194,6 +194,55 @@ describe('MasterbatchService', function () {
                 ->and($targetItem->allocations->first()->supply_id)->toBe($supply->id);
         });
 
+        it('is idempotent when importing masterbatch traceability multiple times', function () {
+            $ingredient = Ingredient::factory()->create();
+            $listing = SupplierListing::factory()->create([
+                'ingredient_id' => $ingredient->id,
+            ]);
+            $supply = Supply::factory()->inStock(50)->create([
+                'supplier_listing_id' => $listing->id,
+                'batch_number' => 'LOT-MB-IDEM',
+            ]);
+
+            $masterbatch = Production::factory()->masterbatch()->finished()->create([
+                'batch_number' => 'MB-IDEM',
+                'replaces_phase' => 'saponified_oils',
+            ]);
+
+            $mbItem = ProductionItem::factory()->create([
+                'production_id' => $masterbatch->id,
+                'ingredient_id' => $ingredient->id,
+                'supplier_listing_id' => $listing->id,
+                'phase' => Phases::Saponification->value,
+                'required_quantity' => 10.0,
+            ]);
+
+            ProductionItemAllocation::factory()->create([
+                'production_item_id' => $mbItem->id,
+                'supply_id' => $supply->id,
+                'quantity' => 10.0,
+                'status' => 'reserved',
+            ]);
+
+            $production = Production::factory()->create([
+                'masterbatch_lot_id' => $masterbatch->id,
+            ]);
+
+            $targetItem = ProductionItem::factory()->create([
+                'production_id' => $production->id,
+                'ingredient_id' => $ingredient->id,
+                'phase' => Phases::Saponification->value,
+                'required_quantity' => 10.0,
+            ]);
+
+            $firstRun = $this->service->applyTraceabilityToProductionItems($production);
+            $secondRun = $this->service->applyTraceabilityToProductionItems($production);
+
+            expect($firstRun)->toBe(1)
+                ->and($secondRun)->toBe(0)
+                ->and($targetItem->fresh()->allocations()->whereIn('status', ['reserved', 'consumed'])->count())->toBe(1);
+        });
+
         it('detects percentage mismatches between production and masterbatch oils', function () {
             $ingredient = Ingredient::factory()->create();
 

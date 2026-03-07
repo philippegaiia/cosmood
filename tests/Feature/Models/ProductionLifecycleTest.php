@@ -250,7 +250,7 @@ describe('Production lifecycle orchestration', function () {
     });
 
     it('keeps tasks when production is ongoing or finished', function () {
-        $production = Production::factory()->create(['status' => ProductionStatus::Confirmed]);
+        $production = Production::withoutEvents(fn () => Production::factory()->create(['status' => ProductionStatus::Confirmed]));
 
         ProductionTask::factory()->count(2)->create([
             'production_id' => $production->id,
@@ -327,6 +327,14 @@ describe('Production lifecycle orchestration', function () {
         expect($autoTask->scheduled_date->format('Y-m-d'))->toBe('2026-03-10')
             ->and($manualTask->scheduled_date->format('Y-m-d'))->toBe('2026-03-20')
             ->and($manualTask->is_manual_schedule)->toBeTrue();
+    });
+
+    it('rejects linking a production to a wave already in progress', function () {
+        $wave = ProductionWave::factory()->inProgress()->create();
+
+        expect(fn () => Production::factory()->create([
+            'production_wave_id' => $wave->id,
+        ]))->toThrow(InvalidArgumentException::class, 'draft or approved waves');
     });
 });
 

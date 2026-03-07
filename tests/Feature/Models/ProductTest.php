@@ -40,11 +40,18 @@ describe('Product Model', function () {
             ->and($product->producedIngredient->id)->toBe($ingredient->id);
     });
 
-    it('has many formulas', function () {
+    it('has many formulas via pivot', function () {
         $product = Product::factory()->create();
-        Formula::factory()->count(2)->create(['product_id' => $product->id]);
+        $formulas = Formula::factory()->count(2)->create();
 
-        expect($product->formulas)->toHaveCount(2);
+        foreach ($formulas as $formula) {
+            $product->formulas()->attach($formula->id, ['is_default' => false]);
+        }
+
+        $product->setDefaultFormula($formulas->first()->id);
+
+        expect($product->formulas)->toHaveCount(2)
+            ->and($product->defaultFormula()->id)->toBe($formulas->first()->id);
     });
 
     it('has many productions', function () {

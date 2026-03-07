@@ -12,7 +12,12 @@ use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
+use App\Models\Production\ProductionWave;
 use App\Models\Supply\Ingredient;
+use App\Models\Supply\Supplier;
+use App\Models\Supply\SupplierListing;
+use App\Models\Supply\SupplierOrder;
+use App\Models\Supply\SupplierOrderItem;
 use App\Models\Supply\Supply;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -418,4 +423,71 @@ it('allows removing manual ordered mark on an item', function (): void {
 
     expect($item->fresh()->is_order_marked)->toBeFalse()
         ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
+});
+
+it('shows wave reference in available supply picker labels', function (): void {
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formule supply wave label',
+        'slug' => 'formule-supply-wave-label',
+        'code' => 'FRM-DEL-009',
+        'is_active' => true,
+    ]);
+
+    $production = Production::query()->create([
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'slug' => 'batch-supply-wave-label',
+        'batch_number' => 'T90009',
+        'status' => ProductionStatus::Planned,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 100,
+        'expected_units' => 100,
+    ]);
+
+    $wave = ProductionWave::factory()->create([
+        'name' => 'Wave Test',
+        'slug' => 'wave-test',
+    ]);
+
+    $supplier = Supplier::factory()->create();
+    $ingredient = Ingredient::factory()->create();
+    $listing = SupplierListing::factory()->create([
+        'supplier_id' => $supplier->id,
+        'ingredient_id' => $ingredient->id,
+    ]);
+
+    $order = SupplierOrder::factory()->passed()->create([
+        'supplier_id' => $supplier->id,
+        'production_wave_id' => $wave->id,
+    ]);
+
+    $orderItem = SupplierOrderItem::factory()->create([
+        'supplier_order_id' => $order->id,
+        'supplier_listing_id' => $listing->id,
+        'quantity' => 1,
+        'unit_weight' => 20,
+        'moved_to_stock_at' => now(),
+    ]);
+
+    $supply = Supply::factory()->inStock(20)->create([
+        'supplier_listing_id' => $listing->id,
+        'supplier_order_item_id' => $orderItem->id,
+        'batch_number' => 'LOT-WAVE-01',
+        'delivery_date' => now()->toDateString(),
+    ]);
+
+    ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'supply_id' => $supply->id,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+    ]);
+
+    Livewire::test(ProductionItemsEditor::class, ['productionId' => $production->id])
+        ->call('editItem', 0)
+        ->assertSee('Vague: Wave Test (wave-test)');
 });

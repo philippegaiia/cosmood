@@ -15,31 +15,30 @@ class TaskTemplateFactory extends Factory
         return [
             'name' => $this->faker->words(2, true).' Template',
             'product_category_id' => null,
-            'product_type_id' => ProductType::factory(),
-            'is_default' => false,
         ];
-    }
-
-    public function default(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'is_default' => true,
-        ]);
     }
 
     public function forCategory(\App\Models\Production\ProductCategory $category): static
     {
         return $this->state(fn (array $attributes) => [
             'product_category_id' => $category->id,
-            'product_type_id' => null,
         ]);
     }
 
-    public function forProductType(ProductType $productType): static
+    public function forProductType(ProductType $productType, bool $isDefault = true): static
     {
-        return $this->state(fn (array $attributes) => [
-            'product_type_id' => $productType->id,
-            'product_category_id' => $productType->product_category_id,
-        ]);
+        return $this->afterCreating(function (TaskTemplate $template) use ($productType, $isDefault): void {
+            $template->productTypes()->attach($productType->id, ['is_default' => $isDefault]);
+        });
+    }
+
+    public function default(): static
+    {
+        return $this->afterCreating(function (TaskTemplate $template): void {
+            $productTypes = $template->productTypes;
+            if ($productTypes->isNotEmpty()) {
+                $template->productTypes()->updateExistingPivot($productTypes->first()->id, ['is_default' => true]);
+            }
+        });
     }
 }

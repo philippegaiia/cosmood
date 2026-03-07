@@ -16,11 +16,14 @@ describe('Formula Model', function () {
             ->and($formula->name)->not->toBeEmpty();
     });
 
-    it('belongs to a product', function () {
+    it('belongs to many products via pivot', function () {
         $product = Product::factory()->create();
-        $formula = Formula::factory()->create(['product_id' => $product->id]);
+        $formula = Formula::factory()->create();
 
-        expect($formula->product->id)->toBe($product->id);
+        $formula->products()->attach($product->id, ['is_default' => true]);
+
+        expect($formula->products)->toHaveCount(1)
+            ->and($formula->defaultProduct()->id)->toBe($product->id);
     });
 
     it('has many formula items', function () {

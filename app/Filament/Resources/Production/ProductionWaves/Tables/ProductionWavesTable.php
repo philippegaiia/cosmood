@@ -3,16 +3,15 @@
 namespace App\Filament\Resources\Production\ProductionWaves\Tables;
 
 use App\Models\Production\ProductionWave;
+use App\Services\Production\WaveDeletionService;
 use App\Services\Production\WaveProcurementService;
 use App\Services\Production\WaveProductionPlanningService;
+use App\Services\Production\WaveRequirementStatusService;
 use Filament\Actions\Action;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Infolists\Components\RepeatableEntry;
@@ -21,7 +20,6 @@ use Filament\Infolists\Components\TextEntry;
 use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -40,6 +38,18 @@ class ProductionWavesTable
                     ->label('Statut')
                     ->badge()
                     ->sortable(),
+                TextColumn::make('coverage_signal')
+                    ->label(__('Couverture appro'))
+                    ->state(fn (ProductionWave $record): string => $record->getCoverageSignalLabel())
+                    ->badge()
+                    ->color(fn (ProductionWave $record): string => $record->getCoverageSignalColor())
+                    ->tooltip(fn (ProductionWave $record): string => $record->getCoverageSignalTooltip()),
+                TextColumn::make('status_sync_advisory')
+                    ->label('Alerte flux')
+                    ->state(fn (ProductionWave $record): ?string => $record->getStatusAdvisoryMessage())
+                    ->badge()
+                    ->color('warning')
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('productions_count')
                     ->label('Productions')
                     ->counts('productions')
@@ -66,9 +76,6 @@ class ProductionWavesTable
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                TrashedFilter::make(),
             ])
             ->recordActions([
                 Action::make('approve')
@@ -108,8 +115,20 @@ class ProductionWavesTable
                     ->color('success')
                     ->requiresConfirmation()
                     ->visible(fn (ProductionWave $record): bool => $record->isInProgress())
+                    ->disabled(fn (ProductionWave $record): bool => $record->hasNonTerminalProductions())
+                    ->tooltip(fn (ProductionWave $record): ?string => $record->hasNonTerminalProductions()
+                        ? __('Toutes les productions liées doivent être terminées ou annulées pour clôturer la vague.')
+                        : null)
                     ->action(function (ProductionWave $record): void {
-                        $record->complete();
+                        try {
+                            $record->complete();
+                        } catch (\InvalidArgumentException $exception) {
+                            Notification::make()
+                                ->title(__('Clôture impossible'))
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+                        }
                     }),
                 Action::make('cancel')
                     ->label('Annuler')
@@ -120,11 +139,34 @@ class ProductionWavesTable
                     ->action(function (ProductionWave $record): void {
                         $record->cancel();
                     }),
+                Action::make('hardDeleteWave')
+                    ->label('Supprimer définitivement')
+                    ->icon(Heroicon::OutlinedTrash)
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCompleted())
+                    ->modalDescription('Supprime définitivement la vague et ses productions. Les allocations doivent être désallouées et les engagements PO retirés manuellement.')
+                    ->action(function (ProductionWave $record): void {
+                        try {
+                            app(WaveDeletionService::class)->hardDeleteWaveWithProductions($record);
+
+                            Notification::make()
+                                ->title('Vague supprimée définitivement')
+                                ->success()
+                                ->send();
+                        } catch (\InvalidArgumentException $exception) {
+                            Notification::make()
+                                ->title('Suppression impossible')
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+                        }
+                    }),
                 Action::make('replanWave')
                     ->label('Replanifier')
                     ->icon(Heroicon::OutlinedCalendarDays)
                     ->color('info')
-                    ->visible(fn (ProductionWave $record): bool => ! $record->isCancelled() && ! $record->isCompleted() && (int) ($record->productions_count ?? 0) > 0)
+                    ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCancelled() && ! $record->isCompleted() && (int) ($record->productions_count ?? 0) > 0)
                     ->schema([
                         DatePicker::make('start_date')
                             ->label('Nouveau départ')
@@ -145,13 +187,23 @@ class ProductionWavesTable
                             ->default(true),
                     ])
                     ->action(function (ProductionWave $record, array $data): void {
-                        $summary = app(WaveProductionPlanningService::class)->rescheduleWaveProductions(
-                            wave: $record,
-                            startDate: (string) $data['start_date'],
-                            skipWeekends: (bool) ($data['skip_weekends'] ?? true),
-                            skipHolidays: (bool) ($data['skip_holidays'] ?? true),
-                            fallbackDailyCapacity: max(1, (int) ($data['fallback_daily_capacity'] ?? 4)),
-                        );
+                        try {
+                            $summary = app(WaveProductionPlanningService::class)->rescheduleWaveProductions(
+                                wave: $record,
+                                startDate: (string) $data['start_date'],
+                                skipWeekends: (bool) ($data['skip_weekends'] ?? true),
+                                skipHolidays: (bool) ($data['skip_holidays'] ?? true),
+                                fallbackDailyCapacity: max(1, (int) ($data['fallback_daily_capacity'] ?? 4)),
+                            );
+                        } catch (\InvalidArgumentException $exception) {
+                            Notification::make()
+                                ->title(__('Replanification impossible'))
+                                ->body($exception->getMessage())
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
 
                         if ($summary['planned_count'] === 0) {
                             Notification::make()
@@ -220,6 +272,40 @@ class ProductionWavesTable
                             ])
                             ->contained(false),
                     ]),
+                Action::make('markWaveIngredientOrdered')
+                    ->label(__('Marquer commande'))
+                    ->icon(Heroicon::OutlinedCheckCircle)
+                    ->color('info')
+                    ->visible(fn (ProductionWave $record): bool => (int) ($record->productions_count ?? 0) > 0)
+                    ->schema([
+                        Select::make('ingredient_ids')
+                            ->label(__('Ingrédients'))
+                            ->multiple()
+                            ->searchable()
+                            ->preload()
+                            ->options(fn (ProductionWave $record): array => app(WaveRequirementStatusService::class)->getIngredientOptionsForWave($record))
+                            ->required(),
+                    ])
+                    ->action(function (ProductionWave $record, array $data): void {
+                        $updatedCount = app(WaveRequirementStatusService::class)
+                            ->markNotOrderedItemsAsOrderedForIngredients($record, (array) ($data['ingredient_ids'] ?? []));
+
+                        if ($updatedCount === 0) {
+                            Notification::make()
+                                ->title(__('Aucun item mis à jour'))
+                                ->body(__('Seuls les items "Non commandé" sont marqués automatiquement.'))
+                                ->warning()
+                                ->send();
+
+                            return;
+                        }
+
+                        Notification::make()
+                            ->title(__('Commande marquée'))
+                            ->body(__('Items mis à jour: :count', ['count' => $updatedCount]))
+                            ->success()
+                            ->send();
+                    }),
                 Action::make('printProcurementPlan')
                     ->label('Imprimer plan')
                     ->icon(Heroicon::OutlinedPrinter)
@@ -228,13 +314,6 @@ class ProductionWavesTable
                     ->openUrlInNewTab(),
                 ViewAction::make(),
                 EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-                ]),
             ])
             ->defaultSort('created_at', 'desc')
             ->modifyQueryUsing(fn ($query) => $query->withCount('productions'));

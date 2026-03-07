@@ -13,6 +13,10 @@ use Illuminate\Support\Facades\DB;
  */
 class ProductionItemGenerationService
 {
+    public function __construct(
+        private readonly IngredientQuantityCalculator $quantityCalculator,
+    ) {}
+
     /**
      * Generates production items once per production.
      * Includes formula ingredients and product packaging.
@@ -31,8 +35,15 @@ class ProductionItemGenerationService
         }
 
         DB::transaction(function () use ($production, $formula, $product): void {
+            $formula->loadMissing('formulaItems.ingredient');
+
             // Generate items from formula ingredients (phases 10/20/30)
             foreach ($formula->formulaItems as $formulaItem) {
+                $resolvedMode = $this->quantityCalculator->resolveCalculationMode(
+                    ingredientBaseUnit: $formulaItem->ingredient?->base_unit,
+                    storedMode: $formulaItem->calculation_mode,
+                );
+
                 ProductionItem::query()->create([
                     'production_id' => $production->id,
                     'ingredient_id' => $formulaItem->ingredient_id,
@@ -41,7 +52,12 @@ class ProductionItemGenerationService
                     'supply_batch_number' => null,
                     'percentage_of_oils' => $formulaItem->percentage_of_oils,
                     'phase' => $formulaItem->phase->value,
-                    'calculation_mode' => $formulaItem->calculation_mode?->value ?? $formulaItem->calculation_mode,
+                    'calculation_mode' => $resolvedMode->value,
+                    'required_quantity' => $this->calculateRequiredQuantity(
+                        production: $production,
+                        coefficient: (float) $formulaItem->percentage_of_oils,
+                        mode: $resolvedMode,
+                    ),
                     'organic' => $formulaItem->organic,
                     'is_supplied' => false,
                     'sort' => $formulaItem->sort,
@@ -63,19 +79,39 @@ class ProductionItemGenerationService
         $packagingItems = $product->packaging()->get();
 
         foreach ($packagingItems as $packaging) {
+            $quantityPerUnit = (float) ($packaging->pivot->quantity_per_unit ?? 0);
+
             ProductionItem::query()->create([
                 'production_id' => $production->id,
                 'ingredient_id' => $packaging->id,
                 'supplier_listing_id' => null,
                 'supply_id' => null,
                 'supply_batch_number' => null,
-                'percentage_of_oils' => $packaging->pivot->quantity_per_unit,
+                'percentage_of_oils' => $quantityPerUnit,
                 'phase' => Phases::Packaging->value,
                 'calculation_mode' => FormulaItemCalculationMode::QuantityPerUnit->value,
+                'required_quantity' => $this->calculateRequiredQuantity(
+                    production: $production,
+                    coefficient: $quantityPerUnit,
+                    mode: FormulaItemCalculationMode::QuantityPerUnit,
+                ),
                 'organic' => false,
                 'is_supplied' => false,
                 'sort' => $packaging->pivot->sort,
             ]);
         }
+    }
+
+    private function calculateRequiredQuantity(
+        Production $production,
+        float $coefficient,
+        FormulaItemCalculationMode $mode,
+    ): float {
+        return $this->quantityCalculator->calculate(
+            coefficient: $coefficient,
+            batchSizeKg: (float) ($production->planned_quantity ?? 0),
+            expectedUnits: (float) ($production->expected_units ?? 0),
+            calculationMode: $mode,
+        );
     }
 }

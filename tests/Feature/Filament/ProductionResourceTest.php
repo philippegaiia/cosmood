@@ -8,6 +8,7 @@ use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionItemAllocation;
 use App\Models\Production\ProductionQcCheck;
 use App\Models\Production\ProductionTask;
 use App\Models\Production\ProductionWave;
@@ -242,10 +243,37 @@ describe('Production - Relationships', function () {
 
         Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
             'record' => $production->id,
-        ])->assertSet('data.productionItems', function (array $items): bool {
-            return collect($items)
-                ->contains(fn (array $item): bool => ($item['supply_batch_number'] ?? null) === 'LOT-UI-001');
-        });
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+        ])->assertSee('LOT-UI-001');
+    });
+
+    it('shows and toggles commande passee from production items tab', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->create();
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'is_order_marked' => false,
+            'procurement_status' => \App\Enums\ProcurementStatus::NotOrdered,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+        ])
+            ->assertSee('Non')
+            ->callAction(TestAction::make('toggleOrderMark')->table($item))
+            ->assertHasNoErrors()
+            ->assertSee('Oui')
+            ->callAction(TestAction::make('toggleOrderMark')->table($item))
+            ->assertHasNoErrors();
+
+        expect($item->fresh()->is_order_marked)->toBeFalse()
+            ->and($item->fresh()->procurement_status)->toBe(\App\Enums\ProcurementStatus::NotOrdered);
     });
 
     it('keeps the original product when editing a production', function () {
@@ -263,7 +291,7 @@ describe('Production - Relationships', function () {
 
         $production = Production::factory()->create([
             'product_id' => $originalProduct->id,
-            'formula_id' => $originalProduct->formulas()->value('id'),
+            'formula_id' => $originalProduct->formulas()->value('formulas.id'),
         ]);
 
         Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
@@ -638,7 +666,7 @@ describe('Production sheet print route', function () {
             'replaces_phase' => 'saponified_oils',
         ]);
 
-        ProductionItem::factory()->create([
+        $masterbatchItem = ProductionItem::factory()->create([
             'production_id' => $masterbatch->id,
             'ingredient_id' => $ingredient->id,
             'supplier_listing_id' => $listing->id,
@@ -647,6 +675,13 @@ describe('Production sheet print route', function () {
             'phase' => '10',
             'percentage_of_oils' => 60,
             'is_supplied' => true,
+        ]);
+
+        ProductionItemAllocation::factory()->create([
+            'production_item_id' => $masterbatchItem->id,
+            'supply_id' => $supply->id,
+            'quantity' => 12,
+            'status' => 'reserved',
         ]);
 
         $production = Production::factory()->usingMasterbatch($masterbatch)->create([

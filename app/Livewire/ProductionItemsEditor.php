@@ -7,7 +7,6 @@ use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
-use App\Models\Settings;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use App\Services\Production\IngredientQuantityCalculator;
@@ -18,7 +17,6 @@ use Filament\Actions\Action;
 use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\On;
@@ -219,32 +217,15 @@ class ProductionItemsEditor extends Component
         $supplies = $this->allocationService->getAvailableSupplies($ingredient)
             ->map(fn ($supply): array => array_merge($supply, [
                 'unit' => 'kg',
-                'supplier_name' => $this->formatSupplierName($supply['id']),
-                'delivery_date' => $supply['delivery_date'],
-                'wave_name' => null,
+                'supplier_name' => (string) ($supply['supplier_name'] ?? __('N/A')),
+                'delivery_date' => $supply['delivery_date'] ?? null,
+                'wave_name' => $supply['wave_label'] ?? null,
             ]));
 
         // Cache results
         $this->availableSuppliesCache[$ingredientId] = $supplies;
 
         return $supplies;
-    }
-
-    private function formatSupplierName(int $supplyId): string
-    {
-        $supply = Supply::with('supplierListing.supplier')->find($supplyId);
-
-        if (! $supply) {
-            return 'N/A';
-        }
-
-        if ($supply->source_production_id !== null) {
-            return Settings::internalSupplierLabel();
-        }
-
-        $supplier = $supply->supplierListing?->supplier;
-
-        return $supplier ? Str::limit($supplier->name, 8) : 'N/A';
     }
 
     public function calculateQuantity(array $item): float
@@ -578,6 +559,7 @@ class ProductionItemsEditor extends Component
         }
 
         $this->syncAllocations($savedItem, $this->editingItem['supply_id'] ?? null);
+        $this->syncWaveRequirementStatusesForProduction($production);
 
         $this->loadItems($production);
 
@@ -905,6 +887,7 @@ class ProductionItemsEditor extends Component
             $production = Production::find($this->productionId);
 
             if ($production) {
+                $this->syncWaveRequirementStatusesForProduction($production);
                 $this->loadItems($production);
             }
 
@@ -1019,6 +1002,8 @@ class ProductionItemsEditor extends Component
 
         $updated = $this->masterbatchService->applyTraceabilityToProductionItems($production);
 
+        $this->syncWaveRequirementStatusesForProduction($production);
+
         if ($updated === 0) {
             Notification::make()
                 ->title('Information')
@@ -1044,6 +1029,17 @@ class ProductionItemsEditor extends Component
         $this->showEditModal = false;
         $this->editingItem = null;
         $this->editingIndex = null;
+    }
+
+    private function syncWaveRequirementStatusesForProduction(Production $production): void
+    {
+        $production->loadMissing('wave');
+
+        if (! $production->wave) {
+            return;
+        }
+
+        app(WaveRequirementStatusService::class)->syncForWave($production->wave);
     }
 
     public function render(): View

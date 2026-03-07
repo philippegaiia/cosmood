@@ -16,6 +16,8 @@ class Supplier extends Model
         'name',
         'code',
         'slug',
+        'customer_code',
+        'estimated_delivery_days',
         'address1',
         'address2',
         'is_active',
@@ -26,8 +28,15 @@ class Supplier extends Model
         'phone',
         'website',
         'description',
-        'customer_code',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+            'estimated_delivery_days' => 'integer',
+        ];
+    }
 
     public function contacts(): HasMany
     {

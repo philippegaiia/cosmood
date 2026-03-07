@@ -31,6 +31,18 @@ class ProductionsRelationManager extends RelationManager
                     ->label('Statut')
                     ->badge()
                     ->sortable(),
+                TextColumn::make('procurement_signal')
+                    ->label(__('Signal appro'))
+                    ->state(fn (Production $record): string => $record->getSupplyCoverageLabel())
+                    ->badge()
+                    ->color(fn (Production $record): string => $record->getSupplyCoverageColor()),
+                TextColumn::make('manual_order_mark')
+                    ->label(__('Commande passée'))
+                    ->state(fn (Production $record): string => $record->hasManualOrderMarkedItems()
+                        ? __('Oui (:count)', ['count' => $record->getManualOrderMarkedItemsCount()])
+                        : __('Non'))
+                    ->badge()
+                    ->color(fn (Production $record): string => $record->hasManualOrderMarkedItems() ? 'info' : 'gray'),
                 TextColumn::make('planned_quantity')
                     ->label('Qté planifiée (kg)')
                     ->numeric(decimalPlaces: 3)
@@ -51,7 +63,7 @@ class ProductionsRelationManager extends RelationManager
             ])
             ->recordUrl(fn (Production $record): string => ProductionResource::getUrl('edit', ['record' => $record]))
             ->openRecordUrlInNewTab()
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['product', 'productionLine']))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['product', 'productionLine', 'productionItems.allocations']))
             ->defaultSort('production_date', 'asc');
     }
 }

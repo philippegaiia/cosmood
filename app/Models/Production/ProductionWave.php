@@ -2,8 +2,10 @@
 
 namespace App\Models\Production;
 
+use App\Enums\ProductionStatus;
 use App\Enums\WaveStatus;
 use App\Models\User;
+use App\Services\Production\WaveProcurementService;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -98,6 +100,14 @@ class ProductionWave extends Model
             throw new \InvalidArgumentException('Only in progress waves can be completed');
         }
 
+        $openProductionBatches = $this->getOpenProductionBatches();
+
+        if ($openProductionBatches !== []) {
+            throw new \InvalidArgumentException(__('Impossible de terminer la vague: productions encore actives (:batches).', [
+                'batches' => implode(', ', $openProductionBatches),
+            ]));
+        }
+
         $this->update([
             'status' => WaveStatus::Completed,
             'completed_at' => now(),
@@ -113,5 +123,139 @@ class ProductionWave extends Model
         $this->update([
             'status' => WaveStatus::Cancelled,
         ]);
+    }
+
+    public function hasStartedProductions(): bool
+    {
+        return $this->productions()
+            ->whereIn('status', [
+                ProductionStatus::Ongoing->value,
+                ProductionStatus::Finished->value,
+            ])
+            ->exists();
+    }
+
+    public function hasNonTerminalProductions(): bool
+    {
+        return $this->productions()
+            ->whereNotIn('status', [
+                ProductionStatus::Finished->value,
+                ProductionStatus::Cancelled->value,
+            ])
+            ->exists();
+    }
+
+    public function getStatusAdvisoryMessage(): ?string
+    {
+        if ($this->isApproved() && $this->hasStartedProductions()) {
+            return __('Des productions liées ont démarré. Passez la vague en cours pour garder le suivi cohérent.');
+        }
+
+        if ($this->isInProgress() && ! $this->hasNonTerminalProductions() && $this->productions()->exists()) {
+            return __('Toutes les productions liées sont terminées ou annulées. Vous pouvez clôturer la vague.');
+        }
+
+        return null;
+    }
+
+    public function getCoverageSignalLabel(): string
+    {
+        return $this->getCoverageSignal()['label'];
+    }
+
+    public function getCoverageSignalColor(): string
+    {
+        return $this->getCoverageSignal()['color'];
+    }
+
+    public function getCoverageSignalTooltip(): string
+    {
+        if ((int) ($this->productions_count ?? 0) === 0 && ! $this->productions()->exists()) {
+            return __('Aucune production liée.');
+        }
+
+        $summary = $this->getProcurementSummary();
+
+        return __('Besoin: :need kg | Reste à sécuriser: :toSecure kg | Manque indicatif: :shortage kg', [
+            'need' => number_format((float) ($summary['required_remaining_total'] ?? 0), 3, ',', ' '),
+            'toSecure' => number_format((float) ($summary['to_secure_total'] ?? 0), 3, ',', ' '),
+            'shortage' => number_format((float) ($summary['shortage_total'] ?? 0), 3, ',', ' '),
+        ]);
+    }
+
+    /**
+     * @return array{label: string, color: string}
+     */
+    private function getCoverageSignal(): array
+    {
+        if ((int) ($this->productions_count ?? 0) === 0 && ! $this->productions()->exists()) {
+            return [
+                'label' => __('Sans besoin'),
+                'color' => 'gray',
+            ];
+        }
+
+        $summary = $this->getProcurementSummary();
+        $requiredRemaining = (float) ($summary['required_remaining_total'] ?? 0);
+        $advisoryShortage = (float) ($summary['shortage_total'] ?? 0);
+        $toSecure = (float) ($summary['to_secure_total'] ?? 0);
+        $provisional = (float) ($summary['provisional_total'] ?? 0);
+
+        if ($requiredRemaining <= 0) {
+            return [
+                'label' => __('Prête'),
+                'color' => 'success',
+            ];
+        }
+
+        if ($advisoryShortage > 0) {
+            return [
+                'label' => __('À sécuriser'),
+                'color' => 'danger',
+            ];
+        }
+
+        if ($toSecure > 0 || $provisional > 0) {
+            return [
+                'label' => __('Partielle'),
+                'color' => 'warning',
+            ];
+        }
+
+        return [
+            'label' => __('Prête'),
+            'color' => 'success',
+        ];
+    }
+
+    /**
+     * @return array<string, float>
+     */
+    private function getProcurementSummary(): array
+    {
+        if (! $this->exists) {
+            return [];
+        }
+
+        /** @var array<string, float> $summary */
+        return app(WaveProcurementService::class)->getPlanningSummary($this);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function getOpenProductionBatches(int $limit = 5): array
+    {
+        return $this->productions()
+            ->whereNotIn('status', [
+                ProductionStatus::Finished->value,
+                ProductionStatus::Cancelled->value,
+            ])
+            ->orderBy('production_date')
+            ->orderBy('id')
+            ->limit($limit)
+            ->pluck('batch_number')
+            ->map(fn (?string $batchNumber): string => (string) ($batchNumber ?: __('Sans référence')))
+            ->all();
     }
 }

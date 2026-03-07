@@ -5,6 +5,7 @@ namespace App\Services\Production;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
+use App\Models\Settings;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use App\Services\InventoryMovementService;
@@ -27,6 +28,7 @@ class ProductionAllocationService
 {
     public function __construct(
         private readonly InventoryMovementService $movementService,
+        private readonly WaveRequirementStatusService $waveRequirementStatusService,
     ) {}
 
     /**
@@ -115,6 +117,8 @@ class ProductionAllocationService
             return $allocation;
         });
 
+        $this->syncWaveRequirementStatusesForItem($item);
+
         return $allocation;
     }
 
@@ -168,12 +172,14 @@ class ProductionAllocationService
             $allocation->update(['status' => 'released']);
             $item->updateAllocationStatus();
         });
+
+        $this->syncWaveRequirementStatusesForItem($allocation->productionItem);
     }
 
     /**
      * Release all allocations for a production item.
      */
-    public function releaseAll(ProductionItem $item): void
+    public function releaseAll(ProductionItem $item, bool $syncWaveRequirements = true): void
     {
         // Eager load production relationship to prevent lazy loading violation
         $item->loadMissing('production');
@@ -202,6 +208,10 @@ class ProductionAllocationService
 
             $item->updateAllocationStatus();
         });
+
+        if ($syncWaveRequirements) {
+            $this->syncWaveRequirementStatusesForItem($item);
+        }
     }
 
     /**
@@ -262,6 +272,8 @@ class ProductionAllocationService
                 $supply->update(['last_used_at' => now()]);
             }
         });
+
+        $this->syncWaveRequirementStatusesForItem($item);
     }
 
     /**
@@ -286,9 +298,11 @@ class ProductionAllocationService
     public function releaseForProduction(Production $production): void
     {
         DB::transaction(function () use ($production): void {
-            $production->productionItems->each(fn ($item) => $this->releaseAll($item));
+            $production->productionItems->each(fn ($item) => $this->releaseAll($item, false));
             $this->movementService->deleteAllAllocationsForProduction($production);
         });
+
+        $this->syncWaveRequirementStatusesForProduction($production);
     }
 
     /**
@@ -506,7 +520,7 @@ class ProductionAllocationService
     /**
      * Get available supplies for an ingredient, ordered by expiry date (FIFO).
      *
-     * @return Collection<int, array{id: int, batch_number: string, available: float, expiry_date: string|null, delivery_date: string|null}>
+     * @return Collection<int, array{id: int, batch_number: string, available: float, expiry_date: string|null, delivery_date: string|null, supplier_name: string, wave_label: string|null}>
      */
     public function getAvailableSupplies(Ingredient $ingredient): Collection
     {
@@ -514,6 +528,11 @@ class ProductionAllocationService
             ->whereHas('supplierListing', fn ($q) => $q->where('ingredient_id', $ingredient->id))
             ->where('is_in_stock', true)
             ->orderBy('expiry_date')
+            ->with([
+                'supplierListing.supplier:id,name',
+                'supplierOrderItem.supplierOrder.wave:id,name,slug',
+                'sourceProduction.wave:id,name,slug',
+            ])
             ->get()
             ->filter(fn (Supply $supply) => $supply->getAvailableQuantity() > 0)
             ->map(fn (Supply $supply) => [
@@ -522,6 +541,8 @@ class ProductionAllocationService
                 'available' => round($supply->getAvailableQuantity(), 3),
                 'expiry_date' => $supply->expiry_date?->format('Y-m-d'),
                 'delivery_date' => $supply->delivery_date?->format('Y-m-d'),
+                'supplier_name' => $this->resolveSupplySupplierName($supply),
+                'wave_label' => $this->resolveSupplyWaveLabel($supply),
             ])
             ->values();
     }
@@ -562,5 +583,55 @@ class ProductionAllocationService
     public function hasSufficientStock(Ingredient $ingredient, float $requiredQuantity): bool
     {
         return round($this->getTotalAvailable($ingredient), 3) >= round($requiredQuantity, 3);
+    }
+
+    private function syncWaveRequirementStatusesForItem(ProductionItem $item): void
+    {
+        $item->loadMissing('production.wave');
+
+        $wave = $item->production?->wave;
+
+        if (! $wave) {
+            return;
+        }
+
+        $this->waveRequirementStatusService->syncForWave($wave);
+    }
+
+    private function syncWaveRequirementStatusesForProduction(Production $production): void
+    {
+        $production->loadMissing('wave');
+
+        if (! $production->wave) {
+            return;
+        }
+
+        $this->waveRequirementStatusService->syncForWave($production->wave);
+    }
+
+    private function resolveSupplySupplierName(Supply $supply): string
+    {
+        if ($supply->source_production_id !== null) {
+            return Settings::internalSupplierLabel();
+        }
+
+        return (string) ($supply->supplierListing?->supplier?->name ?: __('N/A'));
+    }
+
+    private function resolveSupplyWaveLabel(Supply $supply): ?string
+    {
+        $orderWave = $supply->supplierOrderItem?->supplierOrder?->wave;
+
+        if ($orderWave) {
+            return sprintf('%s (%s)', $orderWave->name, $orderWave->slug);
+        }
+
+        $sourceWave = $supply->sourceProduction?->wave;
+
+        if ($sourceWave) {
+            return sprintf('%s (%s)', $sourceWave->name, $sourceWave->slug);
+        }
+
+        return null;
     }
 }

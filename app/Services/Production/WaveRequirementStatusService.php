@@ -73,11 +73,66 @@ class WaveRequirementStatusService
             });
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function getIngredientOptionsForWave(ProductionWave $wave): array
+    {
+        return $this->getWaveProductionItems($wave)
+            ->groupBy('ingredient_id')
+            ->map(function (Collection $items, int|string $ingredientId): string {
+                $ingredientName = (string) ($items->first()?->ingredient?->name ?: __('Ingrédient #:id', ['id' => $ingredientId]));
+
+                return $ingredientName;
+            })
+            ->sortBy(fn (string $name): string => mb_strtolower($name))
+            ->mapWithKeys(fn (string $name, int|string $ingredientId): array => [(int) $ingredientId => $name])
+            ->all();
+    }
+
+    /**
+     * @param  array<int, int|string>  $ingredientIds
+     */
+    public function markNotOrderedItemsAsOrderedForIngredients(ProductionWave $wave, array $ingredientIds): int
+    {
+        $normalizedIngredientIds = collect($ingredientIds)
+            ->map(fn (mixed $ingredientId): int => (int) $ingredientId)
+            ->filter(fn (int $ingredientId): bool => $ingredientId > 0)
+            ->unique()
+            ->values();
+
+        if ($normalizedIngredientIds->isEmpty()) {
+            return 0;
+        }
+
+        $itemsToMark = $this->getWaveProductionItems($wave)
+            ->whereIn('ingredient_id', $normalizedIngredientIds->all())
+            ->filter(fn (ProductionItem $item): bool => $item->procurement_status === ProcurementStatus::NotOrdered && ! $item->isFullyAllocated());
+
+        $updatedCount = 0;
+
+        foreach ($itemsToMark as $item) {
+            $item->update([
+                'is_order_marked' => true,
+                'procurement_status' => ProcurementStatus::Ordered,
+            ]);
+
+            $updatedCount++;
+        }
+
+        if ($updatedCount > 0) {
+            $this->syncForWave($wave);
+        }
+
+        return $updatedCount;
+    }
+
     private function getWaveProductionItems(ProductionWave $wave): Collection
     {
         $wave->loadMissing([
             'productions.productionItems.ingredient',
             'productions.productionItems.allocations',
+            'productions.productionItems.production',
             'productions.masterbatchLot',
         ]);
 

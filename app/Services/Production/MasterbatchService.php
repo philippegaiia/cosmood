@@ -9,6 +9,10 @@ use Illuminate\Support\Collection;
 
 class MasterbatchService
 {
+    public function __construct(
+        private readonly ProductionAllocationService $allocationService,
+    ) {}
+
     public function selectMasterbatch(Production $production, Production $masterbatch): void
     {
         $this->validateMasterbatch($production, $masterbatch);
@@ -205,7 +209,7 @@ class MasterbatchService
             return 0;
         }
 
-        $masterbatch->loadMissing('productionItems.allocations');
+        $masterbatch->loadMissing('productionItems.allocations.supply');
         $production->loadMissing('productionItems.allocations');
 
         $sourceByIngredient = $masterbatch->productionItems
@@ -223,22 +227,54 @@ class MasterbatchService
 
             $sourceAllocation = $source->allocations->first();
 
-            if (! $sourceAllocation) {
+            if (! $sourceAllocation || ! $sourceAllocation->supply) {
                 continue;
             }
 
-            $item->allocations()->create([
-                'supply_id' => $sourceAllocation->supply_id,
-                'quantity' => $sourceAllocation->quantity,
-                'status' => 'reserved',
-                'reserved_at' => now(),
-            ]);
+            $activeAllocations = $item->allocations
+                ->whereIn('status', ['reserved', 'consumed'])
+                ->values();
+
+            $alreadyLinked = $activeAllocations
+                ->first(fn ($allocation): bool => (int) $allocation->supply_id === (int) $sourceAllocation->supply_id);
+
+            if ($alreadyLinked) {
+                if ((int) $item->supplier_listing_id !== (int) $source->supplier_listing_id) {
+                    $item->update([
+                        'supplier_listing_id' => $source->supplier_listing_id,
+                    ]);
+                }
+
+                $item->updateAllocationStatus();
+
+                continue;
+            }
+
+            if ($activeAllocations->contains(fn ($allocation): bool => $allocation->status === 'consumed')) {
+                continue;
+            }
+
+            if ($activeAllocations->isNotEmpty()) {
+                $this->allocationService->releaseAll($item);
+            }
+
+            $requiredQuantity = $item->required_quantity > 0
+                ? (float) $item->required_quantity
+                : $item->getCalculatedQuantityKg($production);
+
+            if ($requiredQuantity <= 0) {
+                continue;
+            }
+
+            try {
+                $this->allocationService->allocate($item, $sourceAllocation->supply, $requiredQuantity);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
 
             $item->update([
                 'supplier_listing_id' => $source->supplier_listing_id,
             ]);
-
-            $item->updateAllocationStatus();
             $updated++;
         }
 

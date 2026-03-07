@@ -18,6 +18,8 @@ class SupplierFactory extends Factory
             'name' => $name,
             'code' => strtoupper($this->faker->bothify('SUP-####')),
             'slug' => Str::slug($name),
+            'customer_code' => strtoupper($this->faker->bothify('CUST-####')),
+            'estimated_delivery_days' => 8,
             'address1' => $this->faker->streetAddress(),
             'address2' => null,
             'is_active' => true,
@@ -28,7 +30,6 @@ class SupplierFactory extends Factory
             'phone' => $this->faker->phoneNumber(),
             'website' => $this->faker->url(),
             'description' => $this->faker->sentence(),
-            'customer_code' => strtoupper($this->faker->bothify('CUST-####')),
         ];
     }
 

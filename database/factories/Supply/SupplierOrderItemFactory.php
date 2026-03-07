@@ -27,6 +27,7 @@ class SupplierOrderItemFactory extends Factory
             'moved_to_stock_by' => null,
             'allocated_to_production_id' => null,
             'allocated_quantity' => 0,
+            'committed_quantity_kg' => 0,
         ];
     }
 

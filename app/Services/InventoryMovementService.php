@@ -258,30 +258,63 @@ class InventoryMovementService
      */
     private function generateUniqueBatchNumber(?string $originalBatchNumber): string
     {
-        if (empty($originalBatchNumber)) {
+        $normalizedBatchNumber = $this->normalizeBatchNumber($originalBatchNumber);
+
+        if ($normalizedBatchNumber === null) {
             return 'NO-BATCH-'.now()->format('YmdHis');
         }
 
-        // Check if the original batch number exists
-        if (! Supply::query()->where('batch_number', $originalBatchNumber)->exists()) {
-            return $originalBatchNumber;
+        $lowerBaseBatchNumber = mb_strtolower($normalizedBatchNumber);
+
+        $existingBatchNumbers = Supply::query()
+            ->whereNotNull('batch_number')
+            ->where(function ($query) use ($lowerBaseBatchNumber): void {
+                $query
+                    ->whereRaw('LOWER(batch_number) = ?', [$lowerBaseBatchNumber])
+                    ->orWhereRaw('LOWER(batch_number) LIKE ?', [$lowerBaseBatchNumber.'-%']);
+            })
+            ->pluck('batch_number')
+            ->filter(fn (?string $batchNumber): bool => filled($batchNumber))
+            ->map(fn (string $batchNumber): string => mb_strtoupper(trim($batchNumber)))
+            ->values();
+
+        if ($existingBatchNumbers->isEmpty()) {
+            return $normalizedBatchNumber;
         }
 
-        // Find the next available suffix
-        $counter = 1;
-        $baseBatchNumber = $originalBatchNumber;
+        $escapedBase = preg_quote($normalizedBatchNumber, '/');
+        $maxSuffix = 0;
+        $baseAlreadyExists = false;
 
-        // Check if the original already has a suffix pattern and extract the base
-        if (preg_match('/^(.+)-(\d+)$/', $originalBatchNumber, $matches)) {
-            $baseBatchNumber = $matches[1];
-            $counter = (int) $matches[2] + 1;
+        foreach ($existingBatchNumbers as $existingBatchNumber) {
+            if (! preg_match('/^'.$escapedBase.'(?:-(\d+))?$/', $existingBatchNumber, $matches)) {
+                continue;
+            }
+
+            if (! isset($matches[1])) {
+                $baseAlreadyExists = true;
+
+                continue;
+            }
+
+            $maxSuffix = max($maxSuffix, (int) $matches[1]);
         }
 
-        // Find the next available suffix
-        while (Supply::query()->where('batch_number', $baseBatchNumber.'-'.$counter)->exists()) {
-            $counter++;
+        if (! $baseAlreadyExists) {
+            return $normalizedBatchNumber;
         }
 
-        return $baseBatchNumber.'-'.$counter;
+        return $normalizedBatchNumber.'-'.($maxSuffix + 1);
+    }
+
+    private function normalizeBatchNumber(?string $batchNumber): ?string
+    {
+        $normalized = trim((string) $batchNumber);
+
+        if ($normalized === '') {
+            return null;
+        }
+
+        return mb_strtoupper($normalized);
     }
 }

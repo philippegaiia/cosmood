@@ -130,7 +130,7 @@ describe('FormulaResource Edit', function () {
         expect($formula->fresh()->name)->toBe('Formula no confirmation');
     });
 
-    it('shows confirmation modal when saponified total is not 100 percent', function () {
+    it('still saves when saponified total is not 100 percent', function () {
         $formula = Formula::factory()->create([
             'is_soap' => true,
         ]);
@@ -144,7 +144,7 @@ describe('FormulaResource Edit', function () {
             ])
             ->call('save');
 
-        expect($formula->fresh()->name)->not->toBe('Formula pending confirmation');
+        expect($formula->fresh()->name)->toBe('Formula pending confirmation');
     });
 
     it('saves after confirming when saponified total is not 100 percent', function () {
