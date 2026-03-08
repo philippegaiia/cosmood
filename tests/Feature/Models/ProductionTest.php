@@ -247,6 +247,21 @@ describe('Production Model', function () {
             ->and($production->getLotDisplayLabel())->toBe('000321 (plan B-PLAN-001)');
     });
 
+    it('maps calendar event metadata with status color and lot label', function () {
+        $production = Production::factory()->cancelled()->create([
+            'batch_number' => 'B-PLAN-001',
+            'permanent_batch_number' => '000321',
+        ]);
+
+        $production->load('product');
+        $event = $production->toCalendarEvent();
+
+        expect($event->getBackgroundColor())->toBe('#ef4444')
+            ->and($event->getExtendedProps()['lotLabel'])->toBe('000321 (B-PLAN-001)')
+            ->and($event->getExtendedProps()['status'])->toBe(ProductionStatus::Cancelled->value)
+            ->and($event->getExtendedProps()['url'])->toContain('/productions/'.$production->id);
+    });
+
     it('computes supply coverage traffic light states', function () {
         $production = Production::factory()->create();
 

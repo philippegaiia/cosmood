@@ -6,6 +6,7 @@ use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Enums\WaveStatus;
+use App\Filament\Resources\Production\ProductionResource;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use Carbon\Carbon;
@@ -574,14 +575,32 @@ class Production extends Model implements Eventable
      */
     public function toCalendarEvent(): \Guava\Calendar\ValueObjects\CalendarEvent
     {
-        return \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
-            ->title($this->product?->name ?? 'Sans nom')
+        $productName = (string) ($this->product?->name ?? __('Sans nom'));
+        $event = \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
+            ->title($productName)
             ->start($this->production_date)
             ->end($this->production_date)
             ->allDay()
             ->backgroundColor($this->getCalendarColor())
             ->textColor('#ffffff')
+            ->extendedProps([
+                'productName' => $productName,
+                'lotLabel' => $this->getCalendarLotLabel(),
+                'temporaryLot' => (string) $this->batch_number,
+                'permanentLot' => (string) ($this->permanent_batch_number ?? ''),
+                'status' => $this->status->value,
+                'statusLabel' => $this->status->getLabel(),
+                'eventType' => 'production',
+            ])
             ->action('edit');
+
+        $productionUrl = $this->resolveCalendarProductionUrl();
+
+        if ($productionUrl !== null) {
+            $event->url($productionUrl, '_self');
+        }
+
+        return $event;
     }
 
     /**
@@ -592,7 +611,27 @@ class Production extends Model implements Eventable
         return match ($this->status) {
             ProductionStatus::Planned => '#64748b', // slate-500
             ProductionStatus::Confirmed => '#3b82f6', // blue-500
-            default => '#6b7280',
+            ProductionStatus::Ongoing => '#f59e0b', // amber-500
+            ProductionStatus::Finished => '#10b981', // emerald-500
+            ProductionStatus::Cancelled => '#ef4444', // red-500
         };
+    }
+
+    private function getCalendarLotLabel(): string
+    {
+        if (! filled($this->permanent_batch_number)) {
+            return (string) $this->batch_number;
+        }
+
+        return $this->permanent_batch_number.' ('.(string) $this->batch_number.')';
+    }
+
+    private function resolveCalendarProductionUrl(): ?string
+    {
+        try {
+            return ProductionResource::getUrl('view', ['record' => $this]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

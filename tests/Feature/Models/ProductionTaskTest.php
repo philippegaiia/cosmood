@@ -64,4 +64,29 @@ describe('ProductionTask Model', function () {
         expect($task->date)->toBeInstanceOf(\Illuminate\Support\Carbon::class)
             ->and($task->scheduled_date)->toBeInstanceOf(\Illuminate\Support\Carbon::class);
     });
+
+    it('uses task type color and exposes lot references in calendar event', function () {
+        $production = Production::factory()->create([
+            'batch_number' => 'T00045',
+            'permanent_batch_number' => 'P-00045',
+        ]);
+
+        $taskType = ProductionTaskType::factory()->create([
+            'color' => '#123456',
+        ]);
+
+        $task = ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'production_task_type_id' => $taskType->id,
+            'name' => 'Melange',
+        ]);
+
+        $task->load('production.product');
+        $event = $task->toCalendarEvent();
+
+        expect($event->getBackgroundColor())->toBe('#123456')
+            ->and($event->getExtendedProps()['lotLabel'])->toBe('P-00045 (T00045)')
+            ->and($event->getExtendedProps()['taskName'])->toBe('Melange')
+            ->and($event->getExtendedProps()['url'])->toContain('/productions/'.$production->id);
+    });
 });

@@ -8,6 +8,7 @@ use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 
 uses(RefreshDatabase::class);
 
@@ -48,6 +49,17 @@ describe('SupplierOrder Model', function () {
 
         expect($order->order_status)->toBeInstanceOf(OrderStatus::class)
             ->and($order->order_status)->toBe(OrderStatus::Draft);
+    });
+
+    it('casts order and delivery dates to Carbon instances', function () {
+        $order = SupplierOrder::factory()->create([
+            'order_date' => '2026-03-01',
+            'delivery_date' => '2026-03-08',
+        ]);
+
+        expect($order->order_date)->toBeInstanceOf(Carbon::class)
+            ->and($order->delivery_date)->toBeInstanceOf(Carbon::class)
+            ->and($order->delivery_date->toDateString())->toBe('2026-03-08');
     });
 
     it('can be marked as draft', function () {

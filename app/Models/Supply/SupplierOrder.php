@@ -25,9 +25,14 @@ class SupplierOrder extends Model
 
     ];
 
-    protected $casts = [
-        'order_status' => OrderStatus::class,
-    ];
+    protected function casts(): array
+    {
+        return [
+            'order_status' => OrderStatus::class,
+            'order_date' => 'date',
+            'delivery_date' => 'date',
+        ];
+    }
 
     protected static function booted(): void
     {

@@ -10,6 +10,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
+use Illuminate\Support\Carbon;
 
 /**
  * Pending Orders Widget.
@@ -76,11 +77,15 @@ class PendingOrdersWidget extends BaseWidget
                             return null;
                         }
 
-                        if ($record->delivery_date->isPast()) {
+                        $deliveryDate = $record->delivery_date instanceof Carbon
+                            ? $record->delivery_date
+                            : Carbon::parse($record->delivery_date);
+
+                        if ($deliveryDate->isPast()) {
                             return 'danger';
                         }
 
-                        if ($record->delivery_date->diffInDays(now()) <= 3) {
+                        if ($deliveryDate->diffInDays(now()) <= 3) {
                             return 'warning';
                         }
 

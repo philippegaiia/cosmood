@@ -13,6 +13,9 @@ class ProductionTaskTypeFactory extends Factory
     {
         return [
             'name' => $this->faker->words(2, true),
+            'color' => $this->faker->hexColor(),
+            'slug' => $this->faker->unique()->slug(),
+            'duration' => $this->faker->numberBetween(30, 240),
             'description' => $this->faker->sentence(),
             'is_active' => true,
         ];

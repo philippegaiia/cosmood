@@ -332,7 +332,7 @@ describe('TaskGenerationService', function () {
                 ->where('production_id', $production->id)
                 ->value('scheduled_date');
 
-            expect(Carbon::parse($scheduledDate)->toDateString())->toBe('2026-03-11');
+            expect(Carbon::parse($scheduledDate)->toDateString())->toBe('2026-03-10');
         });
 
         it('can reset manual schedule to automatic', function () {
@@ -382,10 +382,54 @@ describe('TaskGenerationService', function () {
             $this->service->setManualSchedule($firstTask, '2026-03-06');
 
             $production->refresh();
+            $firstTask = $firstTask->fresh();
             $secondTask = $production->productionTasks()->where('task_template_item_id', $second->id)->first();
 
             expect($production->production_date->format('Y-m-d'))->toBe('2026-03-06')
+                ->and($firstTask->is_manual_schedule)->toBeFalse()
                 ->and($secondTask->scheduled_date->format('Y-m-d'))->toBe('2026-03-10');
+        });
+
+        it('does not shift following tasks when a non-first task is moved manually', function () {
+            $productType = ProductType::factory()->create();
+            $template = TaskTemplate::factory()->forProductType($productType)->create();
+
+            TaskTemplateItem::factory()->forTemplate($template)->create([
+                'sort_order' => 1,
+                'offset_days' => 0,
+                'skip_weekends' => false,
+            ]);
+
+            $second = TaskTemplateItem::factory()->forTemplate($template)->create([
+                'sort_order' => 2,
+                'offset_days' => 2,
+                'skip_weekends' => false,
+            ]);
+
+            $third = TaskTemplateItem::factory()->forTemplate($template)->create([
+                'sort_order' => 3,
+                'offset_days' => 4,
+                'skip_weekends' => false,
+            ]);
+
+            $production = Production::factory()->confirmed()->create([
+                'production_date' => '2026-03-02',
+            ]);
+
+            $this->service->generateFromTemplate($production, $template);
+
+            $secondTask = $production->fresh()->productionTasks()->where('task_template_item_id', $second->id)->first();
+            $thirdTask = $production->fresh()->productionTasks()->where('task_template_item_id', $third->id)->first();
+            $thirdDateBeforeManualMove = $thirdTask->scheduled_date->format('Y-m-d');
+
+            $this->service->setManualSchedule($secondTask, '2026-03-12');
+
+            $secondTask = $secondTask->fresh();
+            $thirdTask = $thirdTask->fresh();
+
+            expect($secondTask->scheduled_date->format('Y-m-d'))->toBe('2026-03-12')
+                ->and($secondTask->is_manual_schedule)->toBeTrue()
+                ->and($thirdTask->scheduled_date->format('Y-m-d'))->toBe($thirdDateBeforeManualMove);
         });
     });
 

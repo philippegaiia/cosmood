@@ -2,7 +2,7 @@
 
 namespace App\Models\Production;
 
-use App\Enums\ProductionStatus;
+use App\Filament\Resources\Production\ProductionResource;
 use App\Models\User;
 use Guava\Calendar\Contracts\Eventable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -74,37 +74,62 @@ class ProductionTask extends Model implements Eventable
      */
     public function toCalendarEvent(): \Guava\Calendar\ValueObjects\CalendarEvent
     {
-        $backgroundColor = $this->productionTaskType?->color ?? '#6366f1';
-
-        // If parent production is ongoing, make it visually distinct (lighter)
-        if ($this->production?->status === ProductionStatus::Ongoing) {
-            $backgroundColor = $this->lightenColor($backgroundColor);
-        }
-
-        return \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
-            ->title($this->name ?? 'Tâche')
+        $productName = (string) ($this->production?->product?->name ?? __('Sans nom'));
+        $taskName = (string) ($this->name ?? __('Tâche'));
+        $backgroundColor = $this->productionTaskType?->color ?? '#6b7280';
+        $temporaryLot = (string) ($this->production?->batch_number ?? '');
+        $permanentLot = (string) ($this->production?->permanent_batch_number ?? '');
+        $event = \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
+            ->title($productName)
             ->start($this->scheduled_date)
             ->end($this->scheduled_date)
             ->allDay()
             ->backgroundColor($backgroundColor)
             ->textColor('#ffffff')
+            ->extendedProps([
+                'productName' => $productName,
+                'lotLabel' => $this->resolveCalendarLotLabel(),
+                'temporaryLot' => $temporaryLot,
+                'permanentLot' => $permanentLot,
+                'taskName' => $taskName,
+                'eventType' => 'task',
+            ])
             ->action('edit');
+
+        $productionUrl = $this->resolveParentProductionUrl();
+
+        if ($productionUrl !== null) {
+            $event->url($productionUrl, '_self');
+        }
+
+        return $event;
     }
 
     /**
-     * Lighten a hex color by blending with white.
+     * Resolve calendar lot label as permanent lot + temporary lot.
      */
-    private function lightenColor(string $color): string
+    private function resolveCalendarLotLabel(): string
     {
-        $r = hexdec(substr($color, 1, 2));
-        $g = hexdec(substr($color, 3, 2));
-        $b = hexdec(substr($color, 5, 2));
+        $temporaryLot = (string) ($this->production?->batch_number ?? '');
+        $permanentLot = (string) ($this->production?->permanent_batch_number ?? '');
 
-        // Blend with white (80% original, 20% white)
-        $r = intval($r * 0.8 + 255 * 0.2);
-        $g = intval($g * 0.8 + 255 * 0.2);
-        $b = intval($b * 0.8 + 255 * 0.2);
+        if ($permanentLot === '') {
+            return $temporaryLot;
+        }
 
-        return sprintf('#%02x%02x%02x', $r, $g, $b);
+        return $permanentLot.' ('.$temporaryLot.')';
+    }
+
+    private function resolveParentProductionUrl(): ?string
+    {
+        if ($this->production_id === null) {
+            return null;
+        }
+
+        try {
+            return ProductionResource::getUrl('view', ['record' => $this->production_id]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

@@ -37,4 +37,16 @@ describe('ProductionTaskType Model', function () {
 
         expect($type->fresh()->deleted_at)->not->toBeNull();
     });
+
+    it('persists color on create and update', function () {
+        $type = ProductionTaskType::factory()->create([
+            'color' => '#123456',
+        ]);
+
+        $type->update([
+            'color' => '#654321',
+        ]);
+
+        expect($type->fresh()->color)->toBe('#654321');
+    });
 });

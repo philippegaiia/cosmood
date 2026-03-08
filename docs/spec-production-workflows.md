@@ -70,6 +70,11 @@ This document describes the current production-side business rules implemented i
 - Replanning is blocked for `in_progress`, `completed`, and `cancelled` waves.
 - Replanning updates only `planned` and `confirmed` productions.
 - Updating `production_date` keeps existing task auto-reschedule behavior via observer.
+- Manual task scheduling invariants:
+  - sequence #1 template task is always anchored to `production_date`,
+  - moving sequence #1 updates `production_date` and keeps the task auto-scheduled,
+  - moving any non-first task marks only that task as manual (no cascading shift to following tasks),
+  - subsequent `production_date` updates replan auto tasks while preserving non-first manual task dates.
 - A bulk action on production list allows the same replan logic without requiring wave membership.
 
 ## Procurement Planning Views

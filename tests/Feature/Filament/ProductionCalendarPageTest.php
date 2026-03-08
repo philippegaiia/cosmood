@@ -1,9 +1,11 @@
 <?php
 
+use App\Enums\ProductionStatus;
 use App\Filament\Widgets\ProductionCalendarWidget;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionTask;
 use App\Models\User;
+use Guava\Calendar\Enums\CalendarViewType;
 use Guava\Calendar\ValueObjects\FetchInfo;
 use Illuminate\Support\Carbon;
 use Livewire\Livewire;
@@ -53,4 +55,49 @@ it('returns task events for the visible range', function () {
         ->join('|');
 
     expect($labels)->toContain('Melange cuve');
+});
+
+it('returns productions for all statuses in the visible range', function () {
+    $cancelledProduction = Production::factory()->cancelled()->create([
+        'batch_number' => 'B-CAL-CAN',
+        'production_date' => Carbon::today(),
+    ]);
+
+    $widget = new class extends ProductionCalendarWidget
+    {
+        public function fetchEventsForTest(FetchInfo $info): iterable
+        {
+            return $this->getEvents($info);
+        }
+    };
+
+    $events = collect($widget->fetchEventsForTest(new FetchInfo([
+        'startStr' => Carbon::today()->startOfMonth()->toDateString(),
+        'endStr' => Carbon::today()->endOfMonth()->toDateString(),
+    ])));
+
+    $cancelledProductionEvent = $events
+        ->whereInstanceOf(Production::class)
+        ->first(fn (Production $eventProduction): bool => $eventProduction->id === $cancelledProduction->id);
+
+    expect($cancelledProductionEvent)->not->toBeNull()
+        ->and($cancelledProductionEvent->status)->toBe(ProductionStatus::Cancelled);
+});
+
+it('uses month view and enables event clicks', function () {
+    $widget = new class extends ProductionCalendarWidget
+    {
+        public function viewForTest(): CalendarViewType
+        {
+            return $this->calendarView;
+        }
+
+        public function eventClickEnabledForTest(): bool
+        {
+            return $this->eventClickEnabled;
+        }
+    };
+
+    expect($widget->viewForTest())->toBe(CalendarViewType::DayGridMonth)
+        ->and($widget->eventClickEnabledForTest())->toBeTrue();
 });

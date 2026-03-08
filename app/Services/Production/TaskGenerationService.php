@@ -195,6 +195,22 @@ class TaskGenerationService
                 continue;
             }
 
+            $isFirstTemplateTask = $task->source === 'template' && $task->sequence_order === 1;
+
+            if ($isFirstTemplateTask) {
+                $anchorDate = Carbon::parse($production->production_date);
+
+                $task->update([
+                    'scheduled_date' => $anchorDate,
+                    'date' => $anchorDate,
+                    'is_manual_schedule' => false,
+                ]);
+
+                $lastScheduledDate = $anchorDate;
+
+                continue;
+            }
+
             if (! $force && $task->is_manual_schedule) {
                 if ($task->scheduled_date) {
                     $lastScheduledDate = Carbon::parse($task->scheduled_date);
@@ -308,7 +324,12 @@ class TaskGenerationService
     }
 
     /**
-     * Sets a manual date for one task and shifts following auto tasks accordingly.
+     * Sets a manual date for one task while preserving first-task anchoring rules.
+     *
+     * Invariants:
+     * - Sequence #1 template task is always anchored to production_date.
+     * - Moving sequence #1 updates production_date and keeps the task auto-scheduled.
+     * - Moving other tasks marks only that task as manual (no cascading shift).
      */
     public function setManualSchedule(ProductionTask $task, Carbon|string $scheduledDate): void
     {
@@ -316,20 +337,15 @@ class TaskGenerationService
             throw new InvalidArgumentException('Finished or cancelled task cannot be rescheduled');
         }
 
-        $previousScheduledDate = $task->scheduled_date ? Carbon::parse($task->scheduled_date) : null;
         $date = Carbon::parse($scheduledDate);
 
-        $task->update([
-            'scheduled_date' => $date,
-            'date' => $date,
-            'is_manual_schedule' => true,
-        ]);
+        if ($task->source === 'template' && $task->sequence_order === 1) {
+            $task->update([
+                'scheduled_date' => $date,
+                'date' => $date,
+                'is_manual_schedule' => false,
+            ]);
 
-        if ($task->source !== 'template' || $task->sequence_order === null) {
-            return;
-        }
-
-        if ($task->sequence_order === 1) {
             $production = $this->resolveProduction($task);
 
             if ($production) {
@@ -341,37 +357,11 @@ class TaskGenerationService
             return;
         }
 
-        if (! $previousScheduledDate) {
-            return;
-        }
-
-        $deltaDays = $previousScheduledDate->diffInDays($date, false);
-
-        if ($deltaDays === 0) {
-            return;
-        }
-
-        ProductionTask::query()
-            ->where('production_id', $task->production_id)
-            ->where('source', 'template')
-            ->where('sequence_order', '>', $task->sequence_order)
-            ->where('is_finished', false)
-            ->whereNull('cancelled_at')
-            ->where('is_manual_schedule', false)
-            ->orderBy('sequence_order')
-            ->get()
-            ->each(function (ProductionTask $followingTask) use ($deltaDays): void {
-                if (! $followingTask->scheduled_date) {
-                    return;
-                }
-
-                $newDate = Carbon::parse($followingTask->scheduled_date)->addDays($deltaDays);
-
-                $followingTask->update([
-                    'scheduled_date' => $newDate,
-                    'date' => $newDate,
-                ]);
-            });
+        $task->update([
+            'scheduled_date' => $date,
+            'date' => $date,
+            'is_manual_schedule' => true,
+        ]);
     }
 
     /**
