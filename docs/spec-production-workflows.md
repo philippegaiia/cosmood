@@ -54,6 +54,7 @@ This document describes the current production-side business rules implemented i
   - `sort_order`.
 - `ProductType.default_production_line_id` defines the default line for newly planned batches.
 - `Production.production_line_id` remains editable per batch for operator override.
+- Manual planning guard: saving a `planned` or `confirmed` production is blocked when target line/day already reached `daily_batch_capacity`.
 - Batch scheduling uses per-line capacities in parallel:
   - capacities are independent by line,
   - line-less productions use fallback daily capacity.
@@ -131,6 +132,10 @@ Example (factory case):
   - `confirmed -> ongoing`
   - `ongoing -> finished`
   - `planned|confirmed|ongoing -> cancelled`
+- Quick actions support operational confirmation from planning views:
+  - list action on production table (`planned -> confirmed`),
+  - bulk confirm on production table,
+  - row and bulk confirm on wave related productions table.
 - `finished` and `cancelled` are terminal.
 - Backward transitions are not allowed (`confirmed -> planned`, `cancelled -> planned`, etc.).
 - Finishing is blocked when required production items have no selected supply lot.

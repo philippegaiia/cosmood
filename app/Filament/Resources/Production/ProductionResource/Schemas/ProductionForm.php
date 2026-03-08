@@ -27,6 +27,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Carbon;
 
 /**
  * Production form schema configuration.
@@ -276,7 +277,7 @@ class ProductionForm
                         DatePicker::make('ready_date')
                             ->label('Date de disponibilité')
                             ->afterOrEqual('production_date')
-                            ->helperText('Calcul automatique: savons +35 jours, autres types +2 jours (modifiable).')
+                            ->helperText(fn (Get $get): string => self::getReadyDateHelperText($get))
                             ->native(false)
                             ->weekStartsOnMonday(),
                     ])
@@ -717,6 +718,35 @@ class ProductionForm
         }
 
         return 'La date de production doit être >= au début de vague ('.$wave->planned_start_date->format('d/m/Y').').';
+    }
+
+    private static function getReadyDateHelperText(Get $get): string
+    {
+        $productionDate = $get('production_date');
+
+        if (! filled($productionDate)) {
+            return __('Calcul automatique: savons +35 jours, autres types +2 jours (modifiable).');
+        }
+
+        $productType = null;
+        $productTypeId = $get('product_type_id');
+
+        if ($productTypeId) {
+            $productType = ProductType::query()->find((int) $productTypeId);
+        }
+
+        $estimatedReadyDate = Production::estimateReadyDate(
+            $productionDate,
+            (string) ($productType?->slug ?? ''),
+            (string) ($productType?->name ?? ''),
+        );
+
+        $delayDays = Carbon::parse((string) $productionDate)->diffInDays($estimatedReadyDate);
+
+        return __('Calcul automatique estimé: :date (+:days jours, modifiable).', [
+            'date' => $estimatedReadyDate->format('d/m/Y'),
+            'days' => $delayDays,
+        ]);
     }
 
     /**

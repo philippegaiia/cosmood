@@ -6,6 +6,7 @@ use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use App\Services\Production\PermanentBatchNumberService;
 use App\Services\Production\PlanningBatchNumberService;
+use App\Services\Production\ProductionStatusTransitionService;
 use App\Services\Production\StatusColorScheme;
 use App\Services\Production\WaveProductionPlanningService;
 use Filament\Actions\Action;
@@ -122,6 +123,18 @@ class ProductionsTable
                     ->relationship('productionLine', 'name'),
             ])
             ->recordActions([
+                Action::make('confirmProduction')
+                    ->label(__('Confirmer'))
+                    ->icon(Heroicon::OutlinedCheckCircle)
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->visible(fn (Production $record): bool => $record->status === ProductionStatus::Planned)
+                    ->action(function (Production $record): void {
+                        $summary = app(ProductionStatusTransitionService::class)
+                            ->confirmPlannedProductions(collect([$record]));
+
+                        self::sendConfirmationNotification($summary);
+                    }),
                 Action::make('duplicate')
                     ->label('Dupliquer')
                     ->icon(Heroicon::OutlinedDocumentDuplicate)
@@ -184,6 +197,17 @@ class ProductionsTable
                             ))
                             ->success()
                             ->send();
+                    }),
+                BulkAction::make('confirmSelected')
+                    ->label(__('Confirmer sélection'))
+                    ->icon(Heroicon::OutlinedCheckCircle)
+                    ->requiresConfirmation()
+                    ->deselectRecordsAfterCompletion()
+                    ->action(function (Collection $records): void {
+                        $summary = app(ProductionStatusTransitionService::class)
+                            ->confirmPlannedProductions($records);
+
+                        self::sendConfirmationNotification($summary);
                     }),
                 BulkActionGroup::make([
                     DeleteBulkAction::make()
@@ -258,6 +282,38 @@ class ProductionsTable
             ->body($assigned.' lot(s) permanent(s) attribué(s).')
             ->success()
             ->send();
+    }
+
+    /**
+     * @param  array{confirmed: int, skipped: int, failed: int}  $summary
+     */
+    private static function sendConfirmationNotification(array $summary): void
+    {
+        $confirmed = (int) ($summary['confirmed'] ?? 0);
+        $skipped = (int) ($summary['skipped'] ?? 0);
+        $failed = (int) ($summary['failed'] ?? 0);
+
+        $notification = Notification::make()
+            ->title(__('Confirmation productions'))
+            ->body(__('Confirmées: :confirmed | Ignorées: :skipped | Erreurs: :failed', [
+                'confirmed' => $confirmed,
+                'skipped' => $skipped,
+                'failed' => $failed,
+            ]));
+
+        if ($confirmed > 0 && $failed === 0) {
+            $notification->success()->send();
+
+            return;
+        }
+
+        if ($failed > 0) {
+            $notification->danger()->send();
+
+            return;
+        }
+
+        $notification->warning()->send();
     }
 
     /**

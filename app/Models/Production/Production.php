@@ -32,6 +32,10 @@ class Production extends Model implements Eventable
                 self::assertWaveIsAssignable($production);
             }
 
+            if (self::shouldValidateLineDailyCapacity($production)) {
+                self::assertLineDailyCapacity($production);
+            }
+
             if ($production->isDirty('ready_date') && filled($production->ready_date)) {
                 return;
             }
@@ -509,6 +513,59 @@ class Production extends Model implements Eventable
 
         if (! in_array($wave->status, [WaveStatus::Draft, WaveStatus::Approved], true)) {
             throw new InvalidArgumentException('Productions can only be linked to draft or approved waves.');
+        }
+    }
+
+    private static function shouldValidateLineDailyCapacity(Production $production): bool
+    {
+        if (! filled($production->production_line_id) || ! filled($production->production_date)) {
+            return false;
+        }
+
+        $status = $production->status instanceof ProductionStatus
+            ? $production->status
+            : ProductionStatus::tryFrom((string) $production->status);
+
+        if (! in_array($status, [ProductionStatus::Planned, ProductionStatus::Confirmed], true)) {
+            return false;
+        }
+
+        if (! $production->exists) {
+            return true;
+        }
+
+        return $production->isDirty('production_line_id')
+            || $production->isDirty('production_date')
+            || $production->isDirty('status');
+    }
+
+    private static function assertLineDailyCapacity(Production $production): void
+    {
+        $line = ProductionLine::query()->find((int) $production->production_line_id);
+
+        if (! $line) {
+            return;
+        }
+
+        $targetDate = Carbon::parse((string) $production->production_date)->toDateString();
+        $capacity = $line->resolveDailyCapacity();
+
+        $plannedCountOnDate = self::query()
+            ->where('production_line_id', $line->id)
+            ->whereDate('production_date', $targetDate)
+            ->whereIn('status', [
+                ProductionStatus::Planned->value,
+                ProductionStatus::Confirmed->value,
+            ])
+            ->when($production->exists, fn ($query) => $query->where('id', '!=', $production->id))
+            ->count();
+
+        if ($plannedCountOnDate >= $capacity) {
+            throw new InvalidArgumentException(__('Capacité journalière dépassée pour :line le :date (:capacity max).', [
+                'line' => $line->name,
+                'date' => Carbon::parse($targetDate)->format('d/m/Y'),
+                'capacity' => $capacity,
+            ]));
         }
     }
 

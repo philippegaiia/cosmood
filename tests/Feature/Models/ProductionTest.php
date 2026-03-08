@@ -8,6 +8,7 @@ use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
+use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
@@ -44,6 +45,38 @@ describe('Production Model', function () {
         expect($production->isOrphan())->toBeFalse()
             ->and($production->production_wave_id)->toBe($wave->id)
             ->and($production->wave->id)->toBe($wave->id);
+    });
+
+    it('blocks planning save when daily line capacity is exceeded', function () {
+        $line = ProductionLine::factory()->create([
+            'daily_batch_capacity' => 1,
+        ]);
+
+        Production::factory()->planned()->onProductionLine($line)->create([
+            'production_date' => '2026-03-14',
+        ]);
+
+        expect(fn () => Production::factory()->planned()->onProductionLine($line)->create([
+            'production_date' => '2026-03-14',
+        ]))->toThrow(InvalidArgumentException::class, 'Capacité journalière dépassée');
+    });
+
+    it('blocks moving a production to an overloaded line day', function () {
+        $line = ProductionLine::factory()->create([
+            'daily_batch_capacity' => 1,
+        ]);
+
+        Production::factory()->planned()->onProductionLine($line)->create([
+            'production_date' => '2026-03-14',
+        ]);
+
+        $movableProduction = Production::factory()->planned()->onProductionLine($line)->create([
+            'production_date' => '2026-03-15',
+        ]);
+
+        expect(fn () => $movableProduction->update([
+            'production_date' => '2026-03-14',
+        ]))->toThrow(InvalidArgumentException::class, 'Capacité journalière dépassée');
     });
 
     it('can be a masterbatch', function () {

@@ -143,6 +143,31 @@ describe('ProductionWave - Relationships', function () {
             ->assertSee('Oui (1)');
     });
 
+    it('confirms a planned production from wave related productions table action', function () {
+        $wave = ProductionWave::factory()->approved()->create();
+        $production = Production::factory()->forWave($wave)->planned()->create();
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class, [
+            'ownerRecord' => $wave,
+            'pageClass' => \App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class,
+        ])
+            ->callAction(TestAction::make('confirmProduction')->table($production))
+            ->assertHasNoErrors();
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Confirmed);
+    });
+
+    it('shows bulk confirm action on wave related productions table', function () {
+        $wave = ProductionWave::factory()->approved()->create();
+        Production::factory()->count(2)->forWave($wave)->planned()->create();
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class, [
+            'ownerRecord' => $wave,
+            'pageClass' => \App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class,
+        ])
+            ->assertSee('Confirmer sélection');
+    });
+
     it('shows productions relation manager on edit wave page', function () {
         $wave = ProductionWave::factory()->create();
         Production::factory()->forWave($wave)->create();

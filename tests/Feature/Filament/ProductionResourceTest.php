@@ -707,6 +707,27 @@ describe('Production sheet print route', function () {
 });
 
 describe('Production list table actions', function () {
+    it('confirms a planned production from list table action', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->planned()->create();
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\ListProductions::class)
+            ->callAction(TestAction::make('confirmProduction')->table($production))
+            ->assertHasNoErrors();
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Confirmed);
+    });
+
+    it('shows bulk confirm action on production list', function () {
+        $this->actingAs($this->user);
+
+        Production::factory()->count(2)->planned()->create();
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\ListProductions::class)
+            ->assertSee('Confirmer sélection');
+    });
+
     it('duplicates a production from list table action', function () {
         $this->actingAs($this->user);
 

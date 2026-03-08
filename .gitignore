@@ -19,3 +19,7 @@ yarn-error.log
 /.vscode
 .qodo
 .agents/
+.DS_Store
+**/.DS_Store
+_ide_helper.php
+_ide_helper_models.php
