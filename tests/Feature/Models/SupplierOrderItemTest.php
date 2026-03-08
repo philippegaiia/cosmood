@@ -76,6 +76,16 @@ describe('SupplierOrderItem Model', function () {
             ->and((float) $item->getOrderedQuantityKg())->toBe(30.0);
     });
 
+    it('normalizes null commitment to zero on save', function () {
+        $item = SupplierOrderItem::factory()->create([
+            'quantity' => 1,
+            'unit_weight' => 12,
+            'committed_quantity_kg' => null,
+        ]);
+
+        expect((float) $item->fresh()->committed_quantity_kg)->toBe(0.0);
+    });
+
     it('allows duplicate supplier batch numbers across order items', function () {
         $firstItem = SupplierOrderItem::factory()->create([
             'batch_number' => 'COCOCAU',

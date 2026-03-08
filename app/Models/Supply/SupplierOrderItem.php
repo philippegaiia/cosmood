@@ -35,6 +35,7 @@ class SupplierOrderItem extends Model
         static::saving(function (SupplierOrderItem $item): void {
             $orderedQuantityKg = $item->getOrderedQuantityKg();
             $committedQuantityKg = round((float) ($item->committed_quantity_kg ?? 0), 3);
+            $item->committed_quantity_kg = $committedQuantityKg;
 
             if ($committedQuantityKg < 0) {
                 throw new \InvalidArgumentException(__('La quantité engagée ne peut pas être négative.'));

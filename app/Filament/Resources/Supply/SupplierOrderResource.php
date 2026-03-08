@@ -279,6 +279,12 @@ class SupplierOrderResource extends Resource
                                     ->numeric()
                                     ->live()
                                     ->default(0)
+                                    ->afterStateHydrated(function (Set $set, mixed $state): void {
+                                        if ($state === null || $state === '') {
+                                            $set('committed_quantity_kg', 0);
+                                        }
+                                    })
+                                    ->dehydrateStateUsing(fn (mixed $state): float => round((float) ($state ?? 0), 3))
                                     ->minValue(0)
                                     ->maxValue(fn (Get $get): float => round((float) ($get('quantity') ?? 0) * max(1.0, (float) ($get('unit_weight') ?? 1)), 3))
                                     ->step(0.001)

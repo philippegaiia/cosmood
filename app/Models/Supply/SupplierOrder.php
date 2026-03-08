@@ -78,6 +78,7 @@ class SupplierOrder extends Model
         });
 
         static::saved(function (SupplierOrder $order): void {
+            $order->resetCommittedQuantitiesWhenWaveRemoved();
             $order->syncWaveRequirementStatuses();
         });
 
@@ -127,5 +128,16 @@ class SupplierOrder extends Model
         }
 
         app(WaveRequirementStatusService::class)->syncForWave($this->wave);
+    }
+
+    private function resetCommittedQuantitiesWhenWaveRemoved(): void
+    {
+        if (! $this->wasChanged('production_wave_id') || $this->production_wave_id !== null) {
+            return;
+        }
+
+        $this->supplier_order_items()
+            ->where('committed_quantity_kg', '>', 0)
+            ->update(['committed_quantity_kg' => 0]);
     }
 }

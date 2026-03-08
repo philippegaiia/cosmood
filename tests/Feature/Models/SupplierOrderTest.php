@@ -114,4 +114,31 @@ describe('SupplierOrder Model', function () {
             ->and($order->serial_number)->toBeInt()
             ->and($order->order_ref)->toContain('-CAU-');
     });
+
+    it('resets committed quantities when wave link is removed', function () {
+        $wave = ProductionWave::factory()->create();
+        $supplier = Supplier::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $order = SupplierOrder::factory()->create([
+            'supplier_id' => $supplier->id,
+            'production_wave_id' => $wave->id,
+        ]);
+
+        $item = SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 2,
+            'unit_weight' => 10,
+            'committed_quantity_kg' => 15,
+        ]);
+
+        $order->update([
+            'production_wave_id' => null,
+        ]);
+
+        expect((float) $item->fresh()->committed_quantity_kg)->toBe(0.0);
+    });
 });
