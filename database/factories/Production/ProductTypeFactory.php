@@ -13,6 +13,19 @@ class ProductTypeFactory extends Factory
 {
     protected $model = ProductType::class;
 
+    public function configure(): static
+    {
+        return $this->afterCreating(function (ProductType $productType): void {
+            if (! $productType->default_production_line_id) {
+                return;
+            }
+
+            $productType->allowedProductionLines()->syncWithoutDetaching([
+                $productType->default_production_line_id,
+            ]);
+        });
+    }
+
     public function definition(): array
     {
         $name = $this->faker->words(2, true);

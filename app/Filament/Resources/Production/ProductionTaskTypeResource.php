@@ -59,6 +59,11 @@ class ProductionTaskTypeResource extends Resource
                     ->columnSpanFull(),
                 Toggle::make('is_active')
                     ->required(),
+                Toggle::make('is_capacity_consuming')
+                    ->label(__('Consomme la capacité'))
+                    ->helperText(__('Compter cette tâche dans la capacité journalière de la ligne.'))
+                    ->default(true)
+                    ->required(),
             ]);
     }
 
@@ -73,6 +78,9 @@ class ProductionTaskTypeResource extends Resource
                 TextColumn::make('duration')
                     ->numeric()
                     ->sortable(),
+                IconColumn::make('is_capacity_consuming')
+                    ->label(__('Capacité'))
+                    ->boolean(),
                 IconColumn::make('is_active')
                     ->boolean(),
                 TextColumn::make('deleted_at')

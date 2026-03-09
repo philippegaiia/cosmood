@@ -13,7 +13,15 @@ class ProductionTaskType extends Model
     use HasFactory;
     use SoftDeletes;
 
-    protected $fillable = ['id', 'name', 'color', 'slug', 'duration', 'description', 'is_active'];
+    protected $fillable = ['id', 'name', 'color', 'slug', 'duration', 'description', 'is_active', 'is_capacity_consuming'];
+
+    protected function casts(): array
+    {
+        return [
+            'is_active' => 'boolean',
+            'is_capacity_consuming' => 'boolean',
+        ];
+    }
 
     public function productionTasks(): HasMany
     {

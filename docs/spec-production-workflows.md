@@ -52,12 +52,27 @@ This document describes the current production-side business rules implemented i
   - `daily_batch_capacity`,
   - `is_active`,
   - `sort_order`.
-- `ProductType.default_production_line_id` defines the default line for newly planned batches.
-- `Production.production_line_id` remains editable per batch for operator override.
+- `ProductType` defines both:
+  - `allowed production lines` (many-to-many),
+  - `default_production_line_id` as the preferred line inside that allowed set.
+- `ProductType.default_production_line_id` must always belong to the allowed-line set.
+- Removing a line from the allowed set auto-clears the default if needed.
+- `Production.production_line_id` remains editable per batch, but only to lines allowed for that production type when the type has allowed-line restrictions.
+- When a line is removed from the allowed set:
+  - `planned` productions on that line are auto-migrated to the current default line when available, otherwise unassigned,
+  - `confirmed` productions stay on their current line and are surfaced to the planner for manual review,
+  - `ongoing`, `finished`, and `cancelled` productions are left untouched for traceability.
 - Manual planning guard: saving a `planned` or `confirmed` production is blocked when target line/day already reached `daily_batch_capacity`.
 - Batch scheduling uses per-line capacities in parallel:
   - capacities are independent by line,
   - line-less productions use fallback daily capacity.
+- Task planning semantics:
+  - `ProductionTaskType.is_capacity_consuming` defines whether a task consumes line capacity,
+  - tasks inherit `Production.production_line_id` in v1 (no task-level line override),
+  - board occupancy is task-driven but preserves batch-capacity semantics:
+    - one production counts for one slot on a line/day when it has at least one capacity-consuming task scheduled that day,
+    - multiple consuming tasks from the same production on the same day still count as one slot,
+    - passive tasks such as curing remain visible in planning but do not consume capacity.
 
 ## Automatic Replanning
 

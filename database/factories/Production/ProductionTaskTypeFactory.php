@@ -18,6 +18,7 @@ class ProductionTaskTypeFactory extends Factory
             'duration' => $this->faker->numberBetween(30, 240),
             'description' => $this->faker->sentence(),
             'is_active' => true,
+            'is_capacity_consuming' => true,
         ];
     }
 
@@ -25,6 +26,13 @@ class ProductionTaskTypeFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'is_active' => false,
+        ]);
+    }
+
+    public function passive(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'is_capacity_consuming' => false,
         ]);
     }
 }

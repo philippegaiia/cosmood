@@ -9,6 +9,7 @@ use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use Filament\Forms\Components\DatePicker;
@@ -123,19 +124,14 @@ class ProductionForm
                     ->helperText(__('Disponible uniquement pour les vagues en brouillon ou approuvées.'))
                     ->nullable(),
                 Select::make('production_line_id')
-                    ->label('Ligne de production')
-                    ->relationship(
-                        name: 'productionLine',
-                        titleAttribute: 'name',
-                        modifyQueryUsing: fn (Builder $query): Builder => $query
-                            ->where('is_active', true)
-                            ->orderBy('sort_order')
-                            ->orderBy('name'),
-                    )
+                    ->label(__('Ligne de production'))
+                    ->options(fn (Get $get, ?Production $record): array => self::getProductionLineOptions($get, $record))
                     ->searchable()
                     ->preload()
-                    ->placeholder('Affectation automatique')
-                    ->helperText('Utilise la ligne par défaut du type produit si vide.')
+                    ->native(false)
+                    ->live()
+                    ->placeholder(__('Affectation automatique'))
+                    ->helperText(__('Utilise la ligne par défaut du type produit si vide.'))
                     ->nullable(),
                 TextInput::make('batch_number')
                     ->label('Réf. planification')
@@ -230,19 +226,23 @@ class ProductionForm
                 TextInput::make('planned_quantity')
                     ->label(fn (Get $get) => self::getPlannedQuantityLabel($get))
                     ->numeric()
+                    ->minValue(0)
                     ->required()
                     ->suffix('kg'),
                 TextInput::make('expected_units')
                     ->label('Unités attendues')
                     ->numeric()
+                    ->minValue(0)
                     ->required(),
                 TextInput::make('expected_waste_kg')
                     ->label('Perte estimée (kg)')
                     ->numeric()
+                    ->minValue(0)
                     ->suffix('kg'),
                 TextInput::make('actual_units')
                     ->label('Unités réelles')
                     ->numeric()
+                    ->minValue(0)
                     ->visibleOn('edit'),
             ]);
     }
@@ -747,6 +747,65 @@ class ProductionForm
             'date' => $estimatedReadyDate->format('d/m/Y'),
             'days' => $delayDays,
         ]);
+    }
+
+    /**
+     * Build line options for the production_line_id select.
+     *
+     * When the product type has allowed-line restrictions, only those lines are shown.
+     * If the record already has a line that falls outside the allowed set (e.g. after a
+     * retroactive config change), it is injected back into the list with an explanatory
+     * suffix so the form stays usable rather than silently hiding the current value.
+     *
+     * When the product type has no restrictions, all active lines are shown (open mode).
+     *
+     * @return array<int, string>
+     */
+    private static function getProductionLineOptions(Get $get, ?Production $record): array
+    {
+        $productTypeId = (int) ($get('product_type_id') ?: $record?->product_type_id ?: 0);
+        $currentLineId = (int) ($get('production_line_id') ?: $record?->production_line_id ?: 0);
+
+        $productType = $productTypeId > 0
+            ? ProductType::query()->with('allowedProductionLines')->find($productTypeId)
+            : null;
+
+        $allowedLineIds = $productType?->allowedProductionLines->modelKeys() ?? [];
+
+        $query = ProductionLine::query()
+            ->where('is_active', true)
+            ->orderBy('sort_order')
+            ->orderBy('name');
+
+        if ($allowedLineIds !== []) {
+            $query->whereIn('id', $allowedLineIds);
+        }
+
+        $options = $query->pluck('name', 'id')->all();
+
+        if ($currentLineId > 0 && ! array_key_exists($currentLineId, $options)) {
+            $currentLine = ProductionLine::query()->find($currentLineId);
+
+            if ($currentLine) {
+                $suffixes = [];
+
+                if ($allowedLineIds !== [] && ! in_array($currentLineId, $allowedLineIds, true)) {
+                    $suffixes[] = __('hors lignes autorisées');
+                }
+
+                if (! $currentLine->is_active) {
+                    $suffixes[] = __('inactive');
+                }
+
+                $labelSuffix = $suffixes === []
+                    ? __('non standard')
+                    : implode(', ', $suffixes);
+
+                $options[$currentLineId] = sprintf('%s (%s)', $currentLine->name, $labelSuffix);
+            }
+        }
+
+        return $options;
     }
 
     /**

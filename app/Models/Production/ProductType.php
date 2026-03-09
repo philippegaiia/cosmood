@@ -58,6 +58,19 @@ class ProductType extends Model
         return $this->belongsTo(ProductionLine::class, 'default_production_line_id');
     }
 
+    /**
+     * Production lines that are allowed for this product type.
+     *
+     * When this set is non-empty, productions of this type may only be assigned
+     * to lines within this set. If the set is empty, no product-type line
+     * restriction is enforced (backward-compatible default).
+     */
+    public function allowedProductionLines(): BelongsToMany
+    {
+        return $this->belongsToMany(ProductionLine::class, 'product_type_production_line')
+            ->withTimestamps();
+    }
+
     public function taskTemplates(): BelongsToMany
     {
         return $this->belongsToMany(TaskTemplate::class, 'product_type_task_template')
@@ -73,5 +86,42 @@ class ProductType extends Model
     public function defaultPreset(): ?BatchSizePreset
     {
         return $this->batchSizePresets()->where('is_default', true)->first();
+    }
+
+    /**
+     * Whether this product type enforces an allowed-lines restriction.
+     *
+     * Returns false when no allowed lines are configured, meaning the model-level
+     * allowed-line guard stays in open/backward-compatible mode.
+     */
+    public function hasAllowedProductionLineRestrictions(): bool
+    {
+        $this->loadMissing('allowedProductionLines');
+
+        return $this->allowedProductionLines->isNotEmpty();
+    }
+
+    /**
+     * Whether the given production line is permitted for this product type.
+     *
+     * Always returns true when:
+     * - $productionLineId is null (unassigned productions are allowed).
+     * - No allowed-line restrictions are configured for this type.
+     *
+     * @param  int|null  $productionLineId  The ID of the line to check, or null.
+     */
+    public function allowsProductionLine(?int $productionLineId): bool
+    {
+        if ($productionLineId === null) {
+            return true;
+        }
+
+        $this->loadMissing('allowedProductionLines');
+
+        if ($this->allowedProductionLines->isEmpty()) {
+            return true;
+        }
+
+        return $this->allowedProductionLines->contains('id', $productionLineId);
     }
 }

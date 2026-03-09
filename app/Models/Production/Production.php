@@ -29,8 +29,20 @@ class Production extends Model implements Eventable
     protected static function booted(): void
     {
         static::saving(function (Production $production): void {
+            if (filled($production->planned_quantity) && (float) $production->planned_quantity < 0) {
+                throw new InvalidArgumentException(__('La quantité planifiée ne peut pas être négative.'));
+            }
+
+            if (filled($production->expected_units) && (float) $production->expected_units < 0) {
+                throw new InvalidArgumentException(__('Les unités attendues ne peuvent pas être négatives.'));
+            }
+
             if ($production->isDirty('production_wave_id') && $production->production_wave_id !== null) {
                 self::assertWaveIsAssignable($production);
+            }
+
+            if (self::shouldValidateAllowedProductionLineAssignment($production)) {
+                self::assertAllowedProductionLineAssignment($production);
             }
 
             if (self::shouldValidateLineDailyCapacity($production)) {
@@ -538,6 +550,52 @@ class Production extends Model implements Eventable
         return $production->isDirty('production_line_id')
             || $production->isDirty('production_date')
             || $production->isDirty('status');
+    }
+
+    /**
+     * Whether the allowed-line assignment guard should run for this save.
+     *
+     * Skips when either production_line_id or product_type_id is absent.
+     * On create it always runs; on update it runs only when those fields
+     * have changed, avoiding unnecessary queries on unrelated updates.
+     */
+    private static function shouldValidateAllowedProductionLineAssignment(Production $production): bool
+    {
+        if (! filled($production->production_line_id) || ! filled($production->product_type_id)) {
+            return false;
+        }
+
+        if (! $production->exists) {
+            return true;
+        }
+
+        return $production->isDirty('production_line_id') || $production->isDirty('product_type_id');
+    }
+
+    /**
+     * Assert that the assigned production line is in the allowed set for the product type.
+     *
+     * Silently passes when:
+     * - The product type does not exist.
+     * - The product type has no allowed-line restrictions (open/backward-compatible mode).
+     *
+     * @throws InvalidArgumentException When the line is not in the allowed set.
+     */
+    private static function assertAllowedProductionLineAssignment(Production $production): void
+    {
+        $productType = ProductType::query()
+            ->with('allowedProductionLines')
+            ->find((int) $production->product_type_id);
+
+        if (! $productType || ! $productType->hasAllowedProductionLineRestrictions()) {
+            return;
+        }
+
+        if ($productType->allowsProductionLine((int) $production->production_line_id)) {
+            return;
+        }
+
+        throw new InvalidArgumentException(__('La ligne de production sélectionnée n\'est pas autorisée pour ce type de produit.'));
     }
 
     private static function assertLineDailyCapacity(Production $production): void

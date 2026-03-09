@@ -79,6 +79,45 @@ describe('Production Model', function () {
         ]))->toThrow(InvalidArgumentException::class, 'Capacité journalière dépassée');
     });
 
+    it('rejects assigning a production to a line outside the product type allowed set', function () {
+        $soapLineOne = ProductionLine::factory()->create(['name' => 'Soap Line 1']);
+        $soapLineTwo = ProductionLine::factory()->create(['name' => 'Soap Line 2']);
+        $deoLine = ProductionLine::factory()->create(['name' => 'Deodorant Line']);
+
+        $productType = ProductType::factory()->create([
+            'default_production_line_id' => $soapLineOne->id,
+        ]);
+        $productType->allowedProductionLines()->sync([$soapLineOne->id, $soapLineTwo->id]);
+
+        expect(fn () => Production::factory()->create([
+            'product_type_id' => $productType->id,
+            'production_line_id' => $deoLine->id,
+        ]))->toThrow(InvalidArgumentException::class, 'n\'est pas autorisée');
+    });
+
+    it('keeps backward compatibility when a product type has no allowed line restrictions', function () {
+        $line = ProductionLine::factory()->create();
+        $productType = ProductType::factory()->create([
+            'default_production_line_id' => null,
+        ]);
+        $productType->allowedProductionLines()->detach();
+
+        $production = Production::factory()->create([
+            'product_type_id' => $productType->id,
+            'production_line_id' => $line->id,
+        ]);
+
+        expect($production->production_line_id)->toBe($line->id);
+    });
+
+    it('rejects negative planned quantity', function () {
+        $production = Production::factory()->create();
+
+        expect(fn () => $production->update([
+            'planned_quantity' => -10,
+        ]))->toThrow(InvalidArgumentException::class, 'quantité planifiée ne peut pas être négative');
+    });
+
     it('can be a masterbatch', function () {
         $production = Production::factory()->masterbatch()->create();
 

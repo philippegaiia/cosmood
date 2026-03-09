@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\Production\ProductTypes\Schemas;
 
 use App\Enums\SizingMode;
+use App\Models\Production\ProductionLine;
+use App\Models\Production\ProductType;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -46,7 +48,7 @@ class ProductTypeForm
                             ->preload()
                             ->nullable(),
                         Select::make('qc_template_id')
-                            ->label('Modèle QC')
+                            ->label(__('Modèle QC'))
                             ->relationship(
                                 name: 'qcTemplate',
                                 titleAttribute: 'name',
@@ -55,22 +57,60 @@ class ProductTypeForm
                             ->searchable()
                             ->preload()
                             ->nullable()
-                            ->helperText('Choisissez le modèle QC partagé par ce type de produit.'),
-                        Select::make('default_production_line_id')
-                            ->label('Ligne de production par défaut')
-                            ->relationship(
-                                name: 'defaultProductionLine',
-                                titleAttribute: 'name',
-                                modifyQueryUsing: fn ($query) => $query
-                                    ->where('is_active', true)
-                                    ->orderBy('sort_order')
-                                    ->orderBy('name'),
-                            )
+                            ->helperText(__('Choisissez le modèle QC partagé par ce type de produit.')),
+                        Select::make('allowed_production_line_ids')
+                            ->label(__('Lignes de production autorisées'))
+                            ->options(fn (): array => ProductionLine::query()
+                                ->where('is_active', true)
+                                ->orderBy('sort_order')
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->multiple()
                             ->searchable()
                             ->preload()
+                            ->native(false)
+                            ->live()
+                            ->dehydrated(false)
+                            ->helperText(__('Définit sur quelles lignes ce type de produit peut être planifié.'))
+                            ->afterStateHydrated(function (Select $component, ?ProductType $record): void {
+                                if (! $record) {
+                                    $component->state([]);
+
+                                    return;
+                                }
+
+                                $record->loadMissing('allowedProductionLines');
+
+                                $component->state($record->allowedProductionLines->modelKeys());
+                            })
+                            ->afterStateUpdated(function (?array $state, Get $get, Set $set): void {
+                                $allowedLineIds = self::normalizeProductionLineIds($state ?? []);
+                                $defaultLineId = self::normalizeProductionLineId($get('default_production_line_id'));
+
+                                if ($defaultLineId !== null && ! in_array($defaultLineId, $allowedLineIds, true)) {
+                                    $set('default_production_line_id', null);
+                                    $defaultLineId = null;
+                                }
+
+                                if ($defaultLineId === null && count($allowedLineIds) === 1) {
+                                    $set('default_production_line_id', $allowedLineIds[0]);
+                                }
+                            }),
+                        Select::make('default_production_line_id')
+                            ->label(__('Ligne de production par défaut'))
+                            ->options(fn (Get $get): array => ProductionLine::query()
+                                ->whereIn('id', self::normalizeProductionLineIds($get('allowed_production_line_ids') ?? []))
+                                ->orderBy('sort_order')
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
                             ->nullable(),
                         Toggle::make('is_active')
-                            ->label('Actif')
+                            ->label(__('Actif'))
                             ->default(true),
                     ]),
 
@@ -151,5 +191,31 @@ class ProductTypeForm
                     ])
                     ->collapsible(),
             ]);
+    }
+
+    /**
+     * @param  array<int, int|string|null>  $productionLineIds
+     * @return array<int, int>
+     */
+    private static function normalizeProductionLineIds(array $productionLineIds): array
+    {
+        return collect($productionLineIds)
+            ->filter(fn (mixed $lineId): bool => filled($lineId))
+            ->map(fn (mixed $lineId): int => (int) $lineId)
+            ->filter(fn (int $lineId): bool => $lineId > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private static function normalizeProductionLineId(mixed $productionLineId): ?int
+    {
+        if (! filled($productionLineId)) {
+            return null;
+        }
+
+        $normalizedLineId = (int) $productionLineId;
+
+        return $normalizedLineId > 0 ? $normalizedLineId : null;
     }
 }

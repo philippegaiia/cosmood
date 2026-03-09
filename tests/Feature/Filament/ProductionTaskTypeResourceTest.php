@@ -27,3 +27,24 @@ it('searches production task types by name', function () {
         ->assertCanSeeTableRecords([$typeA])
         ->assertCanNotSeeTableRecords([$typeB]);
 });
+
+it('persists capacity toggle on production task types', function () {
+    Livewire::test(\App\Filament\Resources\Production\ProductionTaskTypeResource\Pages\CreateProductionTaskType::class)
+        ->fillForm([
+            'name' => 'Curing',
+            'slug' => 'curing',
+            'duration' => 60,
+            'is_active' => true,
+            'is_capacity_consuming' => false,
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    expect(ProductionTaskType::query()->where('slug', 'curing')->firstOrFail()->is_capacity_consuming)->toBeFalse();
+});
+
+it('defaults task types to capacity consuming', function () {
+    $taskType = ProductionTaskType::factory()->create();
+
+    expect($taskType->is_capacity_consuming)->toBeTrue();
+});
