@@ -257,6 +257,7 @@ class FormulaResource extends Resource
                                                 return $mode === FormulaItemCalculationMode::QuantityPerUnit ? 'u' : '%';
                                             })
                                             ->numeric()
+                                            ->minValue(0)
                                             ->live()
                                             ->dehydrated()
                                             ->afterStateUpdated(function (Set $set, $state) {

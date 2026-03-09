@@ -49,4 +49,12 @@ describe('FormulaItem Model', function () {
 
         expect($formulaItem->phase)->toBe(Phases::Additives);
     });
+
+    it('rejects negative percentage values', function () {
+        expect(function (): void {
+            FormulaItem::factory()->create([
+                'percentage_of_oils' => -50,
+            ]);
+        })->toThrow(InvalidArgumentException::class, 'pourcentage ne peut pas être négatif');
+    });
 });

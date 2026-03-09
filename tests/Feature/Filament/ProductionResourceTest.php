@@ -171,6 +171,20 @@ describe('Production - Relationships', function () {
             ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager::class);
     });
 
+    it('does not expose mark done action without entering a qc measurement', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->create();
+        ProductionQcCheck::factory()->create([
+            'production_id' => $production->id,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+        ])->assertDontSee('Marquer fait');
+    });
+
     it('shows total product cost summary in production items relation manager', function () {
         $production = Production::factory()->create([
             'planned_quantity' => 100,
@@ -345,7 +359,7 @@ describe('Production - Relationships', function () {
         expect($production->fresh()->status)->toBe(ProductionStatus::Ongoing);
     });
 
-    it('asks confirmation on save when soap production total saponified is not 100 percent', function () {
+    it('blocks save when soap production has saponified lines and total is not 100 percent', function () {
         $this->actingAs($this->user);
 
         $soapType = ProductType::factory()->create([
@@ -383,24 +397,12 @@ describe('Production - Relationships', function () {
             'record' => $production->id,
         ])
             ->fillForm([
-                'notes' => 'Save should require confirmation',
+                'notes' => 'Save should be blocked',
             ])
             ->call('save')
-            ->assertNotified('Total saponifie different de 100%');
+            ->assertNotified('Total saponifié invalide');
 
-        expect($production->fresh()->notes)->not->toBe('Save should require confirmation');
-
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
-            'record' => $production->id,
-        ])
-            ->fillForm([
-                'notes' => 'Save should require confirmation',
-            ])
-            ->call('save')
-            ->call('save')
-            ->assertHasNoFormErrors();
-
-        expect($production->fresh()->notes)->toBe('Save should require confirmation');
+        expect($production->fresh()->notes)->not->toBe('Save should be blocked');
     });
 
     it('does not ask confirmation when formula control is disabled, even with saponification lines', function () {
@@ -444,13 +446,13 @@ describe('Production - Relationships', function () {
                 'notes' => 'Save without confirmation',
             ])
             ->call('save')
-            ->assertNotNotified('Total saponifie different de 100%')
+            ->assertNotNotified('Total saponifié invalide')
             ->assertHasNoFormErrors();
 
         expect($production->fresh()->notes)->toBe('Save without confirmation');
     });
 
-    it('asks confirmation on save when linked formula has manual soap control enabled', function () {
+    it('does not block save for soap formula when there are no saponified lines', function () {
         $this->actingAs($this->user);
 
         $balmType = ProductType::factory()->create([
@@ -483,24 +485,13 @@ describe('Production - Relationships', function () {
             'record' => $production->id,
         ])
             ->fillForm([
-                'notes' => 'Formula flag should require confirmation',
+                'notes' => 'Formula soap without saponified lines',
             ])
             ->call('save')
-            ->assertNotified('Total saponifie different de 100%');
-
-        expect($production->fresh()->notes)->not->toBe('Formula flag should require confirmation');
-
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
-            'record' => $production->id,
-        ])
-            ->fillForm([
-                'notes' => 'Formula flag should require confirmation',
-            ])
-            ->call('save')
-            ->call('save')
+            ->assertNotNotified('Total saponifié invalide')
             ->assertHasNoFormErrors();
 
-        expect($production->fresh()->notes)->toBe('Formula flag should require confirmation');
+        expect($production->fresh()->notes)->toBe('Formula soap without saponified lines');
     });
 });
 

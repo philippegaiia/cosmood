@@ -70,9 +70,12 @@ class SupplierOrderItemsRelationManager extends RelationManager
 
                 TextInput::make('quantity')
                     ->numeric()
+                    ->minValue(0.001)
+                    ->step(0.001)
                     ->live()
                     ->dehydrated()
                     ->default(1)
+                    ->required()
                     ->columnSpan(1),
 
                 TextInput::make('unit_weight')
@@ -85,6 +88,7 @@ class SupplierOrderItemsRelationManager extends RelationManager
                 TextInput::make('unit_price')
                     ->label('Prix unitaire')
                     ->numeric()
+                    ->minValue(0)
                     ->live()
                     ->columnSpan(1),
 

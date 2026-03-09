@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use InvalidArgumentException;
 
 class Supply extends Model
 {
@@ -30,6 +31,27 @@ class Supply extends Model
             'is_in_stock' => 'boolean',
             'last_used_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (Supply $supply): void {
+            if (filled($supply->initial_quantity) && (float) $supply->initial_quantity < 0) {
+                throw new InvalidArgumentException(__('La quantité initiale ne peut pas être négative.'));
+            }
+
+            if (filled($supply->quantity_in) && (float) $supply->quantity_in < 0) {
+                throw new InvalidArgumentException(__('La quantité reçue ne peut pas être négative.'));
+            }
+
+            if (filled($supply->quantity_out) && (float) $supply->quantity_out < 0) {
+                throw new InvalidArgumentException(__('La quantité consommée ne peut pas être négative.'));
+            }
+
+            if (filled($supply->unit_price) && (float) $supply->unit_price < 0) {
+                throw new InvalidArgumentException(__('Le prix unitaire ne peut pas être négatif.'));
+            }
+        });
     }
 
     public function supplierListing(): BelongsTo

@@ -68,10 +68,12 @@ class IngredientResource extends Resource
                 TextInput::make('price')
                     ->label('Dernier prix (EUR/kg)')
                     ->numeric()
+                    ->minValue(0)
                     ->step(0.01),
                 TextInput::make('stock_min')
                     ->label('Stock min alerte')
                     ->numeric()
+                    ->minValue(0)
                     ->step(0.001)
                     ->default(0)
                     ->helperText('Alerte visuelle en inventaire quand le disponible ingrédient passe sous ce seuil.'),

@@ -26,6 +26,10 @@ class FormulaItem extends Model
         parent::boot();
 
         static::saving(function (FormulaItem $item): void {
+            if (filled($item->percentage_of_oils) && (float) $item->percentage_of_oils < 0) {
+                throw new InvalidArgumentException(__('Le pourcentage ne peut pas être négatif.'));
+            }
+
             if ($item->ingredient_id) {
                 $ingredient = Ingredient::find($item->ingredient_id);
                 if ($ingredient && $ingredient->is_packaging) {

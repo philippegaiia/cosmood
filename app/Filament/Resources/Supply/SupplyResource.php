@@ -90,13 +90,22 @@ class SupplyResource extends Resource
                     ->schema([
                         TextInput::make('initial_quantity')
                             ->label('Qté initiale')
-                            ->numeric(),
+                            ->numeric()
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText(__('Valeur en lecture seule. Utiliser l\'action "Ajuster" depuis la liste inventaire.')),
                         TextInput::make('quantity_in')
                             ->label('Qté reçue')
-                            ->numeric(),
+                            ->numeric()
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText(__('Valeur en lecture seule. Utiliser l\'action "Ajuster" depuis la liste inventaire.')),
                         TextInput::make('quantity_out')
                             ->label('Qté consommée')
-                            ->numeric(),
+                            ->numeric()
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->helperText(__('Valeur en lecture seule. Utiliser l\'action "Ajuster" depuis la liste inventaire.')),
                         TextInput::make('allocated_quantity_display')
                             ->label('Qté réservée')
                             ->numeric()

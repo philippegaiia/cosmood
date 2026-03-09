@@ -42,4 +42,12 @@ describe('Ingredient Model', function () {
         expect($ingredient->name)->toBe('Huile de Coco')
             ->and($ingredient->inci)->toBe('Cocos Nucifera Oil');
     });
+
+    it('rejects negative ingredient price', function () {
+        $ingredient = Ingredient::factory()->create();
+
+        expect(fn () => $ingredient->update([
+            'price' => -1,
+        ]))->toThrow(InvalidArgumentException::class, 'prix ingrédient ne peut pas être négatif');
+    });
 });

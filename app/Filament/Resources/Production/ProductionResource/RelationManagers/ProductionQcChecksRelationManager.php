@@ -72,22 +72,6 @@ class ProductionQcChecksRelationManager extends RelationManager
                     ->placeholder('-'),
             ])
             ->recordActions([
-                Action::make('markDone')
-                    ->label('Marquer fait')
-                    ->icon(Heroicon::OutlinedCheckCircle)
-                    ->color('success')
-                    ->visible(fn (ProductionQcCheck $record): bool => ! $record->isDone())
-                    ->action(function (ProductionQcCheck $record): void {
-                        $record->update([
-                            'checked_by' => Auth::id(),
-                            'checked_at' => now(),
-                        ]);
-
-                        Notification::make()
-                            ->title('Contrôle QC marqué comme fait')
-                            ->success()
-                            ->send();
-                    }),
                 Action::make('recordResult')
                     ->label('Saisir')
                     ->icon(Heroicon::OutlinedPencilSquare)

@@ -30,3 +30,24 @@ it('loads supplies list page successfully', function () {
 it('disables manual supply creation from inventory resource', function () {
     expect(\App\Filament\Resources\Supply\SupplyResource::canCreate())->toBeFalse();
 });
+
+it('does not persist direct edits on stock quantity fields', function () {
+    $supply = Supply::factory()->create([
+        'initial_quantity' => 5,
+        'quantity_in' => 12,
+        'quantity_out' => 3,
+    ]);
+
+    Livewire::test(\App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply::class, ['record' => $supply->id])
+        ->fillForm([
+            'initial_quantity' => 999,
+            'quantity_in' => 888,
+            'quantity_out' => 777,
+        ])
+        ->call('save')
+        ->assertHasNoFormErrors();
+
+    expect((float) $supply->fresh()->initial_quantity)->toBe(5.0)
+        ->and((float) $supply->fresh()->quantity_in)->toBe(12.0)
+        ->and((float) $supply->fresh()->quantity_out)->toBe(3.0);
+});

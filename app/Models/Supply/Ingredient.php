@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use InvalidArgumentException;
 
 class Ingredient extends Model
 {
@@ -21,6 +22,16 @@ class Ingredient extends Model
         static::creating(function (Ingredient $ingredient): void {
             if (empty($ingredient->code)) {
                 $ingredient->code = self::generateUniqueCode($ingredient->ingredient_category_id);
+            }
+        });
+
+        static::saving(function (Ingredient $ingredient): void {
+            if (filled($ingredient->price) && (float) $ingredient->price < 0) {
+                throw new InvalidArgumentException(__('Le prix ingrédient ne peut pas être négatif.'));
+            }
+
+            if (filled($ingredient->stock_min) && (float) $ingredient->stock_min < 0) {
+                throw new InvalidArgumentException(__('Le stock minimum ne peut pas être négatif.'));
             }
         });
     }

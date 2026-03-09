@@ -33,6 +33,14 @@ class SupplierOrderItem extends Model
     protected static function booted(): void
     {
         static::saving(function (SupplierOrderItem $item): void {
+            $orderedUnits = round((float) ($item->quantity ?? 0), 3);
+
+            if ($orderedUnits <= 0) {
+                throw new \InvalidArgumentException(__('La quantité commandée doit être supérieure à zéro.'));
+            }
+
+            $item->quantity = $orderedUnits;
+
             $orderedQuantityKg = $item->getOrderedQuantityKg();
             $committedQuantityKg = round((float) ($item->committed_quantity_kg ?? 0), 3);
             $item->committed_quantity_kg = $committedQuantityKg;

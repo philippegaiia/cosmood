@@ -86,6 +86,23 @@ describe('SupplierOrder Model', function () {
         expect($order->order_status)->toBe(OrderStatus::Delivered);
     });
 
+    it('rejects transitions from checked to draft', function () {
+        $order = SupplierOrder::factory()->create([
+            'order_status' => OrderStatus::Checked,
+        ]);
+
+        expect(fn () => $order->update([
+            'order_status' => OrderStatus::Draft,
+        ]))->toThrow(InvalidArgumentException::class, 'Transition de statut invalide');
+    });
+
+    it('exposes checked as a terminal status transition set', function () {
+        $allowed = SupplierOrder::allowedTransitionsFor(OrderStatus::Checked);
+
+        expect($allowed)->toHaveCount(1)
+            ->and($allowed[0])->toBe(OrderStatus::Checked);
+    });
+
     it('updates ingredient last price when order is confirmed', function () {
         $supplier = Supplier::factory()->create();
         $ingredient = Ingredient::factory()->create(['price' => 5.50]);

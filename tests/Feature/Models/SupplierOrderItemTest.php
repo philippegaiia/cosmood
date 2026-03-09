@@ -98,4 +98,14 @@ describe('SupplierOrderItem Model', function () {
         expect($firstItem->batch_number)->toBe('COCOCAU')
             ->and($secondItem->batch_number)->toBe('COCOCAU');
     });
+
+    it('rejects negative ordered quantity', function () {
+        expect(function (): void {
+            SupplierOrderItem::factory()->create([
+                'quantity' => -3,
+                'unit_weight' => 25,
+                'committed_quantity_kg' => 0,
+            ]);
+        })->toThrow(\InvalidArgumentException::class, 'quantité commandée doit être supérieure à zéro');
+    });
 });

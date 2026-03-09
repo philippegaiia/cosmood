@@ -74,4 +74,12 @@ describe('Supply Model', function () {
 
         expect($supply->expiry_date->isPast())->toBeTrue();
     });
+
+    it('rejects negative stock quantities', function () {
+        $supply = Supply::factory()->create();
+
+        expect(fn () => $supply->update([
+            'quantity_out' => -5,
+        ]))->toThrow(InvalidArgumentException::class, 'quantité consommée ne peut pas être négative');
+    });
 });

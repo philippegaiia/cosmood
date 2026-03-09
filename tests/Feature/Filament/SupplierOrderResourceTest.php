@@ -106,3 +106,39 @@ it('saves edited order when adding a wave after item creation without engagement
     expect((float) $item->fresh()->committed_quantity_kg)->toBe(0.0)
         ->and($order->fresh()->production_wave_id)->toBe($wave->id);
 });
+
+it('blocks negative order item quantities with form validation', function () {
+    $supplier = Supplier::factory()->create();
+    $listing = SupplierListing::factory()->create([
+        'supplier_id' => $supplier->id,
+    ]);
+
+    $order = SupplierOrder::factory()->create([
+        'supplier_id' => $supplier->id,
+        'order_status' => OrderStatus::Draft,
+    ]);
+
+    $item = SupplierOrderItem::factory()->create([
+        'supplier_order_id' => $order->id,
+        'supplier_listing_id' => $listing->id,
+    ]);
+
+    Livewire::test(\App\Filament\Resources\Supply\SupplierOrderResource\Pages\EditSupplierOrder::class, ['record' => $order->id])
+        ->fillForm([
+            'supplier_order_items' => [[
+                'id' => $item->id,
+                'supplier_listing_id' => $item->supplier_listing_id,
+                'quantity' => -3,
+                'unit_weight' => (float) $item->unit_weight,
+                'unit_price' => (float) $item->unit_price,
+                'batch_number' => $item->batch_number,
+                'expiry_date' => optional($item->expiry_date)->format('Y-m-d'),
+                'committed_quantity_kg' => 0,
+                'is_in_supplies' => $item->is_in_supplies,
+            ]],
+        ])
+        ->call('save')
+        ->assertHasFormErrors([
+            'supplier_order_items.0.quantity' => 'min',
+        ]);
+});

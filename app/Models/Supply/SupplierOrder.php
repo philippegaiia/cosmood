@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use InvalidArgumentException;
 
 class SupplierOrder extends Model
 {
@@ -49,6 +50,29 @@ class SupplierOrder extends Model
                 if (filled($supplierCode)) {
                     $order->order_ref = now()->year.'-'.$supplierCode.'-'.$order->serial_number;
                 }
+            }
+        });
+
+        static::updating(function (SupplierOrder $order): void {
+            if (! $order->isDirty('order_status')) {
+                return;
+            }
+
+            $fromRaw = $order->getRawOriginal('order_status');
+            $toRaw = $order->order_status;
+
+            $from = $fromRaw instanceof OrderStatus ? $fromRaw : OrderStatus::tryFrom((string) $fromRaw);
+            $to = $toRaw instanceof OrderStatus ? $toRaw : OrderStatus::tryFrom((string) $toRaw);
+
+            if (! $from instanceof OrderStatus || ! $to instanceof OrderStatus) {
+                return;
+            }
+
+            if (! self::canTransition($from, $to)) {
+                throw new InvalidArgumentException(__('Transition de statut invalide de :from vers :to.', [
+                    'from' => $from->getLabel(),
+                    'to' => $to->getLabel(),
+                ]));
             }
         });
 
@@ -144,5 +168,63 @@ class SupplierOrder extends Model
         $this->supplier_order_items()
             ->where('committed_quantity_kg', '>', 0)
             ->update(['committed_quantity_kg' => 0]);
+    }
+
+    public static function transitionMap(): array
+    {
+        return [
+            OrderStatus::Draft->value => [
+                OrderStatus::Passed,
+                OrderStatus::Confirmed,
+                OrderStatus::Delivered,
+                OrderStatus::Checked,
+                OrderStatus::Cancelled,
+            ],
+            OrderStatus::Passed->value => [
+                OrderStatus::Draft,
+                OrderStatus::Confirmed,
+                OrderStatus::Delivered,
+                OrderStatus::Checked,
+                OrderStatus::Cancelled,
+            ],
+            OrderStatus::Confirmed->value => [
+                OrderStatus::Draft,
+                OrderStatus::Passed,
+                OrderStatus::Delivered,
+                OrderStatus::Checked,
+                OrderStatus::Cancelled,
+            ],
+            OrderStatus::Delivered->value => [
+                OrderStatus::Draft,
+                OrderStatus::Passed,
+                OrderStatus::Confirmed,
+                OrderStatus::Checked,
+                OrderStatus::Cancelled,
+            ],
+            OrderStatus::Checked->value => [],
+            OrderStatus::Cancelled->value => [
+                OrderStatus::Draft,
+                OrderStatus::Passed,
+                OrderStatus::Confirmed,
+                OrderStatus::Delivered,
+            ],
+        ];
+    }
+
+    public static function canTransition(OrderStatus $from, OrderStatus $to): bool
+    {
+        if ($from === $to) {
+            return true;
+        }
+
+        return in_array($to, self::transitionMap()[$from->value] ?? [], true);
+    }
+
+    /**
+     * @return array<int, OrderStatus>
+     */
+    public static function allowedTransitionsFor(OrderStatus $from): array
+    {
+        return array_merge([$from], self::transitionMap()[$from->value] ?? []);
     }
 }

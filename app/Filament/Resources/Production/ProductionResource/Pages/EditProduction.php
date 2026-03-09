@@ -100,34 +100,19 @@ class EditProduction extends EditRecord
             $this->clearStatusTransitionConfirmationState();
         }
 
-        if (! $this->shouldConfirmSaponifiedTotalMismatch()) {
-            $this->clearSaponifiedConfirmationState();
-
+        if (! $this->shouldBlockSaponifiedTotalMismatch()) {
             return;
         }
-
-        $signature = $this->getSaponifiedConfirmationSignature();
-
-        if ($this->hasSaponifiedConfirmation($signature)) {
-            $this->clearSaponifiedConfirmationState();
-
-            return;
-        }
-
-        $this->storeSaponifiedConfirmation($signature);
 
         Notification::make()
-            ->warning()
-            ->title('Total saponifie different de 100%')
-            ->body('Le total saponifie est a '.number_format($this->getSaponifiedTotalFromState(), 2, '.', ' ').' %. Cliquez encore sur Enregistrer pour confirmer.')
+            ->danger()
+            ->title(__('Total saponifié invalide'))
+            ->body(__('Le total saponifié est à :total %. Il doit être égal à 100 % quand au moins une phase saponifiée est présente.', [
+                'total' => number_format($this->getSaponifiedTotalFromState(), 2, '.', ' '),
+            ]))
             ->send();
 
         throw new Halt;
-    }
-
-    private function getSaponifiedConfirmationSessionKey(): string
-    {
-        return sprintf('production:saponified-confirm:%s', $this->record->getKey());
     }
 
     private function getStatusTransitionConfirmationSessionKey(): string
@@ -135,38 +120,14 @@ class EditProduction extends EditRecord
         return sprintf('production:status-confirm:%s', $this->record->getKey());
     }
 
-    private function getSaponifiedConfirmationSignature(): string
-    {
-        return implode('|', [
-            (string) ($this->record->getKey() ?? 'new'),
-            (string) ((int) ($this->record->formula_id ?? 0)),
-            number_format($this->getSaponifiedTotalFromState(), 4, '.', ''),
-        ]);
-    }
-
-    private function hasSaponifiedConfirmation(string $signature): bool
-    {
-        return Session::get($this->getSaponifiedConfirmationSessionKey()) === $signature;
-    }
-
     private function hasStatusTransitionConfirmation(string $signature): bool
     {
         return Session::get($this->getStatusTransitionConfirmationSessionKey()) === $signature;
     }
 
-    private function storeSaponifiedConfirmation(string $signature): void
-    {
-        Session::put($this->getSaponifiedConfirmationSessionKey(), $signature);
-    }
-
     private function storeStatusTransitionConfirmation(string $signature): void
     {
         Session::put($this->getStatusTransitionConfirmationSessionKey(), $signature);
-    }
-
-    private function clearSaponifiedConfirmationState(): void
-    {
-        Session::forget($this->getSaponifiedConfirmationSessionKey());
     }
 
     private function clearStatusTransitionConfirmationState(): void
@@ -303,13 +264,30 @@ class EditProduction extends EditRecord
         ];
     }
 
-    private function shouldConfirmSaponifiedTotalMismatch(): bool
+    private function shouldBlockSaponifiedTotalMismatch(): bool
     {
         if (! $this->isSoapProductionType()) {
             return false;
         }
 
+        if ($this->getSaponifiedItemCountFromState() === 0) {
+            return false;
+        }
+
         return abs($this->getSaponifiedTotalFromState() - 100.0) >= 0.01;
+    }
+
+    private function getSaponifiedItemCountFromState(): int
+    {
+        $count = 0;
+
+        foreach ($this->getSaponifiedItemsForValidation() as $item) {
+            if (($item['phase'] ?? null) === Phases::Saponification->value) {
+                $count++;
+            }
+        }
+
+        return $count;
     }
 
     private function isSoapProductionType(): bool
@@ -323,7 +301,7 @@ class EditProduction extends EditRecord
     {
         $total = 0.0;
 
-        foreach (($this->data['productionItems'] ?? []) as $item) {
+        foreach ($this->getSaponifiedItemsForValidation() as $item) {
             if (($item['phase'] ?? null) !== Phases::Saponification->value) {
                 continue;
             }
@@ -332,5 +310,32 @@ class EditProduction extends EditRecord
         }
 
         return $total;
+    }
+
+    /**
+     * @return array<int, array{phase: string|null, percentage_of_oils: mixed}>
+     */
+    private function getSaponifiedItemsForValidation(): array
+    {
+        $stateItems = $this->data['productionItems'] ?? null;
+
+        if (is_array($stateItems) && $stateItems !== []) {
+            return array_map(
+                fn (array $item): array => [
+                    'phase' => isset($item['phase']) ? (string) $item['phase'] : null,
+                    'percentage_of_oils' => $item['percentage_of_oils'] ?? 0,
+                ],
+                $stateItems,
+            );
+        }
+
+        return $this->record
+            ->productionItems()
+            ->get(['phase', 'percentage_of_oils'])
+            ->map(fn ($item): array => [
+                'phase' => isset($item->phase) ? (string) $item->phase : null,
+                'percentage_of_oils' => $item->percentage_of_oils,
+            ])
+            ->all();
     }
 }

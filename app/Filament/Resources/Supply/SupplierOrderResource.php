@@ -135,7 +135,7 @@ class SupplierOrderResource extends Resource
                             ->schema([
                                 ToggleButtons::make('order_status')
                                     ->hiddenLabel()
-                                    ->options(OrderStatus::class)
+                                    ->options(fn (?SupplierOrder $record): array => self::getStatusOptions($record))
                                     ->inline()
                                     ->live()
                                     ->default(OrderStatus::Draft)
@@ -238,9 +238,12 @@ class SupplierOrderResource extends Resource
 
                                 TextInput::make('quantity')
                                     ->numeric()
+                                    ->minValue(0.001)
+                                    ->step(0.001)
                                     ->live()
                                     ->dehydrated()
                                     ->default(1)
+                                    ->required()
                                     ->columnSpan(2),
 
                                 TextInput::make('unit_weight')
@@ -254,6 +257,7 @@ class SupplierOrderResource extends Resource
                                     ->label('Prix')
                                     // ->dehydrated()
                                     ->numeric()
+                                    ->minValue(0)
                                     ->columnSpan(2),
 
                                 TextInput::make('batch_number')
@@ -600,6 +604,22 @@ class SupplierOrderResource extends Resource
         return Carbon::parse($orderDate)
             ->addDays($leadDays)
             ->toDateString();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private static function getStatusOptions(?SupplierOrder $record): array
+    {
+        if (! $record?->order_status instanceof OrderStatus) {
+            return [
+                OrderStatus::Draft->value => OrderStatus::Draft->getLabel(),
+            ];
+        }
+
+        return collect(SupplierOrder::allowedTransitionsFor($record->order_status))
+            ->mapWithKeys(fn (OrderStatus $status): array => [$status->value => $status->getLabel()])
+            ->all();
     }
 
     public static function getRelations(): array
