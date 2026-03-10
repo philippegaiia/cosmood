@@ -3,8 +3,8 @@
 namespace App\Services\Production;
 
 use App\Enums\ProductionStatus;
+use App\Models\Production\Production;
 use App\Models\Production\ProductionLine;
-use App\Models\Production\ProductionTask;
 use Carbon\Carbon;
 
 class LineDayOccupancyService
@@ -12,9 +12,9 @@ class LineDayOccupancyService
     /**
      * Returns occupancy keyed by line ID then date string.
      *
-     * A production consumes one slot on a line/day when at least one capacity-consuming
-     * task is scheduled there on that date. Multiple consuming tasks from the same
-     * production on the same date still count as one slot.
+     * Capacity is anchored to the production manufacturing date, not to task dates.
+     * A production consumes one slot on a line/day when its production_date falls
+     * on that day and the batch is still in an active planning/execution state.
      *
      * @param  array<int, int>  $lineIds
      * @return array<int, array<string, array{used: int, capacity: int, is_near_capacity: bool, is_over_capacity: bool, is_closed: bool, has_issue: bool}>>
@@ -47,27 +47,14 @@ class LineDayOccupancyService
             }
         }
 
-        $tasks = $this->getCapacityTasks($normalizedLineIds, $from, $to);
+        $productions = $this->getCapacityProductions($normalizedLineIds, $from, $to);
 
-        $groupedProductionIds = [];
-
-        foreach ($tasks as $task) {
-            $lineId = (int) $task->production->production_line_id;
-            $date = $task->scheduled_date?->toDateString();
-
-            if ($date === null) {
-                continue;
-            }
-
-            $groupedProductionIds[$lineId][$date][$task->production_id] = true;
-        }
-
-        foreach ($groupedProductionIds as $lineId => $dates) {
-            foreach ($dates as $date => $productionIds) {
+        foreach ($productions->groupBy('production_line_id') as $lineId => $lineProductions) {
+            foreach ($lineProductions->groupBy(fn (Production $production): string => $production->production_date->toDateString()) as $date => $datedProductions) {
                 $capacity = $lines->get((int) $lineId)?->resolveDailyCapacity() ?? 1;
 
                 $occupancy[(int) $lineId][$date] = $this->formatCell(
-                    used: count($productionIds),
+                    used: $datedProductions->count(),
                     capacity: $capacity,
                 );
             }
@@ -84,10 +71,8 @@ class LineDayOccupancyService
             return false;
         }
 
-        $usedSlots = $this->getCapacityTasks([$lineId], $date->copy()->startOfDay(), $date->copy()->startOfDay())
-            ->when($excludeProductionId !== null, fn ($tasks) => $tasks->where('production_id', '!=', $excludeProductionId))
-            ->pluck('production_id')
-            ->unique()
+        $usedSlots = $this->getCapacityProductions([$lineId], $date->copy()->startOfDay(), $date->copy()->startOfDay())
+            ->when($excludeProductionId !== null, fn ($productions) => $productions->where('id', '!=', $excludeProductionId))
             ->count();
 
         return $usedSlots < $line->resolveDailyCapacity();
@@ -113,25 +98,19 @@ class LineDayOccupancyService
 
     /**
      * @param  array<int, int>  $lineIds
-     * @return \Illuminate\Support\Collection<int, ProductionTask>
+     * @return \Illuminate\Support\Collection<int, Production>
      */
-    private function getCapacityTasks(array $lineIds, Carbon $from, Carbon $to): \Illuminate\Support\Collection
+    private function getCapacityProductions(array $lineIds, Carbon $from, Carbon $to): \Illuminate\Support\Collection
     {
-        return ProductionTask::query()
-            ->with(['production', 'productionTaskType'])
-            ->whereDate('scheduled_date', '>=', $from->toDateString())
-            ->whereDate('scheduled_date', '<=', $to->toDateString())
-            ->whereNull('cancelled_at')
-            ->whereHas('production', function ($query) use ($lineIds): void {
-                $query
-                    ->whereIn('production_line_id', $lineIds)
-                    ->whereIn('status', [
-                        ProductionStatus::Planned->value,
-                        ProductionStatus::Confirmed->value,
-                        ProductionStatus::Ongoing->value,
-                    ]);
-            })
-            ->whereHas('productionTaskType', fn ($query) => $query->where('is_capacity_consuming', true))
+        return Production::query()
+            ->whereIn('production_line_id', $lineIds)
+            ->whereDate('production_date', '>=', $from->toDateString())
+            ->whereDate('production_date', '<=', $to->toDateString())
+            ->whereIn('status', [
+                ProductionStatus::Planned->value,
+                ProductionStatus::Confirmed->value,
+                ProductionStatus::Ongoing->value,
+            ])
             ->get();
     }
 }

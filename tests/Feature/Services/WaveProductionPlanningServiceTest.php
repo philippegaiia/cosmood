@@ -113,6 +113,31 @@ it('skips weekends and holidays when planning dates', function (): void {
         ->and($plannedDates[2]->toDateString())->toBe('2026-03-12');
 });
 
+it('pushes new batches to the next available date when existing productions already occupy capacity', function (): void {
+    $wave = ProductionWave::factory()->create();
+    $line = ProductionLine::factory()->soapLine()->create([
+        'daily_batch_capacity' => 2,
+    ]);
+
+    createWavePlanningProduction($wave, $line->id, ProductionStatus::Planned, '2026-03-09');
+    createWavePlanningProduction($wave, $line->id, ProductionStatus::Confirmed, '2026-03-09');
+    createWavePlanningProduction($wave, $line->id, ProductionStatus::Planned, '2026-03-10');
+
+    $plannedDates = waveProductionPlanningService()->planBatchDates(
+        batchPlans: [
+            ['production_line_id' => $line->id],
+            ['production_line_id' => $line->id],
+        ],
+        startDate: '2026-03-09',
+        skipWeekends: true,
+        skipHolidays: true,
+        fallbackDailyCapacity: 4,
+    );
+
+    expect($plannedDates[0]->toDateString())->toBe('2026-03-10')
+        ->and($plannedDates[1]->toDateString())->toBe('2026-03-11');
+});
+
 it('reschedules only planned and confirmed productions for a wave', function (): void {
     $wave = ProductionWave::factory()->create();
     $line = ProductionLine::factory()->soapLine()->create([
@@ -139,6 +164,29 @@ it('reschedules only planned and confirmed productions for a wave', function ():
         ->and($finished->fresh()->production_date?->toDateString())->toBe('2026-03-03')
         ->and($wave->fresh()->planned_start_date?->toDateString())->toBe('2026-03-09')
         ->and($wave->fresh()->planned_end_date?->toDateString())->toBe('2026-03-09');
+});
+
+it('replans selected productions without counting their current dates as occupied capacity', function (): void {
+    $wave = ProductionWave::factory()->create();
+    $line = ProductionLine::factory()->soapLine()->create([
+        'daily_batch_capacity' => 2,
+    ]);
+
+    $selectedFirst = createWavePlanningProduction($wave, $line->id, ProductionStatus::Planned, '2026-03-09');
+    $selectedSecond = createWavePlanningProduction($wave, $line->id, ProductionStatus::Confirmed, '2026-03-10');
+    createWavePlanningProduction($wave, $line->id, ProductionStatus::Planned, '2026-03-09');
+
+    $summary = waveProductionPlanningService()->rescheduleProductions(
+        productions: collect([$selectedFirst, $selectedSecond]),
+        startDate: '2026-03-09',
+        skipWeekends: true,
+        skipHolidays: true,
+        fallbackDailyCapacity: 4,
+    );
+
+    expect($summary['rescheduled_count'])->toBe(2)
+        ->and($selectedFirst->fresh()->production_date?->toDateString())->toBe('2026-03-09')
+        ->and($selectedSecond->fresh()->production_date?->toDateString())->toBe('2026-03-10');
 });
 
 it('blocks replanning for in-progress waves', function (): void {

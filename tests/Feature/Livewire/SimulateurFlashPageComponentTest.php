@@ -5,8 +5,11 @@ use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
 use App\Models\Production\ProductionLine;
+use App\Models\Production\ProductionTaskType;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
+use App\Models\Production\TaskTemplate;
+use App\Models\Production\TaskTemplateTaskType;
 use App\Models\Supply\Ingredient;
 use App\Models\User;
 use Illuminate\Support\Str;
@@ -88,4 +91,58 @@ it('creates a persistent wave from the simulator component', function () {
     expect($wave)->not->toBeNull()
         ->and($wave->productions()->count())->toBe(2)
         ->and($wave->productions()->where('production_line_id', $line->id)->count())->toBe(2);
+});
+
+it('formats simulator durations in hours and minutes for display', function () {
+    $type = ProductType::factory()->create([
+        'default_batch_size' => 10,
+        'expected_units_output' => 100,
+    ]);
+    $template = TaskTemplate::query()->create([
+        'name' => 'Template Durée UI',
+        'product_category_id' => $type->product_category_id,
+    ]);
+    $type->taskTemplates()->attach($template->id, ['is_default' => true]);
+
+    $mix = ProductionTaskType::factory()->create([
+        'name' => 'Mélange',
+        'duration' => 40,
+    ]);
+    $pack = ProductionTaskType::factory()->create([
+        'name' => 'Conditionnement',
+        'duration' => 70,
+    ]);
+
+    TaskTemplateTaskType::query()->create([
+        'task_template_id' => $template->id,
+        'production_task_type_id' => $mix->id,
+        'sort_order' => 1,
+        'offset_days' => 0,
+        'skip_weekends' => true,
+        'duration_override' => null,
+    ]);
+    TaskTemplateTaskType::query()->create([
+        'task_template_id' => $template->id,
+        'production_task_type_id' => $pack->id,
+        'sort_order' => 2,
+        'offset_days' => 1,
+        'skip_weekends' => true,
+        'duration_override' => null,
+    ]);
+
+    $product = Product::factory()->withProductType($type)->create([
+        'name' => 'Savon Durée UI',
+    ]);
+
+    createComponentFlashFormula($product);
+
+    Livewire::test(SimulateurFlashPage::class)
+        ->set('lines.0.product_id', $product->id)
+        ->set('lines.0.desired_units', 200)
+        ->call('recalculate')
+        ->assertSee('4 h')
+        ->assertSee('40 min')
+        ->assertSee('1 h 10 min')
+        ->assertSee('2 h 20 min')
+        ->assertDontSee('140 min (2,33 h)');
 });

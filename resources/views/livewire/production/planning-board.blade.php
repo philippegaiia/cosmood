@@ -19,9 +19,13 @@
             if (!this.draggingIsDraggable) return;
             event.preventDefault();
         },
-        drop(event, lineId, day) {
+        drop(event, rowType, lineId, day) {
             event.preventDefault();
             if (!this.draggingIsDraggable) return;
+            if (this.draggingType === 'production' && rowType !== 'production') {
+                this.dragEnd();
+                return;
+            }
             if (this.draggingType === 'production') {
                 $wire.moveProduction(this.draggingId, lineId, day);
             } else if (this.draggingType === 'task') {
@@ -36,7 +40,7 @@
             <div>
                 <flux:heading size="lg">{{ __('Planning board') }}</flux:heading>
                 <flux:text class="mt-1 text-zinc-600">
-                    {{ __('Vue hebdomadaire basée sur les tâches. La capacité est calculée par lot distinct avec au moins une tâche consommatrice ce jour-là.') }}
+                    {{ __('Vue hebdomadaire séparant la fabrication et le suivi des tâches. La capacité reste calculée sur la date de production, tandis que les tâches restent affichées à leur date planifiée.') }}
                 </flux:text>
             </div>
 
@@ -98,38 +102,50 @@
             </thead>
             <tbody>
                 @foreach ($board['lines'] as $line)
+                    @continue($line['type'] === 'production' && ! $showProductions)
+                    @continue($line['type'] === 'tasks' && ! $showTasks)
                     <tr>
                         <th class="sticky left-0 z-10 border-b border-zinc-200 bg-zinc-50 px-4 py-4 text-left align-top">
                             <div class="font-medium text-zinc-900">{{ $line['name'] }}</div>
                             <div class="text-xs text-zinc-500">
-                                {{ $line['capacity'] ? __('Capacité :count lots/jour', ['count' => $line['capacity']]) : __('File sans affectation') }}
+                                @if ($line['type'] === 'tasks')
+                                    {{ __('Suivi des tâches avec référence production') }}
+                                @else
+                                    {{ $line['capacity'] ? __('Capacité :count lots/jour', ['count' => $line['capacity']]) : __('File sans affectation') }}
+                                @endif
                             </div>
                         </th>
 
                         @foreach ($board['days'] as $day)
                             @php($cell = $board['cells'][$line['key']][$day] ?? null)
-                            @php($cellBg = $cell['is_over_capacity'] ? ' bg-red-50' : ($cell['is_near_capacity'] ? ' bg-amber-50' : ' bg-white'))
-                            @php($cellBgActive = $cell['is_over_capacity'] ? ' bg-red-100' : ($cell['is_near_capacity'] ? ' bg-amber-100' : ' bg-zinc-50'))
+                            @php($cellBg = $line['type'] === 'production' ? ($cell['is_over_capacity'] ? ' bg-red-50' : ($cell['is_near_capacity'] ? ' bg-amber-50' : ' bg-white')) : ' bg-white')
+                            @php($cellBgActive = $line['type'] === 'production' ? ($cell['is_over_capacity'] ? ' bg-red-100' : ($cell['is_near_capacity'] ? ' bg-amber-100' : ' bg-zinc-50')) : ' bg-zinc-50')
 
                             <td
                                 class="border-b border-l border-zinc-200 px-3 py-3 align-top transition-colors duration-100{{ $cellBg }}"
                                 @dragover="dragOver($event)"
                                 @dragenter.prevent="$el.classList.add('{{ trim($cellBgActive) }}')"
                                 @dragleave="$el.classList.remove('{{ trim($cellBgActive) }}')"
-                                @drop="$el.classList.remove('{{ trim($cellBgActive) }}'); drop($event, {{ $line['id'] ?? 'null' }}, '{{ $day }}')"
+                                @drop="$el.classList.remove('{{ trim($cellBgActive) }}'); drop($event, '{{ $line['type'] }}', {{ $line['id'] ?? 'null' }}, '{{ $day }}')"
                             >
                                 <div class="space-y-3">
                                     <div class="flex items-center justify-between gap-2">
-                                        <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $cell['is_over_capacity'] ? 'bg-red-100 text-red-700' : ($cell['is_near_capacity'] ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-700') }}">
-                                            {{ $line['capacity'] ? __(':used/:capacity', ['used' => $cell['used'], 'capacity' => $cell['capacity']]) : __('—') }}
-                                        </span>
+                                        @if ($line['type'] === 'production')
+                                            <span class="inline-flex rounded-full px-2 py-1 text-xs font-medium {{ $cell['is_over_capacity'] ? 'bg-red-100 text-red-700' : ($cell['is_near_capacity'] ? 'bg-amber-100 text-amber-700' : 'bg-zinc-100 text-zinc-700') }}">
+                                                {{ $line['capacity'] ? __(':used/:capacity', ['used' => $cell['used'], 'capacity' => $cell['capacity']]) : __('—') }}
+                                            </span>
+                                        @else
+                                            <span class="inline-flex rounded-full bg-zinc-100 px-2 py-1 text-xs font-medium text-zinc-700">
+                                                {{ __('Tâches') }}
+                                            </span>
+                                        @endif
 
                                         @if ($cell['has_issue'])
                                             <span class="text-xs font-medium text-amber-700">⚠</span>
                                         @endif
                                     </div>
 
-                                    @if ($showProductions)
+                                    @if ($line['type'] === 'production')
                                         <div class="space-y-2">
                                             @foreach ($cell['productions'] as $production)
                                                 @php($cardBg = match ($production['status']) {
@@ -144,14 +160,14 @@
                                                 @php($cardCursor = $production['is_draggable'] ? 'cursor-grab active:cursor-grabbing' : 'cursor-default opacity-80')
 
                                                 <div
-                                                    class="rounded-xl border p-3 select-none {{ $cardBg }}{{ $cardRing }} {{ $cardCursor }}"
+                                                    class="overflow-hidden rounded-xl border p-3 select-none {{ $cardBg }}{{ $cardRing }} {{ $cardCursor }}"
                                                     draggable="{{ $production['is_draggable'] ? 'true' : 'false' }}"
                                                     @dragstart="dragStart('production', {{ $production['id'] }}, {{ $production['is_draggable'] ? 'true' : 'false' }})"
                                                     @dragend="dragEnd()"
                                                 >
                                                     <div class="flex items-start justify-between gap-3">
-                                                        <div>
-                                                            <div class="font-medium text-zinc-900">{{ $production['product_name'] }}</div>
+                                                        <div class="min-w-0 flex-1">
+                                                            <div class="truncate font-medium text-zinc-900">{{ $production['product_name'] }}</div>
                                                             <div class="text-xs text-zinc-500">{{ $production['batch_ref'] }}</div>
                                                         </div>
                                                         <span class="shrink-0 rounded-full bg-white/70 px-2 py-1 text-[11px] uppercase tracking-wide text-zinc-600">
@@ -169,31 +185,98 @@
                                                             @endif
                                                         </div>
                                                     @endif
+
+                                                    @if ($showTasks && $production['tasks'] !== [])
+                                                        <div class="mt-3 border-t border-zinc-200/70 pt-3">
+                                                            <div class="flex flex-wrap gap-2">
+                                                                @foreach ($production['tasks'] as $task)
+                                                                    @php($taskBase = 'cursor-grab active:cursor-grabbing')
+                                                                    @php($taskCursor = $task['is_draggable'] ? '' : ' opacity-60 cursor-default')
+                                                                    @php($taskExtra = ($task['is_cancelled'] ? ' line-through opacity-60' : '') . ($task['is_finished'] ? ' opacity-50' : ''))
+                                                                    @php($taskStyle = $task['is_capacity_consuming']
+                                                                        ? "background-color: {$task['color']}; border-color: {$task['color']}; color: {$task['text_color']};"
+                                                                        : "background-color: {$task['muted_color']}; border-color: {$task['color']}; color: {$task['color']};")
+
+                                                                    <span
+                                                                        class="inline-flex select-none rounded-full border px-2 py-1 text-[11px] transition-opacity {{ $taskBase }}{{ $taskCursor }}{{ $taskExtra }}"
+                                                                        style="{{ $taskStyle }}"
+                                                                        draggable="{{ $task['is_draggable'] ? 'true' : 'false' }}"
+                                                                        @dragstart="dragStart('task', {{ $task['id'] }}, {{ $task['is_draggable'] ? 'true' : 'false' }})"
+                                                                        @dragend="dragEnd()"
+                                                                        title="{{ $task['is_capacity_consuming'] ? __('Tâche consommatrice') : __('Tâche passive') }}"
+                                                                    >
+                                                                        {{ $task['name'] }}
+                                                                    </span>
+                                                                @endforeach
+                                                            </div>
+                                                        </div>
+                                                    @endif
                                                 </div>
                                             @endforeach
                                         </div>
                                     @endif
 
-                                    @if ($showTasks)
-                                        <div class="flex flex-wrap gap-2">
-                                            @foreach ($cell['tasks'] as $task)
-                                                @php($taskBase = $task['is_capacity_consuming']
-                                                    ? 'border-transparent bg-zinc-900 text-white cursor-grab active:cursor-grabbing'
-                                                    : 'border-zinc-300 bg-white text-zinc-700 cursor-grab active:cursor-grabbing')
-                                                @php($taskExtra = ($task['is_cancelled'] ? ' line-through opacity-60' : '') . ($task['is_finished'] ? ' opacity-50' : ''))
+                                    @if ($line['type'] === 'tasks')
+                                        <div class="space-y-2">
+                                            @foreach ($cell['task_groups'] as $taskGroup)
+                                                <div class="rounded-xl border border-dashed border-zinc-300 bg-white p-3">
+                                                    <div class="flex items-start justify-between gap-3">
+                                                        <div class="min-w-0 flex-1">
+                                                            <div class="truncate font-medium text-zinc-900">{{ $taskGroup['product_name'] }}</div>
+                                                            <div class="text-xs text-zinc-500">
+                                                                {{ $taskGroup['batch_ref'] }}
+                                                                @if ($taskGroup['production_line'] ?? null)
+                                                                    · {{ $taskGroup['production_line'] }}
+                                                                @endif
+                                                                @if ($taskGroup['production_date'])
+                                                                    · {{ __('Production :date', ['date' => \Illuminate\Support\Carbon::parse($taskGroup['production_date'])->format('d/m')]) }}
+                                                                @endif
+                                                            </div>
+                                                        </div>
+                                                        <span class="shrink-0 rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-medium uppercase tracking-wide text-zinc-600">
+                                                            {{ __('Tâches') }}
+                                                        </span>
+                                                    </div>
 
-                                                <span
-                                                    class="inline-flex select-none rounded-full border px-2 py-1 text-[11px] transition-opacity {{ $taskBase }}{{ $taskExtra }}"
-                                                    draggable="true"
-                                                    @dragstart="dragStart('task', {{ $task['id'] }}, true)"
-                                                    @dragend="dragEnd()"
-                                                    title="{{ $task['is_capacity_consuming'] ? __('Tâche consommatrice') : __('Tâche passive') }}"
-                                                >
-                                                    {{ $task['name'] }}
-                                                </span>
+                                                    @if ($taskGroup['is_unassigned'] || ! $taskGroup['is_line_allowed'])
+                                                        <div class="mt-2 flex flex-wrap gap-2 text-[11px]">
+                                                            @if ($taskGroup['is_unassigned'])
+                                                                <span class="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-700">{{ __('Sans ligne') }}</span>
+                                                            @endif
+                                                            @if (! $taskGroup['is_line_allowed'])
+                                                                <span class="rounded-full bg-amber-100 px-2 py-1 font-medium text-amber-700">{{ __('Ligne non autorisée') }}</span>
+                                                            @endif
+                                                        </div>
+                                                    @endif
+
+                                                    <div class="mt-3 border-t border-zinc-200/70 pt-3">
+                                                        <div class="flex flex-wrap gap-2">
+                                                            @foreach ($taskGroup['tasks'] as $task)
+                                                                @php($taskBase = 'cursor-grab active:cursor-grabbing')
+                                                                @php($taskCursor = $task['is_draggable'] ? '' : ' opacity-60 cursor-default')
+                                                                @php($taskExtra = ($task['is_cancelled'] ? ' line-through opacity-60' : '') . ($task['is_finished'] ? ' opacity-50' : ''))
+                                                                @php($taskStyle = $task['is_capacity_consuming']
+                                                                    ? "background-color: {$task['color']}; border-color: {$task['color']}; color: {$task['text_color']};"
+                                                                    : "background-color: {$task['muted_color']}; border-color: {$task['color']}; color: {$task['color']};")
+
+                                                                <span
+                                                                    class="inline-flex select-none rounded-full border px-2 py-1 text-[11px] transition-opacity {{ $taskBase }}{{ $taskCursor }}{{ $taskExtra }}"
+                                                                    style="{{ $taskStyle }}"
+                                                                    draggable="{{ $task['is_draggable'] ? 'true' : 'false' }}"
+                                                                    @dragstart="dragStart('task', {{ $task['id'] }}, {{ $task['is_draggable'] ? 'true' : 'false' }})"
+                                                                    @dragend="dragEnd()"
+                                                                    title="{{ $task['is_capacity_consuming'] ? __('Tâche active') : __('Tâche passive') }}"
+                                                                >
+                                                                    {{ $task['name'] }}
+                                                                </span>
+                                                            @endforeach
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             @endforeach
                                         </div>
                                     @endif
+
                                 </div>
                             </td>
                         @endforeach

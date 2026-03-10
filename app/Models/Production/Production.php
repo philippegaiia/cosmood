@@ -639,6 +639,7 @@ class Production extends Model implements Eventable
             ->start($this->production_date)
             ->end($this->production_date)
             ->allDay()
+            ->resourceId($this->production_line_id ? 'line-'.$this->production_line_id : 'line-unassigned')
             ->backgroundColor($this->getCalendarColor())
             ->textColor('#ffffff')
             ->extendedProps([

@@ -1,7 +1,27 @@
 @import '../../../../vendor/filament/filament/resources/css/theme.css';
-@import '../../../../vendor/saade/filament-fullcalendar/resources/css/filament-fullcalendar.css';
 @import '../../../../vendor/livewire/flux/dist/flux.css';
+@import '../../../../vendor/guava/calendar/resources/css/theme.css';
 
 @source '../../../../app/Filament/**/*.php';
 @source '../../../../resources/views/**/*.blade.php';
-@source '../../../../vendor/saade/filament-fullcalendar/resources/views/**/*.blade.php';
+@source '../../../../vendor/guava/calendar/resources/**/*';
+
+.ec.ec-resource.ec-timeline .ec-container {
+    width: 100%;
+    min-width: 0;
+}
+
+.ec.ec-resource.ec-timeline .ec-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ec.ec-resource.ec-timeline .ec-sidebar {
+    flex: 0 0 14rem;
+    max-width: 14rem;
+}
+
+.ec.ec-resource.ec-timeline .ec-sidebar .ec-resource,
+.ec.ec-resource.ec-timeline .ec-body .ec-days {
+    min-height: 3.5rem;
+}

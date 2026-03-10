@@ -185,6 +185,26 @@ describe('Production - Relationships', function () {
         ])->assertDontSee('Marquer fait');
     });
 
+    it('shows generated task names in the production tasks relation manager', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->create();
+
+        ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'task_template_item_id' => null,
+            'production_task_type_id' => null,
+            'name' => 'Conditionnement différé',
+            'source' => 'template',
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+        ])->assertSee('Conditionnement différé')
+            ->assertDontSee('Tâche manuelle');
+    });
+
     it('shows total product cost summary in production items relation manager', function () {
         $production = Production::factory()->create([
             'planned_quantity' => 100,

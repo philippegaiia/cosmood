@@ -264,6 +264,39 @@ class SimulateurFlashPage extends Component
     }
 
     /**
+     * Format a duration in minutes into a human-readable hours/minutes string.
+     */
+    public function formatDurationMinutes(float|int $minutes): string
+    {
+        $roundedMinutes = max(0, (int) round((float) $minutes));
+        $hours = intdiv($roundedMinutes, 60);
+        $remainingMinutes = $roundedMinutes % 60;
+
+        if ($hours > 0 && $remainingMinutes > 0) {
+            return __(':hours h :minutes min', [
+                'hours' => $hours,
+                'minutes' => $remainingMinutes,
+            ]);
+        }
+
+        if ($hours > 0) {
+            return __(':hours h', ['hours' => $hours]);
+        }
+
+        return __(':minutes min', ['minutes' => $remainingMinutes]);
+    }
+
+    /**
+     * Format a duration summary as rounded hours for dashboard cards.
+     */
+    public function formatRoundedHours(float|int $minutes): string
+    {
+        return __(':hours h', [
+            'hours' => (int) round(((float) $minutes) / 60),
+        ]);
+    }
+
+    /**
      * @return array{line_key: string, product_id: int|null, desired_units: float|int|null, batch_size_preset_id: int|null}
      */
     private function makeLine(): array

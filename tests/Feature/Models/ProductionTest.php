@@ -296,9 +296,22 @@ describe('Production Model', function () {
         $event = $production->toCalendarEvent();
 
         expect($event->getBackgroundColor())->toBe('#ef4444')
+            ->and($event->getStart()->toDateString())->toBe($production->production_date->toDateString())
+            ->and($event->getEnd()->toDateString())->toBe($production->production_date->toDateString())
+            ->and($event->getAllDay())->toBeTrue()
             ->and($event->getExtendedProps()['lotLabel'])->toBe('000321 (B-PLAN-001)')
             ->and($event->getExtendedProps()['status'])->toBe(ProductionStatus::Cancelled->value)
-            ->and($event->getExtendedProps()['url'])->toContain('/productions/'.$production->id);
+            ->and($event->getExtendedProps()['url'])->toContain('/productions/'.$production->id)
+            ->and($event->getResourceIds())->toContain('line-unassigned');
+    });
+
+    it('maps production line to calendar resource id', function () {
+        $line = ProductionLine::factory()->create();
+        $production = Production::factory()->onProductionLine($line)->create();
+
+        $event = $production->toCalendarEvent();
+
+        expect($event->getResourceIds())->toContain('line-'.$line->id);
     });
 
     it('computes supply coverage traffic light states', function () {

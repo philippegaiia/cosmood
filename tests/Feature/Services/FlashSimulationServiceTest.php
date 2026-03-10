@@ -5,9 +5,11 @@ use App\Enums\IngredientBaseUnit;
 use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
+use App\Models\Production\ProductionTaskType;
 use App\Models\Production\ProductType;
 use App\Models\Production\TaskTemplate;
 use App\Models\Production\TaskTemplateItem;
+use App\Models\Production\TaskTemplateTaskType;
 use App\Models\Supply\Ingredient;
 use App\Services\Production\FlashSimulationService;
 use Illuminate\Support\Str;
@@ -315,6 +317,74 @@ it('consolidates task durations globally per task name', function () {
         ->and((float) $moulage['total_duration_minutes'])->toBe(100.0)
         ->and((float) $melange['batches'])->toBe(5.0)
         ->and((float) $moulage['batches'])->toBe(5.0);
+});
+
+it('uses task template task types before legacy template items in simulator task breakdown', function () {
+    $type = ProductType::factory()->create([
+        'default_batch_size' => 10,
+        'expected_units_output' => 100,
+    ]);
+
+    $taskTemplate = TaskTemplate::query()->create([
+        'name' => 'Template Savon Curcuma',
+        'product_category_id' => $type->product_category_id,
+    ]);
+
+    $type->taskTemplates()->attach($taskTemplate->id, ['is_default' => true]);
+
+    $melange = ProductionTaskType::factory()->create([
+        'name' => 'Mélange',
+        'duration' => 45,
+    ]);
+    $moulage = ProductionTaskType::factory()->create([
+        'name' => 'Moulage',
+        'duration' => 25,
+    ]);
+
+    TaskTemplateTaskType::query()->create([
+        'task_template_id' => $taskTemplate->id,
+        'production_task_type_id' => $melange->id,
+        'sort_order' => 1,
+        'offset_days' => 0,
+        'skip_weekends' => true,
+        'duration_override' => null,
+    ]);
+    TaskTemplateTaskType::query()->create([
+        'task_template_id' => $taskTemplate->id,
+        'production_task_type_id' => $moulage->id,
+        'sort_order' => 2,
+        'offset_days' => 1,
+        'skip_weekends' => true,
+        'duration_override' => 30,
+    ]);
+
+    TaskTemplateItem::query()->create([
+        'task_template_id' => $taskTemplate->id,
+        'name' => 'Old translated task',
+        'duration_hours' => 0,
+        'duration_minutes' => 999,
+        'offset_days' => 0,
+        'skip_weekends' => true,
+        'sort_order' => 1,
+    ]);
+
+    $ingredient = Ingredient::factory()->create(['price' => 2]);
+    $product = Product::factory()->withProductType($type)->create();
+    $formula = createActiveFormulaForProduct($product);
+    FormulaItem::factory()->forFormula($formula)->withIngredient($ingredient)->percentage(100)->create();
+
+    $result = flashSimulationService()->simulate([
+        ['product_id' => $product->id, 'desired_units' => 100],
+    ]);
+
+    $line = $result['product_lines']->first();
+    $taskNames = collect($line['tasks'])->pluck('name')->all();
+
+    expect($taskNames)->toBe(['Mélange', 'Moulage'])
+        ->and($line['duration_per_batch_minutes'])->toBe(75)
+        ->and($result['task_totals']->firstWhere('name', 'Mélange')['total_duration_minutes'])->toBe(45)
+        ->and($result['task_totals']->firstWhere('name', 'Moulage')['total_duration_minutes'])->toBe(30)
+        ->and($result['task_totals']->firstWhere('name', 'Old translated task'))->toBeNull();
 });
 
 it('computes weighted average duration per batch in consolidated tasks', function () {

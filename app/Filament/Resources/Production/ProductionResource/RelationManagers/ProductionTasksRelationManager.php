@@ -27,9 +27,9 @@ class ProductionTasksRelationManager extends RelationManager
     {
         return $table
             ->columns([
-                TextColumn::make('templateItem.name')
-                    ->label('Tâche')
-                    ->placeholder('Tâche manuelle')
+                TextColumn::make('name')
+                    ->label(__('Tâche'))
+                    ->placeholder(__('Tâche manuelle'))
                     ->searchable(),
                 TextColumn::make('workflow_status')
                     ->label('Statut')

@@ -96,6 +96,66 @@ class TaskTemplate extends Model
         return $this->productTypes()->wherePivot('is_default', true)->exists();
     }
 
+    /**
+     * Return product-type link state in a shape compatible with the Filament form.
+     *
+     * @return array<int, array{product_type_id: int, is_default: bool}>
+     */
+    public function getProductTypeLinksForForm(): array
+    {
+        $this->loadMissing('productTypes');
+
+        return $this->productTypes
+            ->map(fn (ProductType $productType): array => [
+                'product_type_id' => (int) $productType->id,
+                'is_default' => (bool) ($productType->pivot?->is_default ?? false),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Sync product-type assignments and keep one default template per product type.
+     *
+     * @param  array<int, array{product_type_id?: mixed, is_default?: mixed}>  $links
+     */
+    public function syncProductTypeLinks(array $links): void
+    {
+        $normalizedLinks = collect($links)
+            ->map(fn (array $link): ?array => $this->normalizeProductTypeLink($link))
+            ->filter()
+            ->reverse()
+            ->unique('product_type_id')
+            ->reverse()
+            ->values();
+
+        $syncPayload = $normalizedLinks
+            ->mapWithKeys(fn (array $link): array => [
+                $link['product_type_id'] => ['is_default' => $link['is_default']],
+            ])
+            ->all();
+
+        $this->productTypes()->sync($syncPayload);
+
+        $defaultProductTypeIds = $normalizedLinks
+            ->filter(fn (array $link): bool => $link['is_default'])
+            ->pluck('product_type_id')
+            ->all();
+
+        if ($defaultProductTypeIds !== []) {
+            $this->productTypes()
+                ->newPivotStatement()
+                ->whereIn('product_type_id', $defaultProductTypeIds)
+                ->where('task_template_id', '!=', $this->getKey())
+                ->update([
+                    'is_default' => false,
+                    'updated_at' => now(),
+                ]);
+        }
+
+        $this->unsetRelation('productTypes');
+    }
+
     private function syncLegacyProductTypeLink(): void
     {
         if ($this->legacyProductTypeId === null) {
@@ -119,5 +179,27 @@ class TaskTemplate extends Model
         foreach ($otherProductTypeIds as $productTypeId) {
             $this->productTypes()->updateExistingPivot((int) $productTypeId, ['is_default' => false]);
         }
+    }
+
+    /**
+     * @param  array{product_type_id?: mixed, is_default?: mixed}  $link
+     * @return array{product_type_id: int, is_default: bool}|null
+     */
+    private function normalizeProductTypeLink(array $link): ?array
+    {
+        if (! filled($link['product_type_id'] ?? null)) {
+            return null;
+        }
+
+        $productTypeId = (int) $link['product_type_id'];
+
+        if ($productTypeId <= 0) {
+            return null;
+        }
+
+        return [
+            'product_type_id' => $productTypeId,
+            'is_default' => (bool) ($link['is_default'] ?? false),
+        ];
     }
 }

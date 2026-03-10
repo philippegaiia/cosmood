@@ -67,12 +67,16 @@ This document describes the current production-side business rules implemented i
   - capacities are independent by line,
   - line-less productions use fallback daily capacity.
 - Task planning semantics:
-  - `ProductionTaskType.is_capacity_consuming` defines whether a task consumes line capacity,
+  - line capacity remains anchored to `Production.production_date`,
+  - board occupancy is production-driven:
+    - one production counts for one slot on its line/manufacturing day,
+    - task dates never increase or decrease line capacity,
+    - `planned`, `confirmed`, and `ongoing` productions are included in board occupancy,
+    - `finished` and `cancelled` remain visible historically but do not drive planning capacity,
   - tasks inherit `Production.production_line_id` in v1 (no task-level line override),
-  - board occupancy is task-driven but preserves batch-capacity semantics:
-    - one production counts for one slot on a line/day when it has at least one capacity-consuming task scheduled that day,
-    - multiple consuming tasks from the same production on the same day still count as one slot,
-    - passive tasks such as curing remain visible in planning but do not consume capacity.
+  - tasks are displayed on `ProductionTask.scheduled_date` as operational follow-up only,
+  - planning board UI keeps dedicated line rows for productions and a separate `Tâches` row for operational follow-up cards,
+  - `ProductionTaskType.is_capacity_consuming` remains useful for distinguishing active vs passive task chips in planning UI, but it does not drive line capacity.
 
 ## Automatic Replanning
 
@@ -80,10 +84,12 @@ This document describes the current production-side business rules implemented i
   - skip weekends,
   - skip holidays,
   - fallback daily capacity for unassigned line batches.
+- Shared wave/planner scheduling always seeds from existing `planned` and `confirmed` productions already stored in the database, so new or replanned batches move to the next available slot instead of failing later on save.
 - Editing `planned_start_date` on the wave edit page automatically triggers the same replanning logic.
 - Replanning is allowed only while wave is `draft` or `approved`.
 - Replanning is blocked for `in_progress`, `completed`, and `cancelled` waves.
 - Replanning updates only `planned` and `confirmed` productions.
+- When a selected set of productions is replanned, those same productions are excluded from seeded occupancy so they do not block themselves.
 - Updating `production_date` keeps existing task auto-reschedule behavior via observer.
 - Manual task scheduling invariants:
   - sequence #1 template task is always anchored to `production_date`,

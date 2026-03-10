@@ -218,7 +218,7 @@
             <div class="rounded-lg border border-zinc-200 p-3">
                 <flux:text size="sm">Duree totale</flux:text>
                 <div class="text-lg font-semibold">
-                    {{ number_format((float) ($this->totals['total_duration_minutes'] ?? 0), 0, ',', ' ') }} min
+                    {{ $this->formatRoundedHours((float) ($this->totals['total_duration_minutes'] ?? 0)) }}
                 </div>
             </div>
         </div>
@@ -398,17 +398,12 @@
                     </thead>
                     <tbody>
                         @forelse ($this->taskTotals as $task)
-                            @php
-                                $averageDuration = (float) ($task['average_duration_per_batch_minutes'] ?? 0);
-                                $averageDurationDecimals = fmod($averageDuration, 1.0) === 0.0 ? 0 : 2;
-                            @endphp
                             <tr class="border-b border-zinc-100">
                                 <td class="py-2 pr-4">{{ $task['name'] }}</td>
-                                <td class="py-2 pr-4">{{ number_format($averageDuration, $averageDurationDecimals, ',', ' ') }} min</td>
+                                <td class="py-2 pr-4">{{ $this->formatDurationMinutes((float) ($task['average_duration_per_batch_minutes'] ?? 0)) }}</td>
                                 <td class="py-2 pr-4">{{ number_format((float) ($task['batches'] ?? 0), 0, ',', ' ') }}</td>
                                 <td class="py-2 font-semibold">
-                                    {{ number_format((float) ($task['total_duration_minutes'] ?? 0), 0, ',', ' ') }} min
-                                    ({{ number_format(((float) ($task['total_duration_minutes'] ?? 0)) / 60, 2, ',', ' ') }} h)
+                                    {{ $this->formatDurationMinutes((float) ($task['total_duration_minutes'] ?? 0)) }}
                                 </td>
                             </tr>
                         @empty

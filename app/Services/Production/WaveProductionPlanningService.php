@@ -23,7 +23,12 @@ class WaveProductionPlanningService
     /**
      * Builds draft production dates using per-line daily capacities.
      *
-     * @param  array<int, array{production_line_id: int|null}>  $batchPlans
+     * Existing planned/confirmed productions are counted first so new batches
+     * are placed on the next truly available slot instead of failing later at
+     * model-save capacity validation time.
+     *
+     * @param  array<int, array{production_line_id: int|null, production_id?: int|null}>  $batchPlans
+     * @param  array<int, int|string>  $excludedProductionIds
      * @return array<int, Carbon>
      */
     public function planBatchDates(
@@ -32,6 +37,7 @@ class WaveProductionPlanningService
         bool $skipWeekends = true,
         bool $skipHolidays = true,
         int $fallbackDailyCapacity = 4,
+        array $excludedProductionIds = [],
     ): array {
         if ($batchPlans === []) {
             return [];
@@ -44,6 +50,11 @@ class WaveProductionPlanningService
         );
 
         $lineCapacities = $this->resolveLineCapacities($batchPlans, $fallbackDailyCapacity);
+        $existingUsage = $this->resolveExistingUsage(
+            batchPlans: $batchPlans,
+            startDate: $normalizedStartDate,
+            excludedProductionIds: $excludedProductionIds,
+        );
 
         $lineState = [];
         $plannedDates = [];
@@ -55,21 +66,31 @@ class WaveProductionPlanningService
             if (! isset($lineState[$lineKey])) {
                 $lineState[$lineKey] = [
                     'date' => $normalizedStartDate->copy(),
-                    'used' => 0,
                 ];
             }
 
-            if ($lineState[$lineKey]['used'] >= $lineCapacity) {
+            $planningDate = $lineState[$lineKey]['date']->copy();
+
+            while ($this->resolveUsageCount($existingUsage, $lineKey, $planningDate) >= $lineCapacity) {
+                $planningDate = $this->alignToPlanningDay(
+                    date: $planningDate->copy()->addDay(),
+                    skipWeekends: $skipWeekends,
+                    skipHolidays: $skipHolidays,
+                );
+            }
+
+            $plannedDates[$index] = $planningDate->copy();
+            $this->incrementUsageCount($existingUsage, $lineKey, $planningDate);
+
+            $lineState[$lineKey]['date'] = $planningDate->copy();
+
+            if ($this->resolveUsageCount($existingUsage, $lineKey, $lineState[$lineKey]['date']) >= $lineCapacity) {
                 $lineState[$lineKey]['date'] = $this->alignToPlanningDay(
                     date: $lineState[$lineKey]['date']->copy()->addDay(),
                     skipWeekends: $skipWeekends,
                     skipHolidays: $skipHolidays,
                 );
-                $lineState[$lineKey]['used'] = 0;
             }
-
-            $plannedDates[$index] = $lineState[$lineKey]['date']->copy();
-            $lineState[$lineKey]['used']++;
         }
 
         return $plannedDates;
@@ -152,6 +173,7 @@ class WaveProductionPlanningService
         $plannedDates = $this->planBatchDates(
             batchPlans: $reschedulableProductions
                 ->map(fn (Production $production): array => [
+                    'production_id' => $production->id,
                     'production_line_id' => $production->production_line_id,
                 ])
                 ->all(),
@@ -159,6 +181,7 @@ class WaveProductionPlanningService
             skipWeekends: $skipWeekends,
             skipHolidays: $skipHolidays,
             fallbackDailyCapacity: $fallbackDailyCapacity,
+            excludedProductionIds: $reschedulableProductions->pluck('id')->all(),
         );
 
         $plannedStartDate = null;
@@ -192,7 +215,7 @@ class WaveProductionPlanningService
     }
 
     /**
-     * @param  array<int, array{production_line_id: int|null}>  $batchPlans
+     * @param  array<int, array{production_line_id: int|null, production_id?: int|null}>  $batchPlans
      * @return array<string, int>
      */
     private function resolveLineCapacities(array $batchPlans, int $fallbackDailyCapacity): array
@@ -223,6 +246,69 @@ class WaveProductionPlanningService
         return $capacities;
     }
 
+    /**
+     * @param  array<int, array{production_line_id: int|null, production_id?: int|null}>  $batchPlans
+     * @param  array<int, int|string>  $excludedProductionIds
+     * @return array<string, array<string, int>>
+     */
+    private function resolveExistingUsage(array $batchPlans, Carbon $startDate, array $excludedProductionIds = []): array
+    {
+        $lineIds = collect($batchPlans)
+            ->pluck('production_line_id')
+            ->filter(fn (mixed $lineId): bool => $lineId !== null)
+            ->map(fn (mixed $lineId): int => (int) $lineId)
+            ->filter(fn (int $lineId): bool => $lineId > 0)
+            ->unique()
+            ->values();
+
+        $includeUnassigned = collect($batchPlans)
+            ->contains(fn (array $batchPlan): bool => ! filled($batchPlan['production_line_id'] ?? null));
+
+        $excludedIds = collect($excludedProductionIds)
+            ->map(fn (mixed $productionId): int => (int) $productionId)
+            ->filter(fn (int $productionId): bool => $productionId > 0)
+            ->values();
+
+        $query = Production::query()
+            ->select(['id', 'production_line_id', 'production_date'])
+            ->whereDate('production_date', '>=', $startDate->toDateString())
+            ->whereIn('status', [
+                ProductionStatus::Planned->value,
+                ProductionStatus::Confirmed->value,
+            ])
+            ->when($lineIds->isNotEmpty() || $includeUnassigned, function ($query) use ($lineIds, $includeUnassigned): void {
+                $query->where(function ($subQuery) use ($lineIds, $includeUnassigned): void {
+                    if ($lineIds->isNotEmpty()) {
+                        $subQuery->whereIn('production_line_id', $lineIds->all());
+                    }
+
+                    if ($includeUnassigned) {
+                        $method = $lineIds->isNotEmpty() ? 'orWhereNull' : 'whereNull';
+                        $subQuery->{$method}('production_line_id');
+                    }
+                });
+            })
+            ->when($excludedIds->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $excludedIds->all()))
+            ->orderBy('production_date')
+            ->orderBy('id');
+
+        $usage = [];
+
+        /** @var Production $production */
+        foreach ($query->cursor() as $production) {
+            if (! $production->production_date) {
+                continue;
+            }
+
+            $lineKey = $this->resolveLineKey($production->production_line_id);
+            $dateKey = $production->production_date->toDateString();
+
+            $usage[$lineKey][$dateKey] = ($usage[$lineKey][$dateKey] ?? 0) + 1;
+        }
+
+        return $usage;
+    }
+
     private function resolveLineKey(?int $lineId): string
     {
         if ($lineId !== null && $lineId > 0) {
@@ -230,6 +316,24 @@ class WaveProductionPlanningService
         }
 
         return self::FALLBACK_LINE_KEY;
+    }
+
+    /**
+     * @param  array<string, array<string, int>>  $usage
+     */
+    private function resolveUsageCount(array $usage, string $lineKey, Carbon $date): int
+    {
+        return (int) ($usage[$lineKey][$date->toDateString()] ?? 0);
+    }
+
+    /**
+     * @param  array<string, array<string, int>>  $usage
+     */
+    private function incrementUsageCount(array &$usage, string $lineKey, Carbon $date): void
+    {
+        $dateKey = $date->toDateString();
+
+        $usage[$lineKey][$dateKey] = ($usage[$lineKey][$dateKey] ?? 0) + 1;
     }
 
     private function alignToPlanningDay(Carbon $date, bool $skipWeekends, bool $skipHolidays): Carbon

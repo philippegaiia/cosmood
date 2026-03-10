@@ -23,14 +23,15 @@ class TaskTemplateForm
                             ->label(__('Nom'))
                             ->required()
                             ->maxLength(255),
-                        Repeater::make('productTypes')
+                        Repeater::make('product_type_links')
                             ->label(__('Types de produit'))
-                            ->relationship('productTypes')
                             ->schema([
-                                Select::make('id')
+                                Select::make('product_type_id')
                                     ->label(__('Type de produit'))
-                                    ->options(ProductType::pluck('name', 'id'))
+                                    ->options(fn (): array => ProductType::query()->orderBy('name')->pluck('name', 'id')->all())
                                     ->searchable()
+                                    ->preload()
+                                    ->disableOptionsWhenSelectedInSiblingRepeaterItems()
                                     ->required(),
                                 Toggle::make('is_default')
                                     ->label(__('Par défaut'))
@@ -39,6 +40,14 @@ class TaskTemplateForm
                             ])
                             ->defaultItems(0)
                             ->reorderable(false)
+                            ->addActionLabel(__('Ajouter un type de produit'))
+                            ->itemLabel(function (array $state): ?string {
+                                if (! filled($state['product_type_id'] ?? null)) {
+                                    return __('Nouveau type de produit');
+                                }
+
+                                return ProductType::query()->find($state['product_type_id'])?->name;
+                            })
                             ->columnSpanFull(),
                     ])
                     ->columnSpan(3),

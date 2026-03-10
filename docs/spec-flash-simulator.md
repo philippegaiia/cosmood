@@ -53,11 +53,16 @@ Example:
   - total batches,
   - total oils kg,
   - estimated cost.
+  - total duration displayed as rounded hours in the UI.
 - Ingredient totals table.
 - Consolidated tasks table (global totals per task name, not per product line), with:
   - weighted average duration per batch,
   - cumulative batches,
   - total duration.
+  - durations displayed in human-readable `h/min` format in the UI.
+  - task names and durations are resolved from the same default task template source used by real production generation:
+    - `taskTemplateTaskTypes -> taskType` first,
+    - legacy `TaskTemplate.items` only as fallback for older templates.
 - Per-product extra summary table.
 - Per-line detail table.
 - Print action (`Print`) to export current simulator view through browser print.
@@ -85,6 +90,7 @@ Planner options exposed from simulator:
 Scheduling behavior:
 
 - Date allocation is computed per production line capacity when product types define a default line.
+- Existing `planned` and `confirmed` productions already present in the database are counted first, so simulator-created batches move to the next available slot instead of failing at persistence time.
 - Different lines are planned independently in parallel (e.g. soap line and deodorant lab same day).
 - Products without line assignment use fallback daily capacity.
 

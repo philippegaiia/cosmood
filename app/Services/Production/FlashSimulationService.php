@@ -7,6 +7,7 @@ use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\TaskTemplate;
+use App\Models\Production\TaskTemplateTaskType;
 use Illuminate\Support\Collection;
 
 /**
@@ -51,6 +52,7 @@ class FlashSimulationService
             ->with([
                 'productType:id,name,slug,default_batch_size,expected_units_output',
                 'productType.batchSizePresets',
+                'productType.taskTemplates.taskTemplateTaskTypes.taskType',
                 'productType.taskTemplates.items',
                 'packaging',
                 'formulas' => fn ($query) => $query
@@ -330,6 +332,24 @@ class FlashSimulationService
             return [
                 'total_minutes' => 0,
                 'tasks' => [],
+            ];
+        }
+
+        $taskTemplate->loadMissing(['taskTemplateTaskTypes.taskType', 'items']);
+
+        if ($taskTemplate->taskTemplateTaskTypes->isNotEmpty()) {
+            $tasks = $taskTemplate->taskTemplateTaskTypes
+                ->map(fn (TaskTemplateTaskType $templateTaskType): array => [
+                    'name' => (string) ($templateTaskType->taskType?->name ?? ''),
+                    'duration_minutes' => (int) ($templateTaskType->duration_override ?? $templateTaskType->taskType?->duration ?? 0),
+                ])
+                ->filter(fn (array $task): bool => $task['name'] !== '' && $task['duration_minutes'] > 0)
+                ->values()
+                ->all();
+
+            return [
+                'total_minutes' => (int) collect($tasks)->sum('duration_minutes'),
+                'tasks' => $tasks,
             ];
         }
 

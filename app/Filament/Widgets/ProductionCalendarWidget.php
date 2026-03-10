@@ -4,11 +4,13 @@ namespace App\Filament\Widgets;
 
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductionTask;
 use App\Services\Production\TaskGenerationService;
 use Carbon\Carbon;
 use Guava\Calendar\Enums\CalendarViewType;
 use Guava\Calendar\Filament\CalendarWidget;
+use Guava\Calendar\ValueObjects\CalendarResource;
 use Guava\Calendar\ValueObjects\EventDropInfo;
 use Guava\Calendar\ValueObjects\FetchInfo;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,10 +24,10 @@ use InvalidArgumentException;
  *
  * Shows:
  * - Productions: All statuses with status-based colors
- * - Tasks: All tasks with color from task type
+ * - Resources: Production lines as rows (plus unassigned row)
  *
- * Default view: Month (all-day, no hourly slots)
- * Drag & Drop: Enabled for both productions and tasks
+ * Default view: Resource timeline week
+ * Drag & Drop: Enabled for productions (tasks are hidden in this view)
  */
 class ProductionCalendarWidget extends CalendarWidget
 {
@@ -33,7 +35,20 @@ class ProductionCalendarWidget extends CalendarWidget
 
     protected int|string|array $columnSpan = 'full';
 
-    protected CalendarViewType $calendarView = CalendarViewType::DayGridMonth;
+    protected CalendarViewType $calendarView = CalendarViewType::ResourceTimelineWeek;
+
+    /**
+     * Timeline is day-based only for production planning (no hourly slots).
+     *
+     * @var array<string, mixed>
+     */
+    protected array $options = [
+        'slotDuration' => ['days' => 1],
+        'slotLabelInterval' => ['days' => 1],
+        'customScrollbars' => true,
+        'dayMaxEvents' => false,
+        'displayEventEnd' => false,
+    ];
 
     protected ?string $locale = 'fr';
 
@@ -49,17 +64,35 @@ class ProductionCalendarWidget extends CalendarWidget
      */
     protected function getEvents(FetchInfo $info): Collection|array|Builder
     {
-        $productions = Production::query()
-            ->with('product')
+        return Production::query()
+            ->with(['product', 'productionLine'])
             ->whereBetween('production_date', [$info->start, $info->end])
             ->get();
+    }
 
-        $tasks = ProductionTask::query()
-            ->with(['production.product', 'productionTaskType'])
-            ->whereBetween('scheduled_date', [$info->start, $info->end])
+    protected function getResources(): Collection|array|Builder
+    {
+        $resources = [
+            CalendarResource::make(self::UNASSIGNED_RESOURCE_ID)
+                ->title(__('Sans ligne')),
+        ];
+
+        $lines = ProductionLine::query()
+            ->orderBy('sort_order')
+            ->orderBy('name')
             ->get();
 
-        return $productions->merge($tasks);
+        foreach ($lines as $line) {
+            $resources[] = CalendarResource::make($this->lineToResourceId($line->id))
+                ->title($line->is_active ? $line->name : $line->name.' (inactive)')
+                ->extendedProps([
+                    'lineId' => $line->id,
+                    'capacity' => $line->resolveDailyCapacity(),
+                    'isActive' => $line->is_active,
+                ]);
+        }
+
+        return $resources;
     }
 
     protected function eventContent(): string
@@ -73,15 +106,24 @@ class ProductionCalendarWidget extends CalendarWidget
      */
     protected function onEventDrop(EventDropInfo $info, Model $record): bool
     {
-        $newDate = Carbon::parse($info->event->getStart())->toDateString();
+        $deltaDays = $this->resolveDropDeltaDays($info);
 
         if ($record instanceof Production) {
             if (! in_array($record->status, [ProductionStatus::Planned, ProductionStatus::Confirmed, ProductionStatus::Ongoing], true)) {
                 return false;
             }
 
+            $targetLineId = $this->resourceIdToLineId($info->event->getResourceIds());
+            $newDate = Carbon::parse($record->production_date)
+                ->startOfDay()
+                ->addDays($deltaDays)
+                ->toDateString();
+
             try {
-                $record->update(['production_date' => $newDate]);
+                $record->update([
+                    'production_date' => $newDate,
+                    'production_line_id' => $targetLineId,
+                ]);
             } catch (InvalidArgumentException) {
                 return false;
             }
@@ -92,6 +134,11 @@ class ProductionCalendarWidget extends CalendarWidget
         }
 
         if ($record instanceof ProductionTask) {
+            $newDate = Carbon::parse($record->scheduled_date)
+                ->startOfDay()
+                ->addDays($deltaDays)
+                ->toDateString();
+
             try {
                 app(TaskGenerationService::class)->setManualSchedule($record, $newDate);
             } catch (InvalidArgumentException) {
@@ -104,5 +151,44 @@ class ProductionCalendarWidget extends CalendarWidget
         }
 
         return false;
+    }
+
+    private const string UNASSIGNED_RESOURCE_ID = 'line-unassigned';
+
+    private function lineToResourceId(?int $lineId): string
+    {
+        if (! $lineId) {
+            return self::UNASSIGNED_RESOURCE_ID;
+        }
+
+        return 'line-'.$lineId;
+    }
+
+    /**
+     * @param  array<int, int|string>  $resourceIds
+     */
+    private function resourceIdToLineId(array $resourceIds): ?int
+    {
+        $resourceId = (string) ($resourceIds[0] ?? self::UNASSIGNED_RESOURCE_ID);
+
+        if ($resourceId === self::UNASSIGNED_RESOURCE_ID) {
+            return null;
+        }
+
+        if (! str_starts_with($resourceId, 'line-')) {
+            return null;
+        }
+
+        $lineId = (int) str_replace('line-', '', $resourceId);
+
+        return $lineId > 0 ? $lineId : null;
+    }
+
+    private function resolveDropDeltaDays(EventDropInfo $info): int
+    {
+        $newStart = $info->event->getStart()->copy()->startOfDay();
+        $oldStart = $info->oldEvent->getStart()->copy()->startOfDay();
+
+        return $oldStart->diffInDays($newStart, false);
     }
 }

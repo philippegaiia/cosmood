@@ -3,6 +3,7 @@
 use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
+use App\Models\Production\Production;
 use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
@@ -141,4 +142,61 @@ it('uses fallback capacity when product type has no default production line', fu
 
     expect($wave->productions()->whereNull('production_line_id')->count())->toBe(3)
         ->and($dates)->toBe(['2026-03-09', '2026-03-09', '2026-03-10']);
+});
+
+it('creates a wave by pushing batches beyond existing occupied production dates', function (): void {
+    $soapLine = ProductionLine::factory()->soapLine()->create([
+        'daily_batch_capacity' => 2,
+    ]);
+
+    $soapType = ProductType::factory()->withDefaultProductionLine($soapLine)->create([
+        'default_batch_size' => 10,
+        'expected_units_output' => 10,
+    ]);
+
+    $soapProduct = Product::factory()->withProductType($soapType)->create([
+        'name' => 'Savon Curcuma',
+    ]);
+
+    createFlashPlannerFormula($soapProduct, 'Curcuma');
+
+    Production::factory()->create([
+        'product_id' => $soapProduct->id,
+        'product_type_id' => $soapType->id,
+        'formula_id' => $soapProduct->formulas()->firstOrFail()->id,
+        'production_line_id' => $soapLine->id,
+        'status' => \App\Enums\ProductionStatus::Planned,
+        'production_date' => '2026-03-09',
+    ]);
+
+    Production::factory()->create([
+        'product_id' => $soapProduct->id,
+        'product_type_id' => $soapType->id,
+        'formula_id' => $soapProduct->formulas()->firstOrFail()->id,
+        'production_line_id' => $soapLine->id,
+        'status' => \App\Enums\ProductionStatus::Confirmed,
+        'production_date' => '2026-03-09',
+    ]);
+
+    $wave = flashSimulationWavePlanner()->createWaveFromSimulation(
+        lines: [
+            ['product_id' => $soapProduct->id, 'desired_units' => 25],
+        ],
+        options: [
+            'name' => 'Wave With Existing Occupancy',
+            'start_date' => '2026-03-09',
+            'skip_weekends' => true,
+            'skip_holidays' => true,
+            'fallback_daily_capacity' => 4,
+        ],
+    );
+
+    $dates = $wave->productions()
+        ->orderBy('id')
+        ->pluck('production_date')
+        ->map(fn ($date) => $date?->toDateString())
+        ->values()
+        ->all();
+
+    expect($dates)->toBe(['2026-03-10', '2026-03-10', '2026-03-11']);
 });
