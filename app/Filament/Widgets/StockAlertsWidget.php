@@ -4,8 +4,6 @@ namespace App\Filament\Widgets;
 
 use App\Filament\Resources\Supply\SupplyResource;
 use App\Models\Supply\Ingredient;
-use Filament\Actions\Action;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -40,52 +38,39 @@ class StockAlertsWidget extends BaseWidget
                         return $ingredient->getTotalAvailableStock() < $ingredient->stock_min;
                     })
                     ->pipe(function ($collection) {
-                        return Ingredient::query()->whereIn('id', $collection->pluck('id'));
+                        return Ingredient::query()
+                            ->whereIn('id', $collection->pluck('id'))
+                            ->limit(6);
                     })
             )
             ->columns([
                 TextColumn::make('name')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('available_stock')
-                    ->label('Disponible')
-                    ->state(fn (Ingredient $record): float => $record->getTotalAvailableStock())
-                    ->numeric(decimalPlaces: 2)
+                TextColumn::make('stock_level')
+                    ->label(__('Disponible / minimum'))
+                    ->state(fn (Ingredient $record): string => number_format($record->getTotalAvailableStock(), 2, ',', ' ').' / '.number_format((float) $record->stock_min, 2, ',', ' '))
                     ->color('danger')
-                    ->sortable(),
-
-                TextColumn::make('stock_min')
-                    ->label('Minimum')
-                    ->numeric(decimalPlaces: 2)
-                    ->sortable(),
+                    ->sortable(query: fn ($query, string $direction) => $query->orderBy('stock_min', $direction)),
 
                 TextColumn::make('shortage')
-                    ->label('Manque')
+                    ->label(__('Manque'))
                     ->state(fn (Ingredient $record): float => $record->stock_min - $record->getTotalAvailableStock())
                     ->numeric(decimalPlaces: 2)
                     ->color('rose')
                     ->sortable(),
-
-                TextColumn::make('base_unit')
-                    ->label('Unité'),
             ])
-            ->actions([
-                Action::make('view_supplies')
-                    ->label('Voir lots')
-                    ->icon(Heroicon::Eye)
-                    ->color('gray')
-                    ->url(fn (Ingredient $record): string => SupplyResource::getUrl('index', [
-                        'filters' => [
-                            'ingredient' => [
-                                'value' => $record->id,
-                            ],
-                        ],
-                    ])),
-            ])
-            ->emptyStateHeading('Aucune alerte stock')
-            ->emptyStateDescription('Tous les ingrédients ont un stock suffisant.')
+            ->recordUrl(fn (Ingredient $record): string => SupplyResource::getUrl('index', [
+                'filters' => [
+                    'ingredient' => [
+                        'value' => $record->id,
+                    ],
+                ],
+            ]))
+            ->emptyStateHeading(__('Aucune alerte stock'))
+            ->emptyStateDescription(__('Tous les ingrédients ont un stock suffisant.'))
             ->paginated(false);
     }
 

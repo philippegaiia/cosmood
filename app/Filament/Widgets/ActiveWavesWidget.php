@@ -5,8 +5,6 @@ namespace App\Filament\Widgets;
 use App\Enums\WaveStatus;
 use App\Filament\Resources\Production\ProductionWaves\ProductionWaveResource;
 use App\Models\Production\ProductionWave;
-use Filament\Actions\Action;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -42,30 +40,27 @@ class ActiveWavesWidget extends BaseWidget
                     }])
                     ->whereIn('status', [WaveStatus::Approved, WaveStatus::InProgress])
                     ->orderBy('planned_start_date')
+                    ->limit(5)
             )
             ->columns([
                 TextColumn::make('name')
-                    ->label('Vague')
+                    ->label(__('Vague'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->badge()
                     ->sortable(),
 
-                TextColumn::make('planned_start_date')
-                    ->label('Début')
-                    ->date('d/m/Y')
-                    ->sortable(),
-
-                TextColumn::make('planned_end_date')
-                    ->label('Fin')
-                    ->date('d/m/Y')
-                    ->sortable(),
+                TextColumn::make('coverage')
+                    ->label(__('Couverture'))
+                    ->badge()
+                    ->state(fn (ProductionWave $record): string => $record->getCoverageSignalLabel())
+                    ->color(fn (ProductionWave $record): string => $record->getCoverageSignalColor()),
 
                 TextColumn::make('progress')
-                    ->label('Progression')
+                    ->label(__('Progression'))
                     ->state(function (ProductionWave $record): string {
                         $completed = $record->productions->count();
                         $total = $record->productions_count;
@@ -90,15 +85,9 @@ class ActiveWavesWidget extends BaseWidget
                         };
                     }),
             ])
-            ->actions([
-                Action::make('view')
-                    ->label('Voir')
-                    ->icon(Heroicon::Eye)
-                    ->color('gray')
-                    ->url(fn (ProductionWave $record): string => ProductionWaveResource::getUrl('edit', ['record' => $record])),
-            ])
-            ->emptyStateHeading('Aucune vague active')
-            ->emptyStateDescription('Créez une vague de production pour commencer.')
+            ->recordUrl(fn (ProductionWave $record): string => ProductionWaveResource::getUrl('edit', ['record' => $record]))
+            ->emptyStateHeading(__('Aucune vague active'))
+            ->emptyStateDescription(__('Créez une vague de production pour commencer.'))
             ->paginated(false);
     }
 

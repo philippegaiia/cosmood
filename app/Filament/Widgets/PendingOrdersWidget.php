@@ -5,8 +5,6 @@ namespace App\Filament\Widgets;
 use App\Enums\OrderStatus;
 use App\Filament\Resources\Supply\SupplierOrderResource;
 use App\Models\Supply\SupplierOrder;
-use Filament\Actions\Action;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
@@ -52,25 +50,26 @@ class PendingOrdersWidget extends BaseWidget
                         END
                     ")
                     ->orderBy('delivery_date')
+                    ->limit(5)
             )
             ->columns([
-                TextColumn::make('order_ref')
-                    ->label('Référence')
+                TextColumn::make('supplier.name')
+                    ->label(__('Fournisseur'))
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('supplier.name')
-                    ->label('Fournisseur')
+                TextColumn::make('order_ref')
+                    ->label(__('Référence'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('order_status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->badge()
                     ->sortable(),
 
                 TextColumn::make('delivery_date')
-                    ->label('Livraison')
+                    ->label(__('Livraison'))
                     ->date('d/m/Y')
                     ->color(function (SupplierOrder $record): ?string {
                         if (! $record->delivery_date) {
@@ -92,21 +91,10 @@ class PendingOrdersWidget extends BaseWidget
                         return 'success';
                     })
                     ->sortable(),
-
-                TextColumn::make('order_date')
-                    ->label('Commande')
-                    ->date('d/m/Y')
-                    ->sortable(),
             ])
-            ->actions([
-                Action::make('view')
-                    ->label('Voir')
-                    ->icon(Heroicon::Eye)
-                    ->color('gray')
-                    ->url(fn (SupplierOrder $record): string => SupplierOrderResource::getUrl('view', ['record' => $record])),
-            ])
-            ->emptyStateHeading('Aucune commande en attente')
-            ->emptyStateDescription('Toutes les commandes ont été traitées.')
+            ->recordUrl(fn (SupplierOrder $record): string => SupplierOrderResource::getUrl('edit', ['record' => $record]))
+            ->emptyStateHeading(__('Aucune commande en attente'))
+            ->emptyStateDescription(__('Toutes les commandes ont été traitées.'))
             ->paginated(false);
     }
 

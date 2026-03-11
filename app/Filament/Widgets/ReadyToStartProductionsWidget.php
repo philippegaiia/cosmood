@@ -37,7 +37,7 @@ class ReadyToStartProductionsWidget extends BaseWidget
         return $table
             ->query(
                 Production::query()
-                    ->with(['product', 'wave'])
+                    ->with(['product', 'productionLine'])
                     ->where('status', ProductionStatus::Confirmed)
                     ->whereHas('productionItems', function (Builder $query): void {
                         $query->whereHas('allocations');
@@ -45,52 +45,42 @@ class ReadyToStartProductionsWidget extends BaseWidget
                     ->whereDate('production_date', '>=', now())
                     ->whereDate('production_date', '<=', now()->addDays(7))
                     ->orderBy('production_date')
+                    ->limit(6)
             )
             ->columns([
                 TextColumn::make('production_date')
-                    ->label('Date')
+                    ->label(__('Date'))
                     ->date('d/m')
                     ->sortable(),
 
                 TextColumn::make('batch_number')
-                    ->label('Lot')
+                    ->label(__('Lot'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('product.name')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
 
-                TextColumn::make('wave.name')
-                    ->label('Vague')
-                    ->placeholder('-')
-                    ->sortable(),
-
-                TextColumn::make('planned_quantity')
-                    ->label('Qté')
-                    ->numeric()
-                    ->suffix(' kg')
+                TextColumn::make('productionLine.name')
+                    ->label(__('Ligne'))
+                    ->placeholder(__('Sans ligne'))
                     ->sortable(),
             ])
+            ->recordUrl(fn (Production $record): string => ProductionResource::getUrl('view', ['record' => $record]))
             ->actions([
                 Action::make('launch')
-                    ->label('Lancer')
+                    ->label(__('Lancer'))
                     ->icon(Heroicon::Play)
                     ->color('success')
                     ->requiresConfirmation()
                     ->action(function (Production $record): void {
                         $record->update(['status' => ProductionStatus::Ongoing]);
                     }),
-
-                Action::make('view')
-                    ->label('Voir')
-                    ->icon(Heroicon::Eye)
-                    ->color('gray')
-                    ->url(fn (Production $record): string => ProductionResource::getUrl('view', ['record' => $record])),
             ])
-            ->emptyStateHeading('Aucune production prête')
-            ->emptyStateDescription('Toutes les productions confirmées ont les stocks nécessaires.')
+            ->emptyStateHeading(__('Aucune production prête'))
+            ->emptyStateDescription(__('Toutes les productions confirmées ont les stocks nécessaires.'))
             ->paginated(false);
     }
 

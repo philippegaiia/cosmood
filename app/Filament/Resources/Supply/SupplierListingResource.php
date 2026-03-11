@@ -91,9 +91,12 @@ class SupplierListingResource extends Resource
                 TextInput::make('supplier_code')
                     ->maxLength(255),
                 Select::make('pkg')
-                    ->options(Packaging::class),
-                Select::make('pkg')
-                    ->options(Packaging::class),
+                    ->label('Conditionnement')
+                    ->options(Packaging::class)
+                    ->default(Packaging::Bidon->value),
+                TextInput::make('unit_weight')
+                    ->numeric()
+                    ->inputMode('decimal'),
                 Select::make('unit_of_measure')
                     ->options([
                         'kg' => 'kg',
@@ -117,7 +120,8 @@ class SupplierListingResource extends Resource
                 Textarea::make('description')
                     ->columnSpanFull(),
                 Toggle::make('is_active')
-                    ->required(),
+                    ->required()
+                    ->default(true),
             ]);
     }
 
@@ -149,6 +153,7 @@ class SupplierListingResource extends Resource
 
                 TextColumn::make('pkg')
                     ->label('Packaging')
+
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('unit_weight')

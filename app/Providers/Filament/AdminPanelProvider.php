@@ -2,8 +2,10 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\HomeDashboard;
 use App\Filament\Widgets\ActiveWavesWidget;
 use App\Filament\Widgets\PendingOrdersWidget;
+use App\Filament\Widgets\PilotageStatsWidget;
 use App\Filament\Widgets\ProductionCalendarWidget;
 use App\Filament\Widgets\ProductionsSoonReadyWidget;
 use App\Filament\Widgets\ReadyToStartProductionsWidget;
@@ -13,7 +15,6 @@ use App\Filament\Widgets\TodaysTasksWidget;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
-use Filament\Pages\Dashboard;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
@@ -48,9 +49,10 @@ class AdminPanelProvider extends PanelProvider
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->viteTheme('resources/css/filament/admin/theme.css')
             ->pages([
-                Dashboard::class,
+                HomeDashboard::class,
             ])
             ->widgets([
+                PilotageStatsWidget::class,
                 TodaysProductionsWidget::class,
                 TodaysTasksWidget::class,
                 ProductionsSoonReadyWidget::class,

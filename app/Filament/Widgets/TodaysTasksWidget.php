@@ -31,38 +31,29 @@ class TodaysTasksWidget extends BaseWidget
                     ->where('is_finished', false)
                     ->whereNull('cancelled_at')
                     ->orderBy('sequence_order')
+                    ->limit(8)
             )
             ->columns([
                 TextColumn::make('production.batch_number')
-                    ->label('Production')
+                    ->label(__('Lot'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('production.product.name')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('name')
-                    ->label('Tâche')
+                    ->label(__('Tâche'))
                     ->searchable()
-                    ->sortable(),
-
-                TextColumn::make('productionTaskType.name')
-                    ->label('Type')
-                    ->badge()
-                    ->color(fn ($record) => $record->productionTaskType?->color ?? 'gray'),
-
-                TextColumn::make('duration_minutes')
-                    ->label('Durée')
-                    ->formatStateUsing(fn ($state) => $state ? $state.' min' : '-')
                     ->sortable(),
             ])
             ->recordUrl(fn ($record) => $record->production_id
                 ? ProductionResource::getUrl('view', ['record' => $record->production_id])
                 : null)
-            ->emptyStateHeading('Aucune tâche aujourd\'hui')
-            ->emptyStateDescription('Toutes les tâches sont terminées ou aucune n\'est planifiée.')
+            ->emptyStateHeading(__('Aucune tâche aujourd\'hui'))
+            ->emptyStateDescription(__('Toutes les tâches sont terminées ou aucune n\'est planifiée.'))
             ->paginated(false);
     }
 

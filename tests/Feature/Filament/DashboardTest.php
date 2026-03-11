@@ -1,6 +1,10 @@
 <?php
 
+use App\Enums\OrderStatus;
+use App\Filament\Pages\HomeDashboard;
+use App\Models\Supply\SupplierOrder;
 use App\Models\User;
+use Livewire\Livewire;
 
 uses()->group('dashboard');
 
@@ -13,14 +17,21 @@ describe('Dashboard', function () {
     it('can access dashboard page', function () {
         $response = $this->get('/admin');
 
-        // Page loads without server error (may be 200 or 403 depending on permissions)
         expect($response->getStatusCode())->toBeLessThan(500);
     });
 
     it('displays dashboard widgets', function () {
+        Livewire::test(HomeDashboard::class)
+            ->assertSuccessful();
+    });
+
+    it('loads the dashboard when pending supplier orders exist', function () {
+        SupplierOrder::factory()->create([
+            'order_status' => OrderStatus::Passed,
+        ]);
+
         $response = $this->get('/admin');
 
-        // Page loads successfully (may be 200 or 403 depending on permissions)
         expect($response->getStatusCode())->toBeLessThan(500);
     });
 });
