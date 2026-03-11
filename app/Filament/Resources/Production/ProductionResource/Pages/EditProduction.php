@@ -66,14 +66,24 @@ class EditProduction extends EditRecord
 
     protected function beforeSave(): void
     {
-        if ($this->isTransitioningToFinished()) {
-            $missingIngredientNames = $this->record->getMissingLotIngredientNamesForFinish();
+        if ($this->isTransitioningToOngoing()) {
+            if ($notificationData = $this->getOngoingBlockerNotificationData()) {
+                Notification::make()
+                    ->warning()
+                    ->title($notificationData['title'])
+                    ->body($notificationData['body'])
+                    ->send();
 
-            if ($missingIngredientNames !== []) {
+                throw new Halt;
+            }
+        }
+
+        if ($this->isTransitioningToFinished()) {
+            if ($notificationData = $this->getFinishBlockerNotificationData()) {
                 Notification::make()
                     ->danger()
-                    ->title('Lots supply manquants')
-                    ->body('Impossible de terminer: sélectionner un lot pour '.implode(', ', $missingIngredientNames).'.')
+                    ->title($notificationData['title'])
+                    ->body($notificationData['body'])
                     ->send();
 
                 throw new Halt;
@@ -163,6 +173,90 @@ class EditProduction extends EditRecord
         }
 
         return $nextStatus === ProductionStatus::Finished && $currentStatus !== ProductionStatus::Finished;
+    }
+
+    private function isTransitioningToOngoing(): bool
+    {
+        $currentStatus = $this->record->status instanceof ProductionStatus
+            ? $this->record->status
+            : ProductionStatus::tryFrom((string) ($this->record->status ?? ''));
+
+        $nextStatus = ProductionStatus::tryFrom((string) ($this->data['status'] ?? ''));
+
+        if (! $nextStatus) {
+            return false;
+        }
+
+        return $nextStatus === ProductionStatus::Ongoing && $currentStatus !== ProductionStatus::Ongoing;
+    }
+
+    /**
+     * @return array{title: string, body: string}|null
+     */
+    private function getOngoingBlockerNotificationData(): ?array
+    {
+        $unallocatedIngredientNames = $this->record->getUnallocatedIngredientNamesForOngoing();
+
+        if ($unallocatedIngredientNames === []) {
+            return null;
+        }
+
+        return [
+            'title' => __('Allocations incomplètes'),
+            'body' => __('Impossible de passer en cours : affecter les lots pour :items.', [
+                'items' => implode(', ', $unallocatedIngredientNames),
+            ]),
+        ];
+    }
+
+    /**
+     * @return array{title: string, body: string}|null
+     */
+    private function getFinishBlockerNotificationData(): ?array
+    {
+        $missingIngredientNames = $this->record->getMissingLotIngredientNamesForFinish();
+
+        if ($missingIngredientNames !== []) {
+            return [
+                'title' => __('Lots supply manquants'),
+                'body' => __('Impossible de terminer : sélectionner un lot pour :items.', [
+                    'items' => implode(', ', $missingIngredientNames),
+                ]),
+            ];
+        }
+
+        $unfinishedTaskNames = $this->record->getIncompleteTaskNamesForFinish();
+
+        if ($unfinishedTaskNames !== []) {
+            return [
+                'title' => __('Tâches incomplètes'),
+                'body' => __('Impossible de terminer : finaliser :items.', [
+                    'items' => implode(', ', $unfinishedTaskNames),
+                ]),
+            ];
+        }
+
+        $pendingQcLabels = $this->record->getIncompleteRequiredQcLabelsForFinish();
+
+        if ($pendingQcLabels !== []) {
+            return [
+                'title' => __('Contrôles QC incomplets'),
+                'body' => __('Impossible de terminer : renseigner les contrôles :items.', [
+                    'items' => implode(', ', $pendingQcLabels),
+                ]),
+            ];
+        }
+
+        if ($outputBlocker = $this->record->getOutputBlockerMessageForFinish()) {
+            return [
+                'title' => __('Sorties à compléter'),
+                'body' => __('Impossible de terminer : :reason.', [
+                    'reason' => $outputBlocker,
+                ]),
+            ];
+        }
+
+        return null;
     }
 
     private function getStatusTransitionConfirmationSignature(): string

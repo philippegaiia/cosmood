@@ -1,6 +1,8 @@
 <?php
 
 use App\Enums\Phases;
+use App\Enums\ProcurementStatus;
+use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Models\Production\BatchSizePreset;
@@ -9,6 +11,7 @@ use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
+use App\Models\Production\ProductionOutput;
 use App\Models\Production\ProductionQcCheck;
 use App\Models\Production\ProductionTask;
 use App\Models\Production\ProductionWave;
@@ -167,6 +170,7 @@ describe('Production - Relationships', function () {
 
         expect($relations)
             ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class)
+            ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager::class)
             ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager::class)
             ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager::class);
     });
@@ -203,6 +207,25 @@ describe('Production - Relationships', function () {
             'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
         ])->assertSee('Conditionnement différé')
             ->assertDontSee('Tâche manuelle');
+    });
+
+    it('renders the production outputs relation manager with the output target', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->create();
+
+        ProductionOutput::factory()->create([
+            'production_id' => $production->id,
+            'kind' => ProductionOutputKind::MainProduct,
+            'quantity' => $production->expected_units,
+            'unit' => 'u',
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+        ])->assertSee('Sortie principale')
+            ->assertSee($production->product->name);
     });
 
     it('shows total product cost summary in production items relation manager', function () {
@@ -285,6 +308,43 @@ describe('Production - Relationships', function () {
         ])->assertSee('LOT-UI-001');
     });
 
+    it('shows active allocation lot in production items table even when item traceability fields are stale', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->create();
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+        $supply = Supply::factory()->create([
+            'supplier_listing_id' => $listing->id,
+            'batch_number' => 'LOT-ACTIVE-001',
+            'is_in_stock' => true,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'supply_id' => null,
+            'supply_batch_number' => null,
+            'is_supplied' => false,
+        ]);
+
+        ProductionItemAllocation::factory()->create([
+            'production_item_id' => $item->id,
+            'supply_id' => $supply->id,
+            'quantity' => 5,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+        ])->assertSee('LOT-ACTIVE-001');
+    });
+
     it('shows and toggles commande passee from production items tab', function () {
         $this->actingAs($this->user);
 
@@ -355,6 +415,33 @@ describe('Production - Relationships', function () {
         expect($production->fresh()->permanent_batch_number)->toBe('00001');
     });
 
+    it('blocks transition to ongoing with a notification when items are not fully allocated', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->confirmed()->create();
+
+        $production->productionItems()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 12,
+            'procurement_status' => ProcurementStatus::Ordered,
+            'supply_id' => null,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->set('data.status', ProductionStatus::Ongoing->value)
+            ->call('save')
+            ->assertNotified('Allocations incomplètes');
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Confirmed);
+    });
+
     it('blocks transition to finished when required items have no selected lot', function () {
         $this->actingAs($this->user);
 
@@ -375,6 +462,88 @@ describe('Production - Relationships', function () {
             ->set('data.status', ProductionStatus::Finished->value)
             ->call('save')
             ->assertNotified('Lots supply manquants');
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Ongoing);
+    });
+
+    it('blocks transition to finished when active tasks are incomplete', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->inProgress()->create();
+
+        $production->productionItems()->delete();
+        $production->productionTasks()->delete();
+        $production->productionQcChecks()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(100)->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'name' => 'Conditionnement',
+            'is_finished' => false,
+            'cancelled_at' => null,
+        ]);
+
+        ProductionQcCheck::factory()->passed()->create([
+            'production_id' => $production->id,
+            'required' => true,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->set('data.status', ProductionStatus::Finished->value)
+            ->call('save')
+            ->assertNotified('Tâches incomplètes');
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Ongoing);
+    });
+
+    it('blocks transition to finished when outputs are missing', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->inProgress()->create();
+
+        $production->productionItems()->delete();
+        $production->productionTasks()->delete();
+        $production->productionQcChecks()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(100)->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionTask::factory()->finished()->create([
+            'production_id' => $production->id,
+            'cancelled_at' => null,
+        ]);
+
+        ProductionQcCheck::factory()->passed()->create([
+            'production_id' => $production->id,
+            'required' => true,
+        ]);
+
+        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->set('data.status', ProductionStatus::Finished->value)
+            ->call('save')
+            ->assertNotified('Sorties à compléter');
 
         expect($production->fresh()->status)->toBe(ProductionStatus::Ongoing);
     });

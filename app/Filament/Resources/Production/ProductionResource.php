@@ -7,6 +7,7 @@ use App\Filament\Resources\Production\ProductionResource\Pages\EditProduction;
 use App\Filament\Resources\Production\ProductionResource\Pages\ListProductions;
 use App\Filament\Resources\Production\ProductionResource\Pages\ViewProduction;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager;
+use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager;
 use App\Filament\Resources\Production\ProductionResource\Schemas\ProductionForm;
@@ -83,6 +84,7 @@ class ProductionResource extends Resource
     {
         return [
             ProductionItemsRelationManager::class,
+            ProductionOutputsRelationManager::class,
             ProductionTasksRelationManager::class,
             ProductionQcChecksRelationManager::class,
         ];

@@ -35,6 +35,25 @@ describe('allocate', function () {
         expect($item->fresh()->allocation_status)->toBe(AllocationStatus::Allocated);
     });
 
+    it('syncs the production item supply traceability when allocating', function () {
+        $supply = Supply::factory()->inStock(50.0)->create([
+            'batch_number' => 'LOT-ALLOC-001',
+        ]);
+        $item = ProductionItem::factory()->create([
+            'required_quantity' => 10.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+            'supply_id' => null,
+            'supply_batch_number' => null,
+            'is_supplied' => false,
+        ]);
+
+        $this->service->allocate($item, $supply, 10.0);
+
+        expect($item->fresh()->supply_id)->toBe($supply->id)
+            ->and($item->fresh()->supply_batch_number)->toBe('LOT-ALLOC-001')
+            ->and($item->fresh()->is_supplied)->toBeTrue();
+    });
+
     it('creates stock movement when allocating', function () {
         $supply = Supply::factory()->inStock(50.0)->create();
         $item = ProductionItem::factory()->create([
@@ -155,6 +174,30 @@ describe('release', function () {
 
         expect($allocation->fresh()->status)->toBe('released');
         expect($item->fresh()->allocation_status)->toBe(AllocationStatus::Unassigned);
+    });
+
+    it('clears the production item supply traceability when releasing the last allocation', function () {
+        $supply = Supply::factory()->inStock(50.0)->create([
+            'batch_number' => 'LOT-ALLOC-002',
+        ]);
+        $item = ProductionItem::factory()->create([
+            'required_quantity' => 10.0,
+            'supply_id' => $supply->id,
+            'supply_batch_number' => 'LOT-ALLOC-002',
+            'is_supplied' => true,
+        ]);
+        $allocation = ProductionItemAllocation::factory()->create([
+            'production_item_id' => $item->id,
+            'supply_id' => $supply->id,
+            'quantity' => 10.0,
+            'status' => 'reserved',
+        ]);
+
+        $this->service->release($allocation);
+
+        expect($item->fresh()->supply_id)->toBeNull()
+            ->and($item->fresh()->supply_batch_number)->toBeNull()
+            ->and($item->fresh()->is_supplied)->toBeFalse();
     });
 
     it('deletes stock movement when releasing', function () {

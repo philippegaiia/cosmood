@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ProcurementStatus;
+use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Models\Production\Formula;
@@ -9,6 +10,9 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
 use App\Models\Production\ProductionLine;
+use App\Models\Production\ProductionOutput;
+use App\Models\Production\ProductionQcCheck;
+use App\Models\Production\ProductionTask;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
@@ -158,6 +162,24 @@ describe('Production Model', function () {
             ->toThrow(InvalidArgumentException::class, 'Invalid production status transition from confirmed to finished.');
     });
 
+    it('does not allow cancelled as a normal production transition anymore', function () {
+        expect(Production::allowedTransitionsFor(ProductionStatus::Planned))
+            ->toEqual([
+                ProductionStatus::Planned,
+                ProductionStatus::Confirmed,
+            ])
+            ->and(Production::allowedTransitionsFor(ProductionStatus::Confirmed))
+            ->toEqual([
+                ProductionStatus::Confirmed,
+                ProductionStatus::Ongoing,
+            ])
+            ->and(Production::allowedTransitionsFor(ProductionStatus::Ongoing))
+            ->toEqual([
+                ProductionStatus::Ongoing,
+                ProductionStatus::Finished,
+            ]);
+    });
+
     it('requires lot assignment for all required items before finishing', function () {
         $production = Production::factory()->inProgress()->create();
 
@@ -170,6 +192,105 @@ describe('Production Model', function () {
 
         expect(fn () => $production->update(['status' => ProductionStatus::Finished]))
             ->toThrow(InvalidArgumentException::class);
+    });
+
+    it('requires active tasks to be finished before finishing', function () {
+        $production = Production::factory()->inProgress()->create();
+
+        $production->productionItems()->delete();
+        $production->productionTasks()->delete();
+        $production->productionQcChecks()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(100)->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'name' => 'Conditionnement',
+            'is_finished' => false,
+            'cancelled_at' => null,
+        ]);
+
+        ProductionQcCheck::factory()->passed()->create([
+            'production_id' => $production->id,
+            'required' => true,
+        ]);
+
+        expect(fn () => $production->update(['status' => ProductionStatus::Finished]))
+            ->toThrow(InvalidArgumentException::class, 'unfinished tasks');
+    });
+
+    it('requires required qc checks to be completed before finishing', function () {
+        $production = Production::factory()->inProgress()->create();
+
+        $production->productionItems()->delete();
+        $production->productionTasks()->delete();
+        $production->productionQcChecks()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(100)->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionTask::factory()->finished()->create([
+            'production_id' => $production->id,
+            'name' => 'Conditionnement',
+            'cancelled_at' => null,
+        ]);
+
+        ProductionQcCheck::factory()->create([
+            'production_id' => $production->id,
+            'required' => true,
+        ]);
+
+        expect(fn () => $production->update(['status' => ProductionStatus::Finished]))
+            ->toThrow(InvalidArgumentException::class, 'incomplete QC checks');
+    });
+
+    it('requires declared outputs before finishing', function () {
+        $production = Production::factory()->inProgress()->create();
+
+        $production->productionItems()->delete();
+        $production->productionTasks()->delete();
+        $production->productionQcChecks()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(100)->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionTask::factory()->finished()->create([
+            'production_id' => $production->id,
+            'cancelled_at' => null,
+        ]);
+
+        ProductionQcCheck::factory()->passed()->create([
+            'production_id' => $production->id,
+            'required' => true,
+        ]);
+
+        expect(fn () => $production->update(['status' => ProductionStatus::Finished]))
+            ->toThrow(InvalidArgumentException::class, 'sortie principale');
     });
 
     it('allows valid status transitions', function () {
@@ -195,6 +316,14 @@ describe('Production Model', function () {
 
         $production->update(['status' => ProductionStatus::Confirmed]);
         $production->update(['status' => ProductionStatus::Ongoing]);
+
+        ProductionOutput::factory()->create([
+            'production_id' => $production->id,
+            'kind' => ProductionOutputKind::MainProduct,
+            'quantity' => $production->expected_units,
+            'unit' => 'u',
+        ]);
+
         $production->update(['status' => ProductionStatus::Finished]);
 
         expect($production->fresh()->status)->toBe(ProductionStatus::Finished);
@@ -220,7 +349,7 @@ describe('Production Model', function () {
         $production = Production::factory()->finished()->create();
 
         expect(fn () => $production->delete())
-            ->toThrow(InvalidArgumentException::class, 'Finished productions cannot be deleted. Cancel before deletion if needed.');
+            ->toThrow(InvalidArgumentException::class, 'Finished productions cannot be deleted.');
 
         expect(Production::query()->find($production->id))->not->toBeNull();
     });
@@ -404,6 +533,42 @@ describe('Production Relationships', function () {
         $production = Production::factory()->create();
 
         expect($production->productionTasks())->not->toBeNull();
+    });
+
+    it('auto-links the main output to the production product', function () {
+        $production = Production::factory()->create();
+
+        $output = ProductionOutput::factory()->create([
+            'production_id' => $production->id,
+            'kind' => ProductionOutputKind::MainProduct,
+            'product_id' => null,
+            'quantity' => $production->expected_units,
+            'unit' => 'u',
+        ]);
+
+        expect($output->fresh()->product_id)->toBe($production->product_id);
+    });
+
+    it('prioritizes the rework output for stock creation on sellable productions', function () {
+        $production = Production::factory()->create();
+        $reworkIngredient = Ingredient::factory()->manufactured()->create();
+
+        ProductionOutput::factory()->create([
+            'production_id' => $production->id,
+            'kind' => ProductionOutputKind::MainProduct,
+            'quantity' => $production->expected_units,
+            'unit' => 'u',
+        ]);
+
+        $reworkOutput = ProductionOutput::factory()->create([
+            'production_id' => $production->id,
+            'kind' => ProductionOutputKind::ReworkMaterial,
+            'ingredient_id' => $reworkIngredient->id,
+            'quantity' => 2.5,
+            'unit' => 'kg',
+        ]);
+
+        expect($production->fresh()->getStockCreatingOutput()?->id)->toBe($reworkOutput->id);
     });
 
     it('can reference a manufactured ingredient output', function () {

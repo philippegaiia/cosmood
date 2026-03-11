@@ -6,10 +6,12 @@ use App\Enums\ProductionStatus;
 use App\Filament\Resources\Production\ProductionResource;
 use App\Models\Production\Production;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
+use InvalidArgumentException;
 
 /**
  * Productions Soon Ready Widget.
@@ -75,7 +77,27 @@ class ProductionsSoonReadyWidget extends BaseWidget
                     ->color('success')
                     ->requiresConfirmation()
                     ->action(function (Production $record): void {
-                        $record->update(['status' => ProductionStatus::Finished]);
+                        $record->refresh();
+
+                        if ($notificationData = $this->getFinishBlockerNotificationData($record)) {
+                            Notification::make()
+                                ->danger()
+                                ->title($notificationData['title'])
+                                ->body($notificationData['body'])
+                                ->send();
+
+                            return;
+                        }
+
+                        try {
+                            $record->update(['status' => ProductionStatus::Finished]);
+                        } catch (InvalidArgumentException $exception) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Finalisation impossible'))
+                                ->body($exception->getMessage())
+                                ->send();
+                        }
                     }),
 
                 Action::make('view')
@@ -92,5 +114,55 @@ class ProductionsSoonReadyWidget extends BaseWidget
     public static function canView(): bool
     {
         return true;
+    }
+
+    /**
+     * @return array{title: string, body: string}|null
+     */
+    private function getFinishBlockerNotificationData(Production $production): ?array
+    {
+        $missingIngredientNames = $production->getMissingLotIngredientNamesForFinish();
+
+        if ($missingIngredientNames !== []) {
+            return [
+                'title' => __('Lots supply manquants'),
+                'body' => __('Impossible de terminer : sélectionner un lot pour :items.', [
+                    'items' => implode(', ', $missingIngredientNames),
+                ]),
+            ];
+        }
+
+        $unfinishedTaskNames = $production->getIncompleteTaskNamesForFinish();
+
+        if ($unfinishedTaskNames !== []) {
+            return [
+                'title' => __('Tâches incomplètes'),
+                'body' => __('Impossible de terminer : finaliser :items.', [
+                    'items' => implode(', ', $unfinishedTaskNames),
+                ]),
+            ];
+        }
+
+        $pendingQcLabels = $production->getIncompleteRequiredQcLabelsForFinish();
+
+        if ($pendingQcLabels !== []) {
+            return [
+                'title' => __('Contrôles QC incomplets'),
+                'body' => __('Impossible de terminer : renseigner les contrôles :items.', [
+                    'items' => implode(', ', $pendingQcLabels),
+                ]),
+            ];
+        }
+
+        if ($outputBlocker = $production->getOutputBlockerMessageForFinish()) {
+            return [
+                'title' => __('Sorties à compléter'),
+                'body' => __('Impossible de terminer : :reason.', [
+                    'reason' => $outputBlocker,
+                ]),
+            ];
+        }
+
+        return null;
     }
 }

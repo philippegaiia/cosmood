@@ -90,6 +90,7 @@ class ProductionAllocationService
                     );
 
                     $item->updateAllocationStatus();
+                    $this->syncPrimarySupplyTraceability($item);
 
                     return $existingAllocation;
                 }
@@ -113,6 +114,7 @@ class ProductionAllocationService
             );
 
             $item->updateAllocationStatus();
+            $this->syncPrimarySupplyTraceability($item);
 
             return $allocation;
         });
@@ -171,6 +173,7 @@ class ProductionAllocationService
 
             $allocation->update(['status' => 'released']);
             $item->updateAllocationStatus();
+            $this->syncPrimarySupplyTraceability($item);
         });
 
         $this->syncWaveRequirementStatusesForItem($allocation->productionItem);
@@ -207,6 +210,7 @@ class ProductionAllocationService
                 ->update(['status' => 'released']);
 
             $item->updateAllocationStatus();
+            $this->syncPrimarySupplyTraceability($item);
         });
 
         if ($syncWaveRequirements) {
@@ -271,6 +275,9 @@ class ProductionAllocationService
                 // Update last used timestamp
                 $supply->update(['last_used_at' => now()]);
             }
+
+            $item->updateAllocationStatus();
+            $this->syncPrimarySupplyTraceability($item);
         });
 
         $this->syncWaveRequirementStatusesForItem($item);
@@ -607,6 +614,29 @@ class ProductionAllocationService
         }
 
         $this->waveRequirementStatusService->syncForWave($production->wave);
+    }
+
+    /**
+     * Keep the production item lot pointer aligned with active allocations.
+     *
+     * Allocation history remains the source of truth. `production_items.supply_id`
+     * and `production_items.supply_batch_number` are convenience fields used by
+     * tables, finish guards, and traceability displays.
+     */
+    private function syncPrimarySupplyTraceability(ProductionItem $item): void
+    {
+        $primaryAllocation = $item->allocations()
+            ->with('supply:id,batch_number')
+            ->whereIn('status', ['reserved', 'consumed'])
+            ->orderByRaw("CASE WHEN status = 'reserved' THEN 0 ELSE 1 END")
+            ->orderBy('id')
+            ->first();
+
+        $item->forceFill([
+            'supply_id' => $primaryAllocation?->supply_id,
+            'supply_batch_number' => $primaryAllocation?->supply?->batch_number,
+            'is_supplied' => $primaryAllocation !== null,
+        ])->saveQuietly();
     }
 
     private function resolveSupplySupplierName(Supply $supply): string

@@ -4,6 +4,7 @@ namespace App\Services\Production;
 
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionOutput;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
@@ -38,20 +39,26 @@ class ManufacturedIngredientStockService
             /** @var Production $lockedProduction */
             $lockedProduction = Production::query()
                 ->lockForUpdate()
-                ->with(['producedIngredient', 'product.producedIngredient'])
+                ->with(['producedIngredient', 'product.producedIngredient', 'productionOutputs'])
                 ->findOrFail($production->id);
 
             if ($lockedProduction->status !== ProductionStatus::Finished) {
                 return null;
             }
 
-            $ingredient = $this->resolveProducedIngredient($lockedProduction);
+            $output = $lockedProduction->getStockCreatingOutput();
+
+            if (! $output instanceof ProductionOutput) {
+                return null;
+            }
+
+            $ingredient = $this->resolveIngredientForOutput($lockedProduction, $output);
 
             if (! $ingredient) {
                 return null;
             }
 
-            $quantityKg = (float) ($lockedProduction->planned_quantity ?? 0);
+            $quantityKg = (float) $output->quantity;
 
             if ($quantityKg <= 0) {
                 return null;
@@ -88,7 +95,7 @@ class ManufacturedIngredientStockService
                 supply: $supply,
                 production: $lockedProduction,
                 quantityKg: $quantityKg,
-                reason: 'Manufactured ingredient produced',
+                reason: $this->resolveInboundReason($output),
             );
 
             return $supply;
@@ -121,6 +128,23 @@ class ManufacturedIngredientStockService
         ]);
 
         return $ingredient;
+    }
+
+    private function resolveIngredientForOutput(Production $production, ProductionOutput $output): ?Ingredient
+    {
+        if ($output->kind->value === 'main_product') {
+            return $this->resolveProducedIngredient($production);
+        }
+
+        return Ingredient::query()->find($output->ingredient_id);
+    }
+
+    private function resolveInboundReason(ProductionOutput $output): string
+    {
+        return match ($output->kind->value) {
+            'rework_material' => 'Rework material produced',
+            default => 'Manufactured ingredient produced',
+        };
     }
 
     /**

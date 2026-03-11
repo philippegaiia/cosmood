@@ -6,11 +6,13 @@ use App\Enums\ProductionStatus;
 use App\Filament\Resources\Production\ProductionResource;
 use App\Models\Production\Production;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
 use Illuminate\Database\Eloquent\Builder;
+use InvalidArgumentException;
 
 /**
  * Ready to Start Productions Widget.
@@ -76,7 +78,31 @@ class ReadyToStartProductionsWidget extends BaseWidget
                     ->color('success')
                     ->requiresConfirmation()
                     ->action(function (Production $record): void {
-                        $record->update(['status' => ProductionStatus::Ongoing]);
+                        $record->refresh();
+
+                        $unallocatedIngredientNames = $record->getUnallocatedIngredientNamesForOngoing();
+
+                        if ($unallocatedIngredientNames !== []) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Allocations incomplètes'))
+                                ->body(__('Impossible de passer en cours : affecter les lots pour :items.', [
+                                    'items' => implode(', ', $unallocatedIngredientNames),
+                                ]))
+                                ->send();
+
+                            return;
+                        }
+
+                        try {
+                            $record->update(['status' => ProductionStatus::Ongoing]);
+                        } catch (InvalidArgumentException $exception) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Passage en cours impossible'))
+                                ->body($exception->getMessage())
+                                ->send();
+                        }
                     }),
             ])
             ->emptyStateHeading(__('Aucune production prête'))

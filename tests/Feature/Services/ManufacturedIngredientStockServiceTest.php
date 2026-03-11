@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionOutput;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
 use App\Models\Supply\SuppliesMovement;
@@ -24,6 +26,13 @@ it('creates internal stock lot from finished manufactured production', function 
         'permanent_batch_number' => '000321',
         'planned_quantity' => 26,
         'produced_ingredient_id' => $ingredient->id,
+    ]);
+
+    ProductionOutput::factory()->create([
+        'production_id' => $production->id,
+        'kind' => ProductionOutputKind::MainProduct,
+        'quantity' => 26,
+        'unit' => 'kg',
     ]);
 
     $supply = app(ManufacturedIngredientStockService::class)
@@ -54,6 +63,13 @@ it('does not create duplicate stock lot for the same finished production', funct
         'planned_quantity' => 15,
     ]);
 
+    ProductionOutput::factory()->create([
+        'production_id' => $production->id,
+        'kind' => ProductionOutputKind::MainProduct,
+        'quantity' => 15,
+        'unit' => 'kg',
+    ]);
+
     $service = app(ManufacturedIngredientStockService::class);
 
     $first = $service->ensureStockFromFinishedProduction($production);
@@ -79,6 +95,13 @@ it('auto-creates internal stock lot when production status changes to finished',
 
     $production->update([
         'status' => ProductionStatus::Ongoing,
+    ]);
+
+    ProductionOutput::factory()->create([
+        'production_id' => $production->id,
+        'kind' => ProductionOutputKind::MainProduct,
+        'quantity' => 10,
+        'unit' => 'kg',
     ]);
 
     $production->update([
@@ -108,10 +131,67 @@ it('falls back to product manufactured ingredient when production target is empt
         'planned_quantity' => 8,
     ]);
 
+    ProductionOutput::factory()->create([
+        'production_id' => $production->id,
+        'kind' => ProductionOutputKind::MainProduct,
+        'quantity' => 8,
+        'unit' => 'kg',
+    ]);
+
     $supply = app(ManufacturedIngredientStockService::class)
         ->ensureStockFromFinishedProduction($production);
 
     expect($supply)->not->toBeNull()
         ->and($supply->supplierListing->ingredient_id)->toBe($ingredient->id)
         ->and($production->fresh()->produced_ingredient_id)->toBe($ingredient->id);
+});
+
+it('creates internal stock lot from rework output for sellable productions', function () {
+    $reworkIngredient = Ingredient::factory()->manufactured()->create([
+        'name' => 'Base savon rebatch',
+    ]);
+
+    $production = Production::factory()->finished()->create([
+        'planned_quantity' => 30,
+        'produced_ingredient_id' => null,
+    ]);
+
+    ProductionOutput::factory()->create([
+        'production_id' => $production->id,
+        'kind' => ProductionOutputKind::MainProduct,
+        'quantity' => 280,
+        'unit' => 'u',
+    ]);
+
+    ProductionOutput::factory()->create([
+        'production_id' => $production->id,
+        'kind' => ProductionOutputKind::ReworkMaterial,
+        'ingredient_id' => $reworkIngredient->id,
+        'quantity' => 3,
+        'unit' => 'kg',
+    ]);
+
+    $supply = app(ManufacturedIngredientStockService::class)
+        ->ensureStockFromFinishedProduction($production);
+
+    expect($supply)->not->toBeNull()
+        ->and($supply->supplierListing->ingredient_id)->toBe($reworkIngredient->id)
+        ->and((float) $supply->quantity_in)->toBe(3.0);
+});
+
+it('does not create internal stock lot from a sellable main-product output alone', function () {
+    $production = Production::factory()->finished()->create();
+
+    ProductionOutput::factory()->create([
+        'production_id' => $production->id,
+        'kind' => ProductionOutputKind::MainProduct,
+        'quantity' => 250,
+        'unit' => 'u',
+    ]);
+
+    $supply = app(ManufacturedIngredientStockService::class)
+        ->ensureStockFromFinishedProduction($production);
+
+    expect($supply)->toBeNull()
+        ->and(Supply::query()->where('source_production_id', $production->id)->exists())->toBeFalse();
 });

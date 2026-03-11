@@ -9,6 +9,7 @@ use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionOutput;
 use App\Models\Production\ProductionTask;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
@@ -201,7 +202,7 @@ describe('Production lifecycle orchestration', function () {
             ->and($item->supply_id)->toBeNull();
     });
 
-    it('deletes tasks when production is cancelled', function () {
+    it('rejects transition to cancelled from confirmed productions', function () {
         $production = Production::factory()->create(['status' => ProductionStatus::Confirmed]);
 
         ProductionTask::factory()->create([
@@ -216,9 +217,11 @@ describe('Production lifecycle orchestration', function () {
             'cancelled_at' => null,
         ]);
 
-        $production->update(['status' => ProductionStatus::Cancelled]);
+        expect(fn () => $production->update(['status' => ProductionStatus::Cancelled]))
+            ->toThrow(InvalidArgumentException::class, 'Invalid production status transition from confirmed to cancelled.');
 
-        expect($production->fresh()->productionTasks)->toHaveCount(0);
+        expect($production->fresh()->productionTasks)->toHaveCount(2)
+            ->and($production->fresh()->status)->toBe(ProductionStatus::Confirmed);
     });
 
     it('rejects transition from confirmed back to planned', function () {
@@ -252,8 +255,14 @@ describe('Production lifecycle orchestration', function () {
     it('keeps tasks when production is ongoing or finished', function () {
         $production = Production::withoutEvents(fn () => Production::factory()->create(['status' => ProductionStatus::Confirmed]));
 
-        ProductionTask::factory()->count(2)->create([
+        ProductionTask::factory()->count(2)->finished()->create([
             'production_id' => $production->id,
+        ]);
+
+        ProductionOutput::factory()->create([
+            'production_id' => $production->id,
+            'quantity' => $production->expected_units,
+            'unit' => 'u',
         ]);
 
         $production->update(['status' => ProductionStatus::Ongoing]);

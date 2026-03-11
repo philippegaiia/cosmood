@@ -74,7 +74,7 @@ class ProductionItemsRelationManager extends RelationManager
                 IconColumn::make('is_supplied')
                     ->label('Approvisionné')
                     ->boolean()
-                    ->state(fn (ProductionItem $record): bool => $record->is_supplied || $record->supply_id !== null),
+                    ->state(fn (ProductionItem $record): bool => $record->is_supplied || $record->supply_id !== null || $record->allocations->contains(fn ($allocation): bool => $allocation->isActive())),
                 TextColumn::make('is_order_marked')
                     ->label(__('Commande passée'))
                     ->state(fn (ProductionItem $record): string => $record->is_order_marked ? __('Oui') : __('Non'))
@@ -82,6 +82,9 @@ class ProductionItemsRelationManager extends RelationManager
                     ->color(fn (ProductionItem $record): string => $record->is_order_marked ? 'info' : 'gray'),
                 TextColumn::make('supply_batch_number')
                     ->label('Lot supply')
+                    ->state(fn (ProductionItem $record): ?string => $record->allocations
+                        ->first(fn ($allocation): bool => $allocation->isActive())?->supply?->batch_number
+                        ?? $record->supply_batch_number)
                     ->placeholder('Non sélectionné'),
                 TextColumn::make('supplierListing.name')
                     ->label('Listing fournisseur')
@@ -119,7 +122,7 @@ class ProductionItemsRelationManager extends RelationManager
                             ->send();
                     }),
             ])
-            ->modifyQueryUsing(fn (EloquentBuilder $query): EloquentBuilder => $query->with(['ingredient', 'supplierListing', 'supply', 'production']))
+            ->modifyQueryUsing(fn (EloquentBuilder $query): EloquentBuilder => $query->with(['ingredient', 'supplierListing', 'supply', 'production', 'allocations.supply']))
             ->defaultSort('sort');
     }
 }

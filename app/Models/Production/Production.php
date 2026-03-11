@@ -3,6 +3,7 @@
 namespace App\Models\Production;
 
 use App\Enums\ProcurementStatus;
+use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Enums\WaveStatus;
@@ -105,13 +106,13 @@ class Production extends Model implements Eventable
             }
 
             if ($from !== ProductionStatus::Finished && $to === ProductionStatus::Finished) {
-                self::assertLotsAssignedBeforeFinish($production);
+                self::assertFinishRequirements($production);
             }
         });
 
         static::deleting(function (Production $production): void {
             if ($production->status === ProductionStatus::Finished) {
-                throw new InvalidArgumentException('Finished productions cannot be deleted. Cancel before deletion if needed.');
+                throw new InvalidArgumentException('Finished productions cannot be deleted.');
             }
         });
     }
@@ -196,6 +197,11 @@ class Production extends Model implements Eventable
         return $this->hasMany(ProductionTask::class);
     }
 
+    public function productionOutputs(): HasMany
+    {
+        return $this->hasMany(ProductionOutput::class);
+    }
+
     public function productionQcChecks(): HasMany
     {
         return $this->hasMany(ProductionQcCheck::class);
@@ -228,6 +234,49 @@ class Production extends Model implements Eventable
         }
 
         return $this->permanent_batch_number.' (plan '.$this->batch_number.')';
+    }
+
+    public function hasDeclaredOutputs(): bool
+    {
+        return $this->productionOutputs()->exists();
+    }
+
+    public function getMainOutput(): ?ProductionOutput
+    {
+        if ($this->relationLoaded('productionOutputs')) {
+            return $this->productionOutputs->first(fn (ProductionOutput $output): bool => $output->kind === ProductionOutputKind::MainProduct);
+        }
+
+        return $this->productionOutputs()
+            ->where('kind', ProductionOutputKind::MainProduct->value)
+            ->first();
+    }
+
+    public function getDefaultMainOutputUnit(): string
+    {
+        return $this->resolveProducedIngredientIdForOutput() !== null ? 'kg' : 'u';
+    }
+
+    public function getDefaultMainOutputQuantity(): float
+    {
+        if ($this->getDefaultMainOutputUnit() === 'kg') {
+            return (float) ($this->planned_quantity ?? 0);
+        }
+
+        return (float) ($this->actual_units ?? $this->expected_units ?? 0);
+    }
+
+    public function getStockCreatingOutput(): ?ProductionOutput
+    {
+        $outputs = $this->relationLoaded('productionOutputs')
+            ? $this->productionOutputs
+            : $this->productionOutputs()->get();
+
+        if ($this->resolveProducedIngredientIdForOutput() !== null) {
+            return $outputs->first(fn (ProductionOutput $output): bool => $output->kind === ProductionOutputKind::MainProduct);
+        }
+
+        return $outputs->first(fn (ProductionOutput $output): bool => $output->kind === ProductionOutputKind::ReworkMaterial);
     }
 
     public function getSupplyCoverageState(): string
@@ -314,15 +363,12 @@ class Production extends Model implements Eventable
         return [
             ProductionStatus::Planned->value => [
                 ProductionStatus::Confirmed,
-                ProductionStatus::Cancelled,
             ],
             ProductionStatus::Confirmed->value => [
                 ProductionStatus::Ongoing,
-                ProductionStatus::Cancelled,
             ],
             ProductionStatus::Ongoing->value => [
                 ProductionStatus::Finished,
-                ProductionStatus::Cancelled,
             ],
             ProductionStatus::Finished->value => [],
             ProductionStatus::Cancelled->value => [],
@@ -391,6 +437,17 @@ class Production extends Model implements Eventable
     }
 
     /**
+     * Ensures all finish preconditions are satisfied before finalizing a batch.
+     */
+    private static function assertFinishRequirements(Production $production): void
+    {
+        self::assertLotsAssignedBeforeFinish($production);
+        self::assertTasksCompletedBeforeFinish($production);
+        self::assertRequiredQcCompletedBeforeFinish($production);
+        self::assertOutputsDeclaredBeforeFinish($production);
+    }
+
+    /**
      * Ensures all required production item lots are assigned before finalizing a batch.
      */
     private static function assertLotsAssignedBeforeFinish(Production $production): void
@@ -404,6 +461,57 @@ class Production extends Model implements Eventable
         throw new InvalidArgumentException(sprintf(
             'Cannot set production to finished: missing lot selection for %s.',
             implode(', ', $missingIngredientNames),
+        ));
+    }
+
+    /**
+     * Ensures all active production tasks are finished before finalizing a batch.
+     */
+    private static function assertTasksCompletedBeforeFinish(Production $production): void
+    {
+        $unfinishedTaskNames = $production->getIncompleteTaskNamesForFinish();
+
+        if ($unfinishedTaskNames === []) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'Cannot set production to finished: unfinished tasks for %s.',
+            implode(', ', $unfinishedTaskNames),
+        ));
+    }
+
+    /**
+     * Ensures all required QC checks are completed before finalizing a batch.
+     */
+    private static function assertRequiredQcCompletedBeforeFinish(Production $production): void
+    {
+        $pendingQcLabels = $production->getIncompleteRequiredQcLabelsForFinish();
+
+        if ($pendingQcLabels === []) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'Cannot set production to finished: incomplete QC checks for %s.',
+            implode(', ', $pendingQcLabels),
+        ));
+    }
+
+    /**
+     * Ensures reconciliation outputs are declared before finalizing a batch.
+     */
+    private static function assertOutputsDeclaredBeforeFinish(Production $production): void
+    {
+        $outputBlocker = $production->getOutputBlockerMessageForFinish();
+
+        if ($outputBlocker === null) {
+            return;
+        }
+
+        throw new InvalidArgumentException(sprintf(
+            'Cannot set production to finished: %s.',
+            $outputBlocker,
         ));
     }
 
@@ -477,6 +585,130 @@ class Production extends Model implements Eventable
             ->all();
     }
 
+    /**
+     * Returns active task names still unfinished for finish transition.
+     *
+     * Cancelled tasks are ignored because they are no longer part of the
+     * production execution contract.
+     *
+     * @return array<int, string>
+     */
+    public function getIncompleteTaskNamesForFinish(int $limit = 5): array
+    {
+        return $this->productionTasks()
+            ->whereNull('cancelled_at')
+            ->where('is_finished', false)
+            ->select(['id', 'name'])
+            ->get()
+            ->map(fn (ProductionTask $task): string => (string) ($task->name ?: 'Task #'.$task->id))
+            ->unique()
+            ->take($limit)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Returns required QC labels still incomplete for finish transition.
+     *
+     * A QC check is considered complete once it has a measured value or a
+     * checked timestamp. Result value can still be fail; finish only requires
+     * completion, not conformity.
+     *
+     * @return array<int, string>
+     */
+    public function getIncompleteRequiredQcLabelsForFinish(int $limit = 5): array
+    {
+        return $this->productionQcChecks()
+            ->where('required', true)
+            ->select([
+                'id',
+                'label',
+                'code',
+                'checked_at',
+                'value_number',
+                'value_text',
+                'value_boolean',
+            ])
+            ->get()
+            ->filter(fn (ProductionQcCheck $check): bool => ! $check->isDone())
+            ->map(function (ProductionQcCheck $check): string {
+                $label = trim((string) ($check->label ?? ''));
+
+                if ($label !== '') {
+                    return $label;
+                }
+
+                $code = trim((string) ($check->code ?? ''));
+
+                return $code !== '' ? $code : 'QC #'.$check->id;
+            })
+            ->unique()
+            ->take($limit)
+            ->values()
+            ->all();
+    }
+
+    public function getOutputBlockerMessageForFinish(): ?string
+    {
+        $outputs = $this->relationLoaded('productionOutputs')
+            ? $this->productionOutputs
+            : $this->productionOutputs()->get();
+
+        $mainOutputs = $outputs->filter(fn (ProductionOutput $output): bool => $output->kind === ProductionOutputKind::MainProduct);
+
+        if ($mainOutputs->count() !== 1) {
+            return __('déclarer exactement une sortie principale');
+        }
+
+        $mainOutput = $mainOutputs->first();
+
+        if (! $mainOutput instanceof ProductionOutput) {
+            return __('déclarer une sortie principale valide');
+        }
+
+        if ((int) ($mainOutput->product_id ?? 0) !== (int) ($this->product_id ?? 0)) {
+            return __('lier la sortie principale au produit fabriqué');
+        }
+
+        if ((float) $mainOutput->quantity < 0) {
+            return __('renseigner une quantité valide pour la sortie principale');
+        }
+
+        if ($mainOutput->unit !== $this->getDefaultMainOutputUnit()) {
+            return __('utiliser l\'unité :unit pour la sortie principale', [
+                'unit' => $this->getDefaultMainOutputUnit(),
+            ]);
+        }
+
+        $invalidReworkOutput = $outputs
+            ->first(function (ProductionOutput $output): bool {
+                return $output->kind === ProductionOutputKind::ReworkMaterial
+                    && (! $output->ingredient_id || $output->unit !== 'kg' || (float) $output->quantity <= 0);
+            });
+
+        if ($invalidReworkOutput instanceof ProductionOutput) {
+            return __('compléter correctement la sortie rebatch');
+        }
+
+        $invalidScrapOutput = $outputs
+            ->first(function (ProductionOutput $output): bool {
+                return $output->kind === ProductionOutputKind::Scrap
+                    && ($output->product_id !== null || $output->ingredient_id !== null || $output->unit !== 'kg' || (float) $output->quantity <= 0);
+            });
+
+        if ($invalidScrapOutput instanceof ProductionOutput) {
+            return __('compléter correctement la sortie rebut');
+        }
+
+        $hasPositiveOutput = $outputs->contains(fn (ProductionOutput $output): bool => (float) $output->quantity > 0);
+
+        if (! $hasPositiveOutput) {
+            return __('renseigner au moins une quantité de sortie positive');
+        }
+
+        return null;
+    }
+
     private static function resolveMasterbatchReplacedPhase(Production $production): ?string
     {
         if (! $production->masterbatch_lot_id) {
@@ -497,6 +729,27 @@ class Production extends Model implements Eventable
             'additives' => '30',
             default => (string) $masterbatch->replaces_phase,
         };
+    }
+
+    private function resolveProducedIngredientIdForOutput(): ?int
+    {
+        if ($this->produced_ingredient_id) {
+            return (int) $this->produced_ingredient_id;
+        }
+
+        if ($this->relationLoaded('product') && $this->product?->produced_ingredient_id) {
+            return (int) $this->product->produced_ingredient_id;
+        }
+
+        if (! $this->product_id) {
+            return null;
+        }
+
+        $productIngredientId = Product::query()
+            ->whereKey((int) $this->product_id)
+            ->value('produced_ingredient_id');
+
+        return $productIngredientId ? (int) $productIngredientId : null;
     }
 
     private static function assertMasterbatchLotIsFinished(Production $production): void

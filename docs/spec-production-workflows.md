@@ -151,20 +151,61 @@ Example (factory case):
 
 ## Production Lifecycle Contract
 
+### Planning vs Reconciliation
+
+- `Production.product_id` remains the planning intent:
+  - what product the team intends to make,
+  - which formula/items/tasks/packaging are generated.
+- `production_outputs` records the factual result of the run at finish time.
+- This keeps planning product-first while making reconciliation output-first.
+
+### Production Outputs
+
+- `production_outputs` is the finish-side reconciliation layer for actual batch results.
+- v1 output kinds are intentionally limited to:
+  - `main_product`,
+  - `rework_material`,
+  - `scrap`.
+- Per production, at most one row exists for each kind (`unique(production_id, kind)`):
+  - exactly one `main_product` row is required before finish,
+  - `rework_material` and `scrap` are optional.
+- v1 intentionally avoids unbounded output lists to keep the UI and stock identity model stable.
+
+Output semantics:
+
+- `main_product`
+  - always points to `Production.product_id`,
+  - uses `u` for normal sellable runs,
+  - uses `kg` for internal/manufactured-ingredient runs.
+- `rework_material`
+  - points to an internal manufactured ingredient (for rebatch/rework stock),
+  - always uses `kg`.
+- `scrap`
+  - has no linked product or ingredient,
+  - always uses `kg`.
+
 ### Status transitions
 
 - Allowed transitions are strictly:
   - `planned -> confirmed`
   - `confirmed -> ongoing`
   - `ongoing -> finished`
-  - `planned|confirmed|ongoing -> cancelled`
 - Quick actions support operational confirmation from planning views:
   - list action on production table (`planned -> confirmed`),
   - bulk confirm on production table,
   - row and bulk confirm on wave related productions table.
-- `finished` and `cancelled` are terminal.
+- `finished` is terminal for the active production lifecycle.
+- Legacy `cancelled` productions remain terminal historical records, but `cancelled` is no longer offered as a normal production transition in the UI/domain flow.
 - Backward transitions are not allowed (`confirmed -> planned`, `cancelled -> planned`, etc.).
 - Finishing is blocked when required production items have no selected supply lot.
+- Finishing is also blocked until:
+  - all non-cancelled production tasks are marked finished,
+  - all required QC checks are completed (`done`), regardless of pass/fail conformity result.
+  - outputs are declared correctly:
+    - exactly one `main_product`,
+    - correct unit based on production type,
+    - any optional `rework_material` / `scrap` rows are valid.
+- Output validation is evaluated after lots, tasks, and QC so operators fix blockers in natural execution order.
 
 ### Status semantics
 
@@ -198,9 +239,24 @@ Lifecycle stock behavior:
 - `finished`:
   - release remaining reservations,
   - consume packaging inputs.
-- `cancelled`:
+- legacy `cancelled`:
   - release all reservations,
   - no new consumption is created.
+
+### Finished Output Stock Creation
+
+- Internal stock creation now reads the stock-creating output row instead of raw `planned_quantity`.
+- v1 stock identity rule is intentionally conservative because `supplies.source_production_id` is still one-to-one:
+  - only one output per production may create internal stock.
+- Stock-creating output priority:
+  - internal/manufactured production (`produced_ingredient_id` or product manufactured ingredient) -> `main_product`,
+  - sellable production -> `rework_material` if present,
+  - `scrap` never creates stock.
+- This means:
+  - masterbatch / macerate style runs create their internal lot from `main_product`,
+  - sellable soap runs can create rebatch stock from `rework_material`,
+  - if a production has both an internal `main_product` and a `rework_material`, only the `main_product` is stock-creating in v1.
+- Once a production is `finished`, output rows are treated as read-only in normal UI flow to prevent stock drift after lot creation.
 
 Recompute behavior:
 
@@ -209,8 +265,11 @@ Recompute behavior:
 
 ### Cancellation and deletion behavior
 
-- On cancellation, production tasks are deleted via soft delete.
-- Cancellation is intended for manager/admin governance (policies/gates layer).
+- Production `cancelled` remains supported only for legacy records and historical filters.
+- New production flow should use:
+  - delete before start,
+  - reschedule for postponement,
+  - `finished + production_outputs` for factual outcome reconciliation.
 - Finished productions cannot be deleted.
 - Bulk delete / force-delete actions must exclude finished productions.
 - Non-finished production deletion must rollback reservations and staged consumptions before soft delete.
@@ -233,8 +292,8 @@ Recompute behavior:
 
 ### Wave interaction guardrail
 
-- Wave procurement and requirement status synchronization ignore requirements belonging to cancelled productions.
-- This prevents cancelled batches from inflating wave purchase planning.
+- Wave procurement and requirement status synchronization ignore requirements belonging to legacy cancelled productions.
+- This prevents cancelled historical batches from inflating wave purchase planning.
 - Wave statuses remain manual, but advisory warnings are shown when:
   - linked productions have started while wave is still `approved`,
   - all linked productions are terminal while wave is still `in_progress`.
