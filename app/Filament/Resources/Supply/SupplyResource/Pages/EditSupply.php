@@ -3,9 +3,6 @@
 namespace App\Filament\Resources\Supply\SupplyResource\Pages;
 
 use App\Filament\Resources\Supply\SupplyResource;
-use Filament\Actions\DeleteAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
@@ -23,9 +20,6 @@ class EditSupply extends EditRecord
     {
         return [
             ViewAction::make(),
-            DeleteAction::make(),
-            ForceDeleteAction::make(),
-            RestoreAction::make(),
         ];
     }
 }

@@ -82,4 +82,13 @@ describe('Supply Model', function () {
             'quantity_out' => -5,
         ]))->toThrow(InvalidArgumentException::class, 'quantité consommée ne peut pas être négative');
     });
+
+    it('does not allow deleting stock lots', function () {
+        $supply = Supply::factory()->create();
+
+        expect(fn () => $supply->delete())
+            ->toThrow(InvalidArgumentException::class, 'lots de stock ne peuvent pas être supprimés');
+
+        expect(Supply::query()->find($supply->id))->not->toBeNull();
+    });
 });

@@ -18,7 +18,6 @@ use Filament\Schemas\Schema;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 /**
  * Supply Resource.
@@ -174,9 +173,11 @@ class SupplyResource extends Resource
 
     public static function getEloquentQuery(): Builder
     {
-        return parent::getEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
+        return parent::getEloquentQuery();
+    }
+
+    public static function canDelete(Model $record): bool
+    {
+        return false;
     }
 }

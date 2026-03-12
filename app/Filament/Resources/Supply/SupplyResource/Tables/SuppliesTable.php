@@ -2,25 +2,28 @@
 
 namespace App\Filament\Resources\Supply\SupplyResource\Tables;
 
+use App\Models\Supply\SuppliesMovement;
 use App\Models\Supply\Supply;
+use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ViewColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
-use Filament\Tables\Filters\TrashedFilter;
+use Filament\Tables\Grouping\Group;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Collection;
 
 /**
  * Supplies table configuration.
@@ -128,11 +131,6 @@ class SuppliesTable
                     ->label('En stock')
                     ->boolean(),
 
-                TextColumn::make('deleted_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -151,7 +149,6 @@ class SuppliesTable
                     ->toggleable(),
             ])
             ->filters([
-                TrashedFilter::make(),
                 SelectFilter::make('ingredient')
                     ->label('Ingrédient')
                     ->relationship('supplierListing.ingredient', 'name')
@@ -178,30 +175,30 @@ class SuppliesTable
                     ViewAction::make(),
                     EditAction::make(),
 
-                    \Filament\Actions\Action::make('adjust')
+                    Action::make('adjust')
                         ->label('Ajuster')
                         ->icon(Heroicon::AdjustmentsHorizontal)
                         ->color('warning')
                         ->schema([
-                            \Filament\Forms\Components\TextInput::make('adjustment_quantity')
+                            TextInput::make('adjustment_quantity')
                                 ->label('Quantité d\'ajustement')
                                 ->numeric()
                                 ->step(0.001)
                                 ->required()
                                 ->helperText('Positive = ajout de stock, Négative = retrait de stock'),
 
-                            \Filament\Forms\Components\DateTimePicker::make('moved_at')
+                            DateTimePicker::make('moved_at')
                                 ->label('Date et heure')
                                 ->default(now())
                                 ->required(),
 
-                            \Filament\Forms\Components\Textarea::make('reason')
+                            Textarea::make('reason')
                                 ->label('Raison de l\'ajustement')
                                 ->required()
                                 ->placeholder('Ex: Inventaire, correction erreur, etc.'),
                         ])
                         ->action(function (array $data, Supply $record): void {
-                            \App\Models\Supply\SuppliesMovement::create([
+                            SuppliesMovement::create([
                                 'supply_id' => $record->id,
                                 'quantity' => $data['adjustment_quantity'],
                                 'movement_type' => 'adjustment',
@@ -220,7 +217,7 @@ class SuppliesTable
                         })
                         ->successNotificationTitle('Ajustement créé'),
 
-                    \Filament\Actions\Action::make('markOutOfStock')
+                    Action::make('markOutOfStock')
                         ->label('Marquer épuisé')
                         ->icon(Heroicon::ArchiveBoxXMark)
                         ->color('danger')
@@ -231,7 +228,7 @@ class SuppliesTable
                         ->action(function (Supply $record): void {
                             $record->update(['is_in_stock' => false]);
 
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Lot marqué comme épuisé')
                                 ->body("Le lot {$record->batch_number} a été marqué comme hors stock.")
                                 ->success()
@@ -241,23 +238,19 @@ class SuppliesTable
                 ]),
             ])
             ->groups([
-                \Filament\Tables\Grouping\Group::make('supplierListing.ingredient.name')
+                Group::make('supplierListing.ingredient.name')
                     ->label('Ingrédient')
                     ->collapsible(),
-                \Filament\Tables\Grouping\Group::make('supplierListing.supplier.name')
+                Group::make('supplierListing.supplier.name')
                     ->label('Fournisseur')
                     ->collapsible(),
-                \Filament\Tables\Grouping\Group::make('source')
+                Group::make('source')
                     ->label('Source')
                     ->getTitleFromRecordUsing(fn (Supply $record): string => $record->source_production_id !== null ? 'Interne' : 'Achat')
                     ->collapsible(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-
                     BulkAction::make('markOutOfStock')
                         ->label('Marquer épuisés')
                         ->icon(Heroicon::ArchiveBoxXMark)
@@ -265,7 +258,7 @@ class SuppliesTable
                         ->requiresConfirmation()
                         ->modalHeading('Marquer les lots comme épuisés?')
                         ->modalDescription('Cette action marquera tous les lots sélectionnés comme hors stock.')
-                        ->action(function (\Illuminate\Support\Collection $records): void {
+                        ->action(function (Collection $records): void {
                             $count = 0;
                             foreach ($records as $record) {
                                 if ($record->is_in_stock) {
@@ -274,7 +267,7 @@ class SuppliesTable
                                 }
                             }
 
-                            \Filament\Notifications\Notification::make()
+                            Notification::make()
                                 ->title('Lots marqués comme épuisés')
                                 ->body("{$count} lot(s) ont été marqués comme hors stock.")
                                 ->success()
@@ -306,13 +299,8 @@ class SuppliesTable
         return null;
     }
 
-    /**
-     * Get the Eloquent query without soft deleting scope.
-     */
     public static function getEloquentQuery(Builder $query): Builder
     {
-        return $query->withoutGlobalScopes([
-            SoftDeletingScope::class,
-        ]);
+        return $query;
     }
 }

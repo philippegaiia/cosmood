@@ -8,13 +8,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use InvalidArgumentException;
 
 class Supply extends Model
 {
     use HasFactory;
-    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -52,6 +50,10 @@ class Supply extends Model
                 throw new InvalidArgumentException(__('Le prix unitaire ne peut pas être négatif.'));
             }
         });
+
+        static::deleting(function (Supply $supply): void {
+            throw new InvalidArgumentException(__('Les lots de stock ne peuvent pas être supprimés. Utilisez un ajustement de stock ou marquez le lot comme épuisé.'));
+        });
     }
 
     public function supplierListing(): BelongsTo
@@ -76,6 +78,10 @@ class Supply extends Model
 
     /**
      * Get all stock movements for this supply.
+     *
+     * Supply lots are treated as immutable stock ledger records:
+     * movements stay attached to the lot for traceability, so delete is blocked
+     * in the model instead of relying only on Filament action visibility.
      */
     public function movements(): HasMany
     {

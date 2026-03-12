@@ -78,6 +78,20 @@ This document describes the current production-side business rules implemented i
   - planning board UI keeps dedicated line rows for productions and a separate `Tâches` row for operational follow-up cards,
   - `ProductionTaskType.is_capacity_consuming` remains useful for distinguishing active vs passive task chips in planning UI, but it does not drive line capacity.
 
+### Planning board semantics
+
+- The planning board separates two operational questions:
+  - `Productions`: what is manufactured on each line/day,
+  - `Tâches`: what follow-up work happens around those productions.
+- Production cards are shown only on `Production.production_date`.
+- Capacity is calculated only from production cards on their manufacturing day.
+- Task dates are shown on `ProductionTask.scheduled_date` and are informational for operations; they do not reserve line capacity.
+- The dedicated `Tâches` row exists to avoid implying that later tasks still occupy the manufacturing line.
+- When both toggles are enabled:
+  - line rows remain a capacity view,
+  - the `Tâches` row remains an execution/follow-up view.
+- This distinction is deliberate for soap workflows where curing, packaging, or labeling can happen well after fabrication without blocking the soap line.
+
 ## Automatic Replanning
 
 - Waves can be replanned from a new start date with soft options:
@@ -130,6 +144,18 @@ This document describes the current production-side business rules implemented i
   - procurement item statuses stay indicative,
   - planning views expose explicit warnings when coverage depends on non-committed provisional pool.
 
+## Supply Lot Contract
+
+- `Supply` models a stock lot, not editable master data.
+- Stock lots are immutable for deletion purposes:
+  - they cannot be deleted from the normal UI,
+  - model-level delete is blocked as well.
+- Operational corrections must use one of these paths instead:
+  - stock adjustment (`adjustment` movement),
+  - mark the lot as out of stock (`is_in_stock = false`).
+- This preserves movement traceability and avoids nulling historical ledger links from `supplies_movements`.
+- `SuppliesMovement` still keeps soft-delete internally because allocation rollback for pre-start production deletion removes reservation noise without exposing a recycle-bin workflow to users.
+
 Example (factory case):
 
 - Wave A needs `100 kg` sunflower oil.
@@ -170,6 +196,24 @@ Example (factory case):
   - exactly one `main_product` row is required before finish,
   - `rework_material` and `scrap` are optional.
 - v1 intentionally avoids unbounded output lists to keep the UI and stock identity model stable.
+
+### Rebatch and rebut semantics
+
+- `Matière de rebatch` means reusable internal material.
+  - It is entered in `kg`.
+  - It is intended to create an internal manufactured-ingredient lot.
+  - Example: `40` pieces of `50 g` offcuts are entered as `2.000 kg`, with the piece detail kept in notes if useful.
+- `Rebut` means pure waste.
+  - It is entered in `kg`.
+  - It creates no stock.
+  - It is traceability-only.
+- Planning remains product-first:
+  - the batch is still created against one intended `product_id`,
+  - outputs reconcile what actually came out at finish time.
+- Rebatch loop:
+  - Production A finishes with `rework_material`,
+  - that creates internal ingredient stock,
+  - Production B later consumes that ingredient to create another product (for example pudding soap).
 
 Output semantics:
 
@@ -223,6 +267,15 @@ Output semantics:
   - manufactured stock created from the production.
 - `ongoing`, `finished`, and legacy `cancelled` productions are kept for traceability.
 - Wave deletion is also permanent and must go through the guarded wave deletion service so linked productions are deleted coherently first.
+
+Deletion consequences:
+
+- Deleting a pre-start production behaves like a planning rollback:
+  - reserved quantities become available again,
+  - allocation trace rows are removed from stock movements,
+  - child production rows are removed through normal database cascades.
+- This is intentional: the app treats pre-start deletion as if the batch plan never became operational reality.
+- Once a batch has entered execution or created stock history, deletion is blocked and traceability wins over cleanup.
 
 ### Observer side effects by status
 
@@ -281,15 +334,20 @@ Recompute behavior:
   - reschedule for postponement,
   - `finished + production_outputs` for factual outcome reconciliation.
 - Finished productions cannot be deleted.
-- Bulk delete / force-delete actions must exclude finished productions.
-- Non-finished production deletion must rollback reservations and staged consumptions before soft delete.
-- Production items cannot be deleted once a production is finished.
+- Bulk delete actions must exclude non-deletable records.
+- Non-finished production deletion now performs a permanent delete, not a soft delete.
+- Production items cannot be deleted once a production has started (`ongoing`, `finished`, legacy `cancelled`).
 - Production items are permanently deleted (no soft delete behavior for operator flows).
 - Production items with active allocations (`reserved` or `consumed`) cannot be deleted; they must be deallocated first.
 - Deleting a split child item from the editor merges it back into its nearest active parent to preserve coefficient/quantity balance.
 - Deleting a parent item that still has split children is blocked until split children are merged or removed.
 - Items with consumed allocations are immutable in the editor (no split, no deallocation, no merge-to-delete workflow).
 - For existing items, `ingredient` and `phase` are immutable server-side (UI and backend) to preserve traceability invariants.
+- Production tasks are also permanently deleted when removed; task cancellation relies on `cancelled_at`, not soft delete.
+- Legacy production `cancelled` now preserves task history by marking unfinished tasks cancelled instead of hiding them.
+- Supplier order items are permanently deleted before stock transfer only; once an order item has created stock, deletion is blocked and the linked stock lot must be removed first.
+- Supplier orders are also permanently deleted now (no restore workflow).
+- A supplier order can be deleted only when it no longer contains any order items, so parent deletion cannot bypass stock-transfer guards through database cascades.
 - Production record deletion remains separate from cancellation and should stay exceptional due to traceability impact.
 - Wave hard deletion (`vague + productions`) is guarded and blocked when:
   - wave is `in_progress` or `completed`,
