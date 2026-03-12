@@ -3,6 +3,7 @@
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionLine;
+use App\Models\Production\ProductionTask;
 use App\Services\Production\LineDayOccupancyService;
 use Carbon\Carbon;
 
@@ -35,7 +36,7 @@ describe('LineDayOccupancyService', function () {
             'production_date' => $productionDate->toDateString(),
         ]);
 
-        \App\Models\Production\ProductionTask::factory()->create([
+        ProductionTask::factory()->create([
             'production_id' => $production->id,
             'scheduled_date' => $taskDate,
             'date' => $taskDate,
@@ -47,11 +48,11 @@ describe('LineDayOccupancyService', function () {
             ->and($occupancy[$line->id][$taskDate->toDateString()]['used'])->toBe(0);
     });
 
-    it('excludes soft deleted productions from occupancy', function () {
+    it('excludes permanently deleted productions from occupancy', function () {
         $line = ProductionLine::factory()->create(['daily_batch_capacity' => 2]);
         $date = Carbon::parse('2026-03-09');
 
-        $activeProduction = Production::factory()->create([
+        Production::factory()->create([
             'status' => ProductionStatus::Planned,
             'production_line_id' => $line->id,
             'production_date' => $date->toDateString(),

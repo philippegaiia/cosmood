@@ -47,7 +47,7 @@ Avoid factory-generated fake formulas/products in production-like environments.
 
 - Waves, production tasks/items/requirements, supplier orders, supplies movement, contacts.
 - Included in `DevelopmentDatabaseSeeder` only.
-- Demo production flows should respect lifecycle contract (`planned -> confirmed -> ongoing -> finished|cancelled`) to avoid inconsistent stock side effects.
+- Demo production flows should respect lifecycle contract (`planned -> confirmed -> ongoing -> finished`) and use production outputs for end-of-run reconciliation instead of `cancelled`.
 
 ## Current Guardrails
 

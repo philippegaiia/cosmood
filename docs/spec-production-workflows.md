@@ -214,6 +214,16 @@ Output semantics:
 - Transition to `ongoing` is blocked until all required production items are fully allocated.
 - `ready_date` remains an availability date (soap default +35 days, others +2 days unless overridden).
 
+### Deletion contract
+
+- Production deletion is permanent in normal operation (no restore workflow).
+- Only `planned` and `confirmed` productions can be deleted.
+- Deletion is blocked once stock reality exists, including:
+  - consumed allocations,
+  - manufactured stock created from the production.
+- `ongoing`, `finished`, and legacy `cancelled` productions are kept for traceability.
+- Wave deletion is also permanent and must go through the guarded wave deletion service so linked productions are deleted coherently first.
+
 ### Observer side effects by status
 
 - Create:

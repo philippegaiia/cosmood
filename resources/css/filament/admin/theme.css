@@ -25,3 +25,12 @@
 .ec.ec-resource.ec-timeline .ec-body .ec-days {
     min-height: 3.5rem;
 }
+
+.ec.ec-time-grid .ec-times,
+.ec.ec-time-grid .ec-time {
+    display: none;
+}
+
+.ec.ec-time-grid .ec-body {
+    grid-template-columns: 0 minmax(0, 1fr);
+}

@@ -11,11 +11,8 @@ use App\Services\Production\StatusColorScheme;
 use App\Services\Production\WaveProductionPlanningService;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
-use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\TextInput;
@@ -25,11 +22,9 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Str;
 
 /**
@@ -111,7 +106,6 @@ class ProductionsTable
                     ->trueIcon(Heroicon::OutlinedLink),
             ])
             ->filters([
-                TrashedFilter::make(),
                 SelectFilter::make('production_wave_id')
                     ->label('Vague')
                     ->relationship('wave', 'name'),
@@ -209,13 +203,10 @@ class ProductionsTable
 
                         self::sendConfirmationNotification($summary);
                     }),
-                BulkActionGroup::make([
-                    DeleteBulkAction::make()
-                        ->authorizeIndividualRecords(fn (Production $record): bool => $record->status !== ProductionStatus::Finished),
-                    ForceDeleteBulkAction::make()
-                        ->authorizeIndividualRecords(fn (Production $record): bool => $record->status !== ProductionStatus::Finished),
-                    RestoreBulkAction::make(),
-                ]),
+                DeleteBulkAction::make()
+                    ->label(__('Supprimer définitivement'))
+                    ->modalDescription(__('Supprime définitivement les productions sélectionnées avant démarrage.'))
+                    ->authorizeIndividualRecords(fn (Production $record): bool => $record->canBeDeleted()),
             ])
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['productionItems', 'productionLine']))
             ->defaultSort('created_at', 'desc');
@@ -330,20 +321,5 @@ class ProductionsTable
             ->implode(',');
 
         return route('productions.bulk-documents', ['ids' => $ids]);
-    }
-
-    /**
-     * Get the Eloquent query without soft deleting scope.
-     *
-     * This ensures trashed records are included in queries.
-     *
-     * @param  Builder  $query  The base query
-     * @return Builder The modified query
-     */
-    public static function getEloquentQuery(Builder $query): Builder
-    {
-        return $query->withoutGlobalScopes([
-            SoftDeletingScope::class,
-        ]);
     }
 }

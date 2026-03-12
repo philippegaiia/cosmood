@@ -5,6 +5,14 @@ use App\Enums\ProcurementStatus;
 use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
+use App\Filament\Resources\Production\ProductionResource;
+use App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction;
+use App\Filament\Resources\Production\ProductionResource\Pages\EditProduction;
+use App\Filament\Resources\Production\ProductionResource\Pages\ListProductions;
+use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager;
+use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager;
+use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager;
+use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager;
 use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
@@ -127,7 +135,7 @@ describe('Production - Masterbatch', function () {
             'product_id' => $product->id,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction::class)
+        Livewire::test(CreateProduction::class)
             ->fillForm([
                 'is_masterbatch' => true,
             ])
@@ -166,13 +174,13 @@ describe('Production - Relationships', function () {
     });
 
     it('registers relation manager tabs for items tasks and qc checks', function () {
-        $relations = \App\Filament\Resources\Production\ProductionResource::getRelations();
+        $relations = ProductionResource::getRelations();
 
         expect($relations)
-            ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class)
-            ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager::class)
-            ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager::class)
-            ->toContain(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager::class);
+            ->toContain(ProductionItemsRelationManager::class)
+            ->toContain(ProductionOutputsRelationManager::class)
+            ->toContain(ProductionTasksRelationManager::class)
+            ->toContain(ProductionQcChecksRelationManager::class);
     });
 
     it('does not expose mark done action without entering a qc measurement', function () {
@@ -183,9 +191,9 @@ describe('Production - Relationships', function () {
             'production_id' => $production->id,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager::class, [
+        Livewire::test(ProductionQcChecksRelationManager::class, [
             'ownerRecord' => $production,
-            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+            'pageClass' => EditProduction::class,
         ])->assertDontSee('Marquer fait');
     });
 
@@ -202,9 +210,9 @@ describe('Production - Relationships', function () {
             'source' => 'template',
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager::class, [
+        Livewire::test(ProductionTasksRelationManager::class, [
             'ownerRecord' => $production,
-            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+            'pageClass' => EditProduction::class,
         ])->assertSee('Conditionnement différé')
             ->assertDontSee('Tâche manuelle');
     });
@@ -221,9 +229,9 @@ describe('Production - Relationships', function () {
             'unit' => 'u',
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager::class, [
+        Livewire::test(ProductionOutputsRelationManager::class, [
             'ownerRecord' => $production,
-            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+            'pageClass' => EditProduction::class,
         ])->assertSee('Sortie principale')
             ->assertSee($production->product->name);
     });
@@ -269,9 +277,9 @@ describe('Production - Relationships', function () {
             'percentage_of_oils' => 5,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class, [
+        Livewire::test(ProductionItemsRelationManager::class, [
             'ownerRecord' => $production,
-            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+            'pageClass' => EditProduction::class,
         ])->assertTableColumnSummarySet('product_cost', 'total_cost', 120.0);
     });
 
@@ -298,13 +306,13 @@ describe('Production - Relationships', function () {
             'is_supplied' => true,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class, [
+        Livewire::test(ProductionItemsRelationManager::class, [
             'ownerRecord' => $production,
-            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+            'pageClass' => EditProduction::class,
         ])->assertSee('LOT-UI-001');
     });
 
@@ -339,9 +347,9 @@ describe('Production - Relationships', function () {
             'reserved_at' => now(),
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class, [
+        Livewire::test(ProductionItemsRelationManager::class, [
             'ownerRecord' => $production,
-            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+            'pageClass' => EditProduction::class,
         ])->assertSee('LOT-ACTIVE-001');
     });
 
@@ -352,12 +360,12 @@ describe('Production - Relationships', function () {
         $item = ProductionItem::factory()->create([
             'production_id' => $production->id,
             'is_order_marked' => false,
-            'procurement_status' => \App\Enums\ProcurementStatus::NotOrdered,
+            'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager::class, [
+        Livewire::test(ProductionItemsRelationManager::class, [
             'ownerRecord' => $production,
-            'pageClass' => \App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class,
+            'pageClass' => EditProduction::class,
         ])
             ->assertSee('Non')
             ->callAction(TestAction::make('toggleOrderMark')->table($item))
@@ -367,7 +375,7 @@ describe('Production - Relationships', function () {
             ->assertHasNoErrors();
 
         expect($item->fresh()->is_order_marked)->toBeFalse()
-            ->and($item->fresh()->procurement_status)->toBe(\App\Enums\ProcurementStatus::NotOrdered);
+            ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
     });
 
     it('keeps the original product when editing a production', function () {
@@ -388,7 +396,7 @@ describe('Production - Relationships', function () {
             'formula_id' => $originalProduct->formulas()->value('formulas.id'),
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->set('data.product_id', $replacementProduct->id)
@@ -404,7 +412,7 @@ describe('Production - Relationships', function () {
             'permanent_batch_number' => null,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->set('data.status', ProductionStatus::Ongoing->value)
@@ -432,7 +440,7 @@ describe('Production - Relationships', function () {
             'supply_id' => null,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->set('data.status', ProductionStatus::Ongoing->value)
@@ -456,7 +464,7 @@ describe('Production - Relationships', function () {
             'supply_batch_number' => null,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->set('data.status', ProductionStatus::Finished->value)
@@ -498,7 +506,7 @@ describe('Production - Relationships', function () {
             'required' => true,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->set('data.status', ProductionStatus::Finished->value)
@@ -538,7 +546,7 @@ describe('Production - Relationships', function () {
             'required' => true,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->set('data.status', ProductionStatus::Finished->value)
@@ -582,7 +590,7 @@ describe('Production - Relationships', function () {
             'percentage_of_oils' => 30,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->fillForm([
@@ -628,7 +636,7 @@ describe('Production - Relationships', function () {
             'percentage_of_oils' => 30,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->fillForm([
@@ -670,7 +678,7 @@ describe('Production - Relationships', function () {
             'percentage_of_oils' => 1,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\EditProduction::class, [
+        Livewire::test(EditProduction::class, [
             'record' => $production->id,
         ])
             ->fillForm([
@@ -684,22 +692,20 @@ describe('Production - Relationships', function () {
     });
 });
 
-describe('Production - Soft Deletes', function () {
-    it('can be soft deleted', function () {
-        $production = Production::factory()->create();
+describe('Production deletion contract', function () {
+    it('permanently deletes pre-start productions', function () {
+        $production = Production::factory()->confirmed()->create();
 
         $production->delete();
 
-        expect($production->fresh()->deleted_at)->not->toBeNull();
+        expect(Production::query()->whereKey($production->id)->exists())->toBeFalse();
     });
 
-    it('can be restored', function () {
-        $production = Production::factory()->create();
-        $production->delete();
+    it('keeps ongoing productions undeletable', function () {
+        $production = Production::factory()->inProgress()->create();
 
-        $production->restore();
-
-        expect($production->fresh()->deleted_at)->toBeNull();
+        expect(fn () => $production->delete())
+            ->toThrow(InvalidArgumentException::class, 'Seules les productions planifiées ou confirmées peuvent être supprimées définitivement.');
     });
 });
 
@@ -892,7 +898,7 @@ describe('Production list table actions', function () {
 
         $production = Production::factory()->planned()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\ListProductions::class)
+        Livewire::test(ListProductions::class)
             ->callAction(TestAction::make('confirmProduction')->table($production))
             ->assertHasNoErrors();
 
@@ -904,7 +910,7 @@ describe('Production list table actions', function () {
 
         Production::factory()->count(2)->planned()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\ListProductions::class)
+        Livewire::test(ListProductions::class)
             ->assertSee('Confirmer sélection');
     });
 
@@ -916,7 +922,7 @@ describe('Production list table actions', function () {
             'slug' => 'b5402',
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\ListProductions::class)
+        Livewire::test(ListProductions::class)
             ->callAction(TestAction::make('duplicate')->table($production))
             ->assertHasNoErrors();
 
@@ -939,7 +945,7 @@ describe('Production list table actions', function () {
             'slug' => 'b7000',
         ]);
 
-        $list = Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\ListProductions::class);
+        $list = Livewire::test(ListProductions::class);
 
         $list->callAction(TestAction::make('duplicate')->table($production))->assertHasNoErrors();
 
@@ -980,7 +986,7 @@ describe('Production create form validations', function () {
             'product_id' => $product->id,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction::class)
+        Livewire::test(CreateProduction::class)
             ->fillForm([
                 'product_id' => $product->id,
                 'formula_id' => $formula->id,
@@ -1013,7 +1019,7 @@ describe('Production create form validations', function () {
             'product_id' => $product->id,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction::class)
+        Livewire::test(CreateProduction::class)
             ->fillForm([
                 'production_wave_id' => $wave->id,
                 'batch_number' => 'B-WAVE-VAL-001',

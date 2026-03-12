@@ -90,7 +90,7 @@ class Product extends Model
 
     public function hasProductionHistory(): bool
     {
-        return $this->productions()->withTrashed()->exists();
+        return $this->productions()->exists();
     }
 
     public function setDefaultFormula(?int $formulaId): void

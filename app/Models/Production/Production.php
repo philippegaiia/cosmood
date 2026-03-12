@@ -12,18 +12,18 @@ use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use Carbon\Carbon;
 use Guava\Calendar\Contracts\Eventable;
+use Guava\Calendar\ValueObjects\CalendarEvent;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 class Production extends Model implements Eventable
 {
     use HasFactory;
-    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -111,8 +111,10 @@ class Production extends Model implements Eventable
         });
 
         static::deleting(function (Production $production): void {
-            if ($production->status === ProductionStatus::Finished) {
-                throw new InvalidArgumentException('Finished productions cannot be deleted.');
+            $deletionBlocker = $production->getDeletionBlockerMessage();
+
+            if ($deletionBlocker !== null) {
+                throw new InvalidArgumentException($deletionBlocker);
             }
         });
     }
@@ -334,6 +336,36 @@ class Production extends Model implements Eventable
             'ordered' => 'warning',
             default => 'danger',
         };
+    }
+
+    public function canBeDeleted(): bool
+    {
+        return $this->getDeletionBlockerMessage() === null;
+    }
+
+    public function getDeletionBlockerMessage(): ?string
+    {
+        if ($this->producedSupply()->exists()) {
+            return __('Impossible de supprimer une production ayant créé un stock fabriqué.');
+        }
+
+        $hasConsumedAllocations = $this->productionItems()
+            ->whereHas('allocations', fn ($query) => $query->where('status', 'consumed'))
+            ->exists();
+
+        if ($hasConsumedAllocations) {
+            return __('Impossible de supprimer une production avec des consommations de stock.');
+        }
+
+        $status = $this->status instanceof ProductionStatus
+            ? $this->status
+            : ProductionStatus::tryFrom((string) $this->status);
+
+        if (! in_array($status, [ProductionStatus::Planned, ProductionStatus::Confirmed], true)) {
+            return __('Seules les productions planifiées ou confirmées peuvent être supprimées définitivement.');
+        }
+
+        return null;
     }
 
     public function hasManualOrderMarkedItems(): bool
@@ -884,15 +916,20 @@ class Production extends Model implements Eventable
     /**
      * Convert to calendar event for Guava Calendar.
      */
-    public function toCalendarEvent(): \Guava\Calendar\ValueObjects\CalendarEvent
+    public function toCalendarEvent(): CalendarEvent
+    {
+        return $this->toCalendarEventForDateColumn('production_date');
+    }
+
+    public function toCalendarEventForDateColumn(string $dateColumn): CalendarEvent
     {
         $productName = (string) ($this->product?->name ?? __('Sans nom'));
-        $event = \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
+        $calendarDate = $this->resolveCalendarDate($dateColumn);
+        $event = CalendarEvent::make($this)
             ->title($productName)
-            ->start($this->production_date)
-            ->end($this->production_date)
+            ->start($calendarDate)
+            ->end($calendarDate)
             ->allDay()
-            ->resourceId($this->production_line_id ? 'line-'.$this->production_line_id : 'line-unassigned')
             ->backgroundColor($this->getCalendarColor())
             ->textColor('#ffffff')
             ->extendedProps([
@@ -902,6 +939,13 @@ class Production extends Model implements Eventable
                 'permanentLot' => (string) ($this->permanent_batch_number ?? ''),
                 'status' => $this->status->value,
                 'statusLabel' => $this->status->getLabel(),
+                'lineLabel' => $this->getCalendarLineLabel(),
+                'lineBadge' => $this->getCalendarLineBadge(),
+                'quantityLabel' => $this->getCalendarQuantityLabel(),
+                'unitsLabel' => $this->getCalendarUnitsLabel(),
+                'waveLabel' => $this->getCalendarWaveLabel(),
+                'readyDateLabel' => $this->ready_date?->format('d/m/Y'),
+                'dateBasis' => $dateColumn,
                 'eventType' => 'production',
             ])
             ->action('edit');
@@ -913,6 +957,17 @@ class Production extends Model implements Eventable
         }
 
         return $event;
+    }
+
+    private function resolveCalendarDate(string $dateColumn): Carbon
+    {
+        $date = $this->{$dateColumn};
+
+        if ($date instanceof Carbon) {
+            return $date;
+        }
+
+        return Carbon::parse((string) $date);
     }
 
     /**
@@ -936,6 +991,60 @@ class Production extends Model implements Eventable
         }
 
         return $this->permanent_batch_number.' ('.(string) $this->batch_number.')';
+    }
+
+    private function getCalendarLineLabel(): string
+    {
+        return (string) ($this->productionLine?->name ?? __('Sans ligne'));
+    }
+
+    private function getCalendarLineBadge(): string
+    {
+        if (! $this->productionLine?->name) {
+            return __('Sans ligne');
+        }
+
+        $lineName = trim($this->productionLine->name);
+
+        if (preg_match('/(\d+)/', $lineName, $matches) === 1) {
+            return 'L'.$matches[1];
+        }
+
+        $normalized = Str::of($lineName)
+            ->replaceStart('Ligne ', '')
+            ->replaceStart('ligne ', '')
+            ->trim();
+
+        return Str::limit((string) $normalized, 12, '');
+    }
+
+    private function getCalendarQuantityLabel(): string
+    {
+        if (! filled($this->planned_quantity)) {
+            return __('Qté inconnue');
+        }
+
+        $quantity = rtrim(rtrim(number_format((float) $this->planned_quantity, 3, ',', ' '), '0'), ',');
+
+        return __(':quantity kg', ['quantity' => $quantity]);
+    }
+
+    private function getCalendarUnitsLabel(): ?string
+    {
+        if (! filled($this->expected_units)) {
+            return null;
+        }
+
+        $units = number_format((float) $this->expected_units, 0, ',', ' ');
+
+        return __(':units u.', ['units' => $units]);
+    }
+
+    private function getCalendarWaveLabel(): ?string
+    {
+        $waveName = trim((string) ($this->wave?->name ?? ''));
+
+        return $waveName !== '' ? $waveName : null;
     }
 
     private function resolveCalendarProductionUrl(): ?string

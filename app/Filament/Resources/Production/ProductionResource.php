@@ -18,8 +18,6 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 /**
  * Production resource definition.
@@ -103,20 +101,5 @@ class ProductionResource extends Resource
             'view' => ViewProduction::route('/{record}'),
             'edit' => EditProduction::route('/{record}/edit'),
         ];
-    }
-
-    /**
-     * Get the Eloquent query without soft deleting scope.
-     *
-     * This ensures trashed records are included in queries.
-     *
-     * @return Builder The modified query
-     */
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
     }
 }

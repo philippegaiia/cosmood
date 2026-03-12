@@ -4,6 +4,7 @@ use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Enums\WaveStatus;
 use App\Models\Production\Formula;
+use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
@@ -27,7 +28,7 @@ function waveDeletionService(): WaveDeletionService
 
 function createWaveDeletionProduction(ProductionWave $wave, string $batchNumber, ProductionStatus $status = ProductionStatus::Planned): Production
 {
-    $product = \App\Models\Production\Product::factory()->create();
+    $product = Product::factory()->create();
 
     $formula = Formula::query()->create([
         'name' => 'Formula delete wave '.Str::uuid(),
@@ -78,7 +79,7 @@ it('blocks hard deletion when reserved allocations are present', function (): vo
     ]);
 
     expect(fn () => waveDeletionService()->hardDeleteWaveWithProductions($wave))
-        ->toThrow(\InvalidArgumentException::class, 'Allocations réservées actives');
+        ->toThrow(InvalidArgumentException::class, 'Allocations réservées actives');
 });
 
 it('blocks hard deletion when committed supplier order quantities exist', function (): void {
@@ -105,7 +106,7 @@ it('blocks hard deletion when committed supplier order quantities exist', functi
     ]);
 
     expect(fn () => waveDeletionService()->hardDeleteWaveWithProductions($wave))
-        ->toThrow(\InvalidArgumentException::class, 'Engagements PO actifs');
+        ->toThrow(InvalidArgumentException::class, 'Engagements PO actifs');
 });
 
 it('blocks hard deletion for waves without productions when committed PO lines are linked', function (): void {
@@ -132,17 +133,26 @@ it('blocks hard deletion for waves without productions when committed PO lines a
     ]);
 
     expect(fn () => waveDeletionService()->hardDeleteWaveWithProductions($wave))
-        ->toThrow(\InvalidArgumentException::class, 'PO-WAVE-LOCK');
+        ->toThrow(InvalidArgumentException::class, 'PO-WAVE-LOCK');
+});
+
+it('blocks hard deletion when a legacy cancelled production remains in the wave', function (): void {
+    $wave = ProductionWave::factory()->create(['status' => WaveStatus::Cancelled]);
+    createWaveDeletionProduction($wave, 'T99103');
+    createWaveDeletionProduction($wave, 'T99104', ProductionStatus::Cancelled);
+
+    expect(fn () => waveDeletionService()->hardDeleteWaveWithProductions($wave))
+        ->toThrow(InvalidArgumentException::class, 'Productions historiques présentes');
 });
 
 it('hard deletes wave and linked productions when no blockers remain', function (): void {
     $wave = ProductionWave::factory()->create(['status' => WaveStatus::Cancelled]);
     $productionA = createWaveDeletionProduction($wave, 'T99103');
-    $productionB = createWaveDeletionProduction($wave, 'T99104', ProductionStatus::Cancelled);
+    $productionB = createWaveDeletionProduction($wave, 'T99104', ProductionStatus::Confirmed);
 
     waveDeletionService()->hardDeleteWaveWithProductions($wave);
 
-    expect(ProductionWave::withTrashed()->whereKey($wave->id)->exists())->toBeFalse()
-        ->and(Production::withTrashed()->whereKey($productionA->id)->exists())->toBeFalse()
-        ->and(Production::withTrashed()->whereKey($productionB->id)->exists())->toBeFalse();
+    expect(ProductionWave::query()->whereKey($wave->id)->exists())->toBeFalse()
+        ->and(Production::query()->whereKey($productionA->id)->exists())->toBeFalse()
+        ->and(Production::query()->whereKey($productionB->id)->exists())->toBeFalse();
 });

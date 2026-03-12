@@ -349,9 +349,49 @@ describe('Production Model', function () {
         $production = Production::factory()->finished()->create();
 
         expect(fn () => $production->delete())
-            ->toThrow(InvalidArgumentException::class, 'Finished productions cannot be deleted.');
+            ->toThrow(InvalidArgumentException::class, 'Seules les productions planifiées ou confirmées peuvent être supprimées définitivement.');
 
         expect(Production::query()->find($production->id))->not->toBeNull();
+    });
+
+    it('prevents deleting ongoing productions', function () {
+        $production = Production::factory()->inProgress()->create();
+
+        expect(fn () => $production->delete())
+            ->toThrow(InvalidArgumentException::class, 'Seules les productions planifiées ou confirmées peuvent être supprimées définitivement.');
+
+        expect(Production::query()->whereKey($production->id)->exists())->toBeTrue();
+    });
+
+    it('permanently deletes confirmed productions before start', function () {
+        $production = Production::factory()->confirmed()->create();
+
+        $production->delete();
+
+        expect(Production::query()->whereKey($production->id)->exists())->toBeFalse();
+    });
+
+    it('blocks deleting confirmed productions with consumed allocations', function () {
+        $production = Production::factory()->confirmed()->create();
+        $ingredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(20)->create();
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $item->id,
+            'supply_id' => $supply->id,
+            'quantity' => 5,
+            'status' => 'consumed',
+            'reserved_at' => now(),
+            'consumed_at' => now(),
+        ]);
+
+        expect(fn () => $production->delete())
+            ->toThrow(InvalidArgumentException::class, 'Impossible de supprimer une production avec des consommations de stock.');
     });
 
     it('auto-calculates ready date from production date based on product type', function () {
@@ -415,13 +455,20 @@ describe('Production Model', function () {
             ->and($production->getLotDisplayLabel())->toBe('000321 (plan B-PLAN-001)');
     });
 
-    it('maps calendar event metadata with status color and lot label', function () {
+    it('maps calendar event metadata with status color lot line and quantity labels', function () {
+        $wave = ProductionWave::factory()->create([
+            'name' => 'Vague Avril',
+        ]);
+
         $production = Production::factory()->cancelled()->create([
             'batch_number' => 'B-PLAN-001',
             'permanent_batch_number' => '000321',
+            'planned_quantity' => 12.5,
+            'expected_units' => 320,
+            'production_wave_id' => $wave->id,
         ]);
 
-        $production->load('product');
+        $production->load(['product', 'productionLine', 'wave']);
         $event = $production->toCalendarEvent();
 
         expect($event->getBackgroundColor())->toBe('#ef4444')
@@ -431,16 +478,20 @@ describe('Production Model', function () {
             ->and($event->getExtendedProps()['lotLabel'])->toBe('000321 (B-PLAN-001)')
             ->and($event->getExtendedProps()['status'])->toBe(ProductionStatus::Cancelled->value)
             ->and($event->getExtendedProps()['url'])->toContain('/productions/'.$production->id)
-            ->and($event->getResourceIds())->toContain('line-unassigned');
+            ->and($event->getExtendedProps()['lineLabel'])->toBe('Sans ligne')
+            ->and($event->getExtendedProps()['quantityLabel'])->toBe('12,5 kg')
+            ->and($event->getExtendedProps()['unitsLabel'])->toBe('320 u.')
+            ->and($event->getExtendedProps()['waveLabel'])->toBe('Vague Avril');
     });
 
-    it('maps production line to calendar resource id', function () {
+    it('maps production line badge in calendar event metadata', function () {
         $line = ProductionLine::factory()->create();
         $production = Production::factory()->onProductionLine($line)->create();
 
         $event = $production->toCalendarEvent();
 
-        expect($event->getResourceIds())->toContain('line-'.$line->id);
+        expect($event->getExtendedProps()['lineLabel'])->toBe($line->name)
+            ->and($event->getExtendedProps()['lineBadge'])->not->toBe('');
     });
 
     it('computes supply coverage traffic light states', function () {

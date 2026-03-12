@@ -4,6 +4,11 @@ use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Enums\WaveStatus;
+use App\Filament\Resources\Production\ProductionWaves\Pages\CreateProductionWave;
+use App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave;
+use App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves;
+use App\Filament\Resources\Production\ProductionWaves\ProductionWaveResource;
+use App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
@@ -120,9 +125,9 @@ describe('ProductionWave - Relationships', function () {
     });
 
     it('registers productions relation manager for wave edit page', function () {
-        $relations = \App\Filament\Resources\Production\ProductionWaves\ProductionWaveResource::getRelations();
+        $relations = ProductionWaveResource::getRelations();
 
-        expect($relations)->toContain(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class);
+        expect($relations)->toContain(ProductionsRelationManager::class);
     });
 
     it('shows procurement signal and manual order marker in related productions tab', function () {
@@ -135,9 +140,9 @@ describe('ProductionWave - Relationships', function () {
             'procurement_status' => ProcurementStatus::Ordered,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class, [
+        Livewire::test(ProductionsRelationManager::class, [
             'ownerRecord' => $wave,
-            'pageClass' => \App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class,
+            'pageClass' => EditProductionWave::class,
         ])
             ->assertSee('Commandé')
             ->assertSee('Oui (1)');
@@ -147,9 +152,9 @@ describe('ProductionWave - Relationships', function () {
         $wave = ProductionWave::factory()->approved()->create();
         $production = Production::factory()->forWave($wave)->planned()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class, [
+        Livewire::test(ProductionsRelationManager::class, [
             'ownerRecord' => $wave,
-            'pageClass' => \App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class,
+            'pageClass' => EditProductionWave::class,
         ])
             ->callAction(TestAction::make('confirmProduction')->table($production))
             ->assertHasNoErrors();
@@ -161,9 +166,9 @@ describe('ProductionWave - Relationships', function () {
         $wave = ProductionWave::factory()->approved()->create();
         Production::factory()->count(2)->forWave($wave)->planned()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class, [
+        Livewire::test(ProductionsRelationManager::class, [
             'ownerRecord' => $wave,
-            'pageClass' => \App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class,
+            'pageClass' => EditProductionWave::class,
         ])
             ->assertSee('Confirmer sélection');
     });
@@ -172,15 +177,15 @@ describe('ProductionWave - Relationships', function () {
         $wave = ProductionWave::factory()->create();
         Production::factory()->forWave($wave)->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class, [
+        Livewire::test(EditProductionWave::class, [
             'record' => $wave->id,
-        ])->assertSeeLivewire(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class);
+        ])->assertSeeLivewire(ProductionsRelationManager::class);
     });
 
     it('shows the approvisionnement tab on edit wave page', function () {
         $wave = ProductionWave::factory()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class, [
+        Livewire::test(EditProductionWave::class, [
             'record' => $wave->id,
         ])->assertSee('Approvisionnement');
     });
@@ -192,9 +197,9 @@ describe('ProductionWave - Relationships', function () {
         $waveProductions = Production::factory()->count(2)->forWave($wave)->create();
         $otherWaveProduction = Production::factory()->forWave($otherWave)->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\RelationManagers\ProductionsRelationManager::class, [
+        Livewire::test(ProductionsRelationManager::class, [
             'ownerRecord' => $wave,
-            'pageClass' => \App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class,
+            'pageClass' => EditProductionWave::class,
         ])
             ->assertCanSeeTableRecords($waveProductions)
             ->assertCanNotSeeTableRecords([$otherWaveProduction]);
@@ -241,28 +246,18 @@ describe('ProductionWave - Status Transitions', function () {
     });
 });
 
-describe('ProductionWave - Soft Deletes', function () {
-    it('can be soft deleted', function () {
+describe('ProductionWave deletion contract', function () {
+    it('blocks direct wave deletion outside the managed service', function () {
         $wave = ProductionWave::factory()->create();
 
-        $wave->delete();
-
-        expect($wave->fresh()->deleted_at)->not->toBeNull();
-    });
-
-    it('can be restored', function () {
-        $wave = ProductionWave::factory()->create();
-        $wave->delete();
-
-        $wave->restore();
-
-        expect($wave->fresh()->deleted_at)->toBeNull();
+        expect(fn () => $wave->delete())
+            ->toThrow(InvalidArgumentException::class, 'Utilisez la suppression définitive de la vague');
     });
 });
 
 describe('ProductionWaveResource - table actions', function () {
     it('creates wave as draft without requiring planned end date on create page', function () {
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\CreateProductionWave::class)
+        Livewire::test(CreateProductionWave::class)
             ->fillForm([
                 'name' => 'Vague création légère',
                 'slug' => 'vague-creation-legere',
@@ -283,7 +278,7 @@ describe('ProductionWaveResource - table actions', function () {
             'planned_end_date' => now()->addDays(10)->toDateString(),
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->callAction(TestAction::make('approve')->table($wave))
             ->assertHasNoErrors();
 
@@ -293,7 +288,7 @@ describe('ProductionWaveResource - table actions', function () {
     it('approves a draft wave from list action', function () {
         $wave = ProductionWave::factory()->draft()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->callAction(TestAction::make('approve')->table($wave))
             ->assertHasNoErrors();
 
@@ -303,7 +298,7 @@ describe('ProductionWaveResource - table actions', function () {
     it('starts an approved wave from list action', function () {
         $wave = ProductionWave::factory()->approved()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->callAction(TestAction::make('start')->table($wave))
             ->assertHasNoErrors();
 
@@ -311,7 +306,7 @@ describe('ProductionWaveResource - table actions', function () {
     });
 
     it('shows procurement coverage legend action on list page', function () {
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->assertSee('Légende couverture');
     });
 
@@ -359,7 +354,7 @@ describe('ProductionWaveResource - table actions', function () {
             'required_quantity' => 3,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->callAction(TestAction::make('markWaveIngredientOrdered')->table($wave), [
                 'ingredient_ids' => [(string) $ingredientMarked->id],
             ])
@@ -388,7 +383,7 @@ describe('ProductionWaveResource - table actions', function () {
             'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->callAction(TestAction::make('procurementPlan')->table($wave))
             ->assertHasNoErrors();
     });
@@ -396,7 +391,7 @@ describe('ProductionWaveResource - table actions', function () {
     it('opens procurement plan action even without requirements', function () {
         $wave = ProductionWave::factory()->approved()->create();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->callAction(TestAction::make('procurementPlan')->table($wave))
             ->assertHasNoErrors();
     });
@@ -419,7 +414,7 @@ describe('ProductionWaveResource - table actions', function () {
             'procurement_status' => ProcurementStatus::NotOrdered,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->assertSee('Couverture appro');
 
         expect($wave->fresh()->getCoverageSignalLabel())->toBe('À sécuriser');
@@ -458,7 +453,7 @@ describe('ProductionWaveResource - table actions', function () {
             'committed_quantity_kg' => 10,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->assertSee('Couverture appro');
 
         expect($wave->fresh()->getCoverageSignalLabel())->toBe('Prête');
@@ -487,7 +482,7 @@ describe('ProductionWaveResource - table actions', function () {
             'is_in_stock' => true,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->assertSee('Couverture appro');
 
         expect($wave->fresh()->getCoverageSignalLabel())->toBe('Partielle');
@@ -540,7 +535,7 @@ describe('ProductionWaveResource - table actions', function () {
             'organic' => true,
         ]);
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves::class)
+        Livewire::test(ListProductionWaves::class)
             ->callAction(TestAction::make('replanWave')->table($wave), [
                 'start_date' => '2026-03-09',
                 'fallback_daily_capacity' => 4,
@@ -590,7 +585,7 @@ describe('ProductionWaveResource - table actions', function () {
         expect($first->fresh()->productionTasks)->not->toBeEmpty()
             ->and($second->fresh()->productionTasks)->not->toBeEmpty();
 
-        Livewire::test(\App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave::class, [
+        Livewire::test(EditProductionWave::class, [
             'record' => $wave->id,
         ])
             ->set('data.planned_start_date', '2026-03-09')

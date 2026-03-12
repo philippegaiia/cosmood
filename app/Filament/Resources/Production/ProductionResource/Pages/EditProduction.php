@@ -9,8 +9,6 @@ use App\Models\Production\Formula;
 use App\Services\Production\MasterbatchService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
@@ -351,10 +349,10 @@ class EditProduction extends EditRecord
                 }),
             ViewAction::make(),
             DeleteAction::make()
-                ->visible(fn (): bool => $this->record->status !== ProductionStatus::Finished),
-            ForceDeleteAction::make()
-                ->visible(fn (): bool => $this->record->status !== ProductionStatus::Finished),
-            RestoreAction::make(),
+                ->label(__('Supprimer définitivement'))
+                ->modalDescription(__('Supprime définitivement cette production avant démarrage.'))
+                ->disabled(fn (): bool => ! $this->record->canBeDeleted())
+                ->tooltip(fn (): ?string => $this->record->getDeletionBlockerMessage()),
         ];
     }
 

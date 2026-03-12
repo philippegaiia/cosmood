@@ -3,96 +3,111 @@
 namespace App\Filament\Widgets;
 
 use App\Enums\ProductionStatus;
+use App\Models\Production\ProductCategory;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionLine;
-use App\Models\Production\ProductionTask;
-use App\Services\Production\TaskGenerationService;
-use Carbon\Carbon;
+use Filament\Actions\Action;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Guava\Calendar\Enums\CalendarViewType;
 use Guava\Calendar\Filament\CalendarWidget;
-use Guava\Calendar\ValueObjects\CalendarResource;
-use Guava\Calendar\ValueObjects\EventDropInfo;
+use Guava\Calendar\ValueObjects\CalendarEvent;
 use Guava\Calendar\ValueObjects\FetchInfo;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\HtmlString;
-use InvalidArgumentException;
 
 /**
  * Production Calendar Widget using Guava Calendar.
  *
  * Shows:
- * - Productions: All statuses with status-based colors
- * - Resources: Production lines as rows (plus unassigned row)
+ * - Productions only, for medium-term planning visibility
+ * - Product, lot, expected quantity, expected units and wave reference
  *
- * Default view: Resource timeline week
- * Drag & Drop: Enabled for productions (tasks are hidden in this view)
+ * Default view: Month
+ * Read-only: all scheduling actions stay on the planning board
  */
 class ProductionCalendarWidget extends CalendarWidget
 {
+    public string $dateBasis = 'production_date';
+
+    public ?string $statusFilter = null;
+
+    public ?int $lineFilter = null;
+
+    public ?int $productCategoryFilter = null;
+
+    public bool $onlyUnassigned = false;
+
     protected HtmlString|string|bool|null $heading = 'Calendrier production';
 
     protected int|string|array $columnSpan = 'full';
 
-    protected CalendarViewType $calendarView = CalendarViewType::ResourceTimelineWeek;
+    protected CalendarViewType $calendarView = CalendarViewType::DayGridMonth;
+
+    protected bool $dayMaxEvents = true;
 
     /**
-     * Timeline is day-based only for production planning (no hourly slots).
-     *
      * @var array<string, mixed>
      */
     protected array $options = [
-        'slotDuration' => ['days' => 1],
-        'slotLabelInterval' => ['days' => 1],
-        'customScrollbars' => true,
-        'dayMaxEvents' => false,
+        'height' => 'auto',
+        'contentHeight' => 'auto',
         'displayEventEnd' => false,
+        'allDaySlot' => true,
+        'slotMinTime' => '00:00:00',
+        'slotMaxTime' => '01:00:00',
+        'headerToolbar' => [
+            'start' => 'prev,next today',
+            'center' => 'title',
+            'end' => 'dayGridMonth,timeGridWeek,listMonth',
+        ],
+        'buttonText' => [
+            'today' => 'Aujourd\'hui',
+            'dayGridMonth' => 'Mois',
+            'timeGridWeek' => 'Semaine',
+            'listMonth' => 'Liste',
+        ],
     ];
 
     protected ?string $locale = 'fr';
 
-    /** Enable drag & drop for calendar events */
-    protected bool $eventDragEnabled = true;
+    /** Calendar remains read-only. */
+    protected bool $eventDragEnabled = false;
 
     /** Enable click handling so event URLs are opened. */
     protected bool $eventClickEnabled = true;
 
     /**
-     * Get events for the calendar.
-     * Returns both productions and tasks that implement Eventable.
+     * Get production events for the selected horizon/filter mode.
      */
     protected function getEvents(FetchInfo $info): Collection|array|Builder
     {
-        return Production::query()
-            ->with(['product', 'productionLine'])
-            ->whereBetween('production_date', [$info->start, $info->end])
-            ->get();
-    }
+        $dateColumn = $this->getCalendarDateColumn();
 
-    protected function getResources(): Collection|array|Builder
-    {
-        $resources = [
-            CalendarResource::make(self::UNASSIGNED_RESOURCE_ID)
-                ->title(__('Sans ligne')),
-        ];
+        $query = Production::query()
+            ->with(['product.productCategory', 'productionLine', 'wave'])
+            ->whereNotNull($dateColumn)
+            ->whereBetween($dateColumn, [$info->start, $info->end]);
 
-        $lines = ProductionLine::query()
-            ->orderBy('sort_order')
-            ->orderBy('name')
-            ->get();
-
-        foreach ($lines as $line) {
-            $resources[] = CalendarResource::make($this->lineToResourceId($line->id))
-                ->title($line->is_active ? $line->name : $line->name.' (inactive)')
-                ->extendedProps([
-                    'lineId' => $line->id,
-                    'capacity' => $line->resolveDailyCapacity(),
-                    'isActive' => $line->is_active,
-                ]);
+        if ($this->statusFilter) {
+            $query->where('status', $this->statusFilter);
         }
 
-        return $resources;
+        if ($this->productCategoryFilter) {
+            $query->whereHas('product', fn (Builder $productQuery) => $productQuery->where('product_category_id', $this->productCategoryFilter));
+        }
+
+        if ($this->onlyUnassigned) {
+            $query->whereNull('production_line_id');
+        } elseif ($this->lineFilter) {
+            $query->where('production_line_id', $this->lineFilter);
+        }
+
+        return $query
+            ->orderBy($dateColumn)
+            ->get()
+            ->map(fn (Production $production): CalendarEvent => $production->toCalendarEventForDateColumn($dateColumn));
     }
 
     protected function eventContent(): string
@@ -100,95 +115,107 @@ class ProductionCalendarWidget extends CalendarWidget
         return view('filament.widgets.production-calendar.event')->render();
     }
 
+    public function getHeaderActions(): array
+    {
+        return [
+            Action::make('filters')
+                ->label(__('Filtres'))
+                ->icon('heroicon-o-funnel')
+                ->fillForm(fn (): array => [
+                    'dateBasis' => $this->dateBasis,
+                    'statusFilter' => $this->statusFilter,
+                    'productCategoryFilter' => $this->productCategoryFilter,
+                    'lineFilter' => $this->lineFilter,
+                    'onlyUnassigned' => $this->onlyUnassigned,
+                ])
+                ->schema([
+                    Select::make('dateBasis')
+                        ->label(__('Afficher par'))
+                        ->options([
+                            'production_date' => __('Date de production'),
+                            'ready_date' => __('Date de disponibilité'),
+                        ])
+                        ->required(),
+                    Select::make('statusFilter')
+                        ->label(__('Statut'))
+                        ->options(collect(ProductionStatus::cases())
+                            ->mapWithKeys(fn (ProductionStatus $status): array => [$status->value => $status->getLabel()])
+                            ->all())
+                        ->placeholder(__('Tous les statuts')),
+                    Select::make('productCategoryFilter')
+                        ->label(__('Catégorie produit'))
+                        ->options($this->getProductCategoryFilterOptions())
+                        ->placeholder(__('Toutes les catégories')),
+                    Select::make('lineFilter')
+                        ->label(__('Ligne'))
+                        ->options($this->getLineFilterOptions())
+                        ->placeholder(__('Toutes les lignes')),
+                    Toggle::make('onlyUnassigned')
+                        ->label(__('Sans ligne uniquement')),
+                ])
+                ->action(function (array $data): void {
+                    $this->dateBasis = $data['dateBasis'];
+                    $this->statusFilter = filled($data['statusFilter'] ?? null) ? (string) $data['statusFilter'] : null;
+                    $this->productCategoryFilter = filled($data['productCategoryFilter'] ?? null) ? (int) $data['productCategoryFilter'] : null;
+                    $this->lineFilter = filled($data['lineFilter'] ?? null) ? (int) $data['lineFilter'] : null;
+                    $this->onlyUnassigned = (bool) ($data['onlyUnassigned'] ?? false);
+
+                    if ($this->onlyUnassigned) {
+                        $this->lineFilter = null;
+                    }
+
+                    $this->refreshRecords();
+                }),
+            Action::make('resetFilters')
+                ->label(__('Réinitialiser'))
+                ->icon('heroicon-o-arrow-path')
+                ->visible(fn (): bool => $this->hasActiveFilters())
+                ->action(function (): void {
+                    $this->dateBasis = 'production_date';
+                    $this->statusFilter = null;
+                    $this->productCategoryFilter = null;
+                    $this->lineFilter = null;
+                    $this->onlyUnassigned = false;
+
+                    $this->refreshRecords();
+                }),
+        ];
+    }
+
+    private function getCalendarDateColumn(): string
+    {
+        return $this->dateBasis === 'ready_date' ? 'ready_date' : 'production_date';
+    }
+
     /**
-     * Handle event drop (drag & drop).
-     * Updates the date when an event is dragged to a new date.
+     * @return array<int, string>
      */
-    protected function onEventDrop(EventDropInfo $info, Model $record): bool
+    private function getLineFilterOptions(): array
     {
-        $deltaDays = $this->resolveDropDeltaDays($info);
-
-        if ($record instanceof Production) {
-            if (! in_array($record->status, [ProductionStatus::Planned, ProductionStatus::Confirmed, ProductionStatus::Ongoing], true)) {
-                return false;
-            }
-
-            $targetLineId = $this->resourceIdToLineId($info->event->getResourceIds());
-            $newDate = Carbon::parse($record->production_date)
-                ->startOfDay()
-                ->addDays($deltaDays)
-                ->toDateString();
-
-            try {
-                $record->update([
-                    'production_date' => $newDate,
-                    'production_line_id' => $targetLineId,
-                ]);
-            } catch (InvalidArgumentException) {
-                return false;
-            }
-
-            $this->refreshRecords();
-
-            return true;
-        }
-
-        if ($record instanceof ProductionTask) {
-            $newDate = Carbon::parse($record->scheduled_date)
-                ->startOfDay()
-                ->addDays($deltaDays)
-                ->toDateString();
-
-            try {
-                app(TaskGenerationService::class)->setManualSchedule($record, $newDate);
-            } catch (InvalidArgumentException) {
-                return false;
-            }
-
-            $this->refreshRecords();
-
-            return true;
-        }
-
-        return false;
-    }
-
-    private const string UNASSIGNED_RESOURCE_ID = 'line-unassigned';
-
-    private function lineToResourceId(?int $lineId): string
-    {
-        if (! $lineId) {
-            return self::UNASSIGNED_RESOURCE_ID;
-        }
-
-        return 'line-'.$lineId;
+        return ProductionLine::query()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 
     /**
-     * @param  array<int, int|string>  $resourceIds
+     * @return array<int, string>
      */
-    private function resourceIdToLineId(array $resourceIds): ?int
+    private function getProductCategoryFilterOptions(): array
     {
-        $resourceId = (string) ($resourceIds[0] ?? self::UNASSIGNED_RESOURCE_ID);
-
-        if ($resourceId === self::UNASSIGNED_RESOURCE_ID) {
-            return null;
-        }
-
-        if (! str_starts_with($resourceId, 'line-')) {
-            return null;
-        }
-
-        $lineId = (int) str_replace('line-', '', $resourceId);
-
-        return $lineId > 0 ? $lineId : null;
+        return ProductCategory::query()
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->all();
     }
 
-    private function resolveDropDeltaDays(EventDropInfo $info): int
+    private function hasActiveFilters(): bool
     {
-        $newStart = $info->event->getStart()->copy()->startOfDay();
-        $oldStart = $info->oldEvent->getStart()->copy()->startOfDay();
-
-        return $oldStart->diffInDays($newStart, false);
+        return $this->dateBasis !== 'production_date'
+            || $this->statusFilter !== null
+            || $this->productCategoryFilter !== null
+            || $this->lineFilter !== null
+            || $this->onlyUnassigned;
     }
 }

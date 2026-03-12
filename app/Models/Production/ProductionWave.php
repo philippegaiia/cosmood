@@ -11,14 +11,26 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use InvalidArgumentException;
 
 class ProductionWave extends Model
 {
     use HasFactory;
-    use SoftDeletes;
+
+    private static bool $allowsManagedDeletion = false;
 
     protected $guarded = [];
+
+    protected static function booted(): void
+    {
+        static::deleting(function (ProductionWave $wave): void {
+            if (self::$allowsManagedDeletion) {
+                return;
+            }
+
+            throw new InvalidArgumentException(__('Utilisez la suppression définitive de la vague pour supprimer également ses productions liées.'));
+        });
+    }
 
     protected function casts(): array
     {
@@ -70,7 +82,7 @@ class ProductionWave extends Model
     public function approve(User $user, ?CarbonInterface $plannedStartDate = null, ?CarbonInterface $plannedEndDate = null): void
     {
         if (! $this->isDraft()) {
-            throw new \InvalidArgumentException('Only draft waves can be approved');
+            throw new InvalidArgumentException('Only draft waves can be approved');
         }
 
         $this->update([
@@ -85,7 +97,7 @@ class ProductionWave extends Model
     public function start(): void
     {
         if (! $this->isApproved()) {
-            throw new \InvalidArgumentException('Only approved waves can be started');
+            throw new InvalidArgumentException('Only approved waves can be started');
         }
 
         $this->update([
@@ -97,13 +109,13 @@ class ProductionWave extends Model
     public function complete(): void
     {
         if (! $this->isInProgress()) {
-            throw new \InvalidArgumentException('Only in progress waves can be completed');
+            throw new InvalidArgumentException('Only in progress waves can be completed');
         }
 
         $openProductionBatches = $this->getOpenProductionBatches();
 
         if ($openProductionBatches !== []) {
-            throw new \InvalidArgumentException(__('Impossible de terminer la vague: productions encore actives (:batches).', [
+            throw new InvalidArgumentException(__('Impossible de terminer la vague: productions encore actives (:batches).', [
                 'batches' => implode(', ', $openProductionBatches),
             ]));
         }
@@ -117,7 +129,7 @@ class ProductionWave extends Model
     public function cancel(): void
     {
         if ($this->isCompleted()) {
-            throw new \InvalidArgumentException('Completed waves cannot be cancelled');
+            throw new InvalidArgumentException('Completed waves cannot be cancelled');
         }
 
         $this->update([
@@ -257,5 +269,16 @@ class ProductionWave extends Model
             ->pluck('batch_number')
             ->map(fn (?string $batchNumber): string => (string) ($batchNumber ?: __('Sans référence')))
             ->all();
+    }
+
+    public static function allowManagedDeletion(callable $callback): mixed
+    {
+        self::$allowsManagedDeletion = true;
+
+        try {
+            return $callback();
+        } finally {
+            self::$allowsManagedDeletion = false;
+        }
     }
 }

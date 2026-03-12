@@ -18,7 +18,7 @@ class WaveDeletionService
      *
      * Business invariants:
      * - No in-progress/completed wave deletion.
-     * - No ongoing/finished productions in the wave.
+     * - No started or legacy-cancelled productions in the wave.
      * - No reserved/consumed allocations remain.
      * - No committed PO quantities remain for the wave.
      */
@@ -27,16 +27,16 @@ class WaveDeletionService
         $this->assertCanHardDeleteWave($wave);
 
         DB::transaction(function () use ($wave): void {
-            $productions = Production::withTrashed()
+            $productions = Production::query()
                 ->where('production_wave_id', $wave->id)
                 ->with(['productionItems.allocations'])
                 ->get();
 
             foreach ($productions as $production) {
-                $production->forceDelete();
+                $production->delete();
             }
 
-            $wave->forceDelete();
+            ProductionWave::allowManagedDeletion(fn () => $wave->delete());
         });
     }
 
@@ -51,7 +51,7 @@ class WaveDeletionService
             $blockers[] = __('La vague est en cours ou terminée.');
         }
 
-        $productionIds = Production::withTrashed()
+        $productionIds = Production::query()
             ->where('production_wave_id', $wave->id)
             ->pluck('id');
 
@@ -83,15 +83,15 @@ class WaveDeletionService
             return $blockers;
         }
 
-        $blockingProductions = Production::withTrashed()
+        $blockingProductions = Production::query()
             ->whereIn('id', $productionIds)
-            ->whereIn('status', [ProductionStatus::Ongoing, ProductionStatus::Finished])
+            ->whereIn('status', [ProductionStatus::Ongoing, ProductionStatus::Finished, ProductionStatus::Cancelled])
             ->pluck('batch_number')
             ->take(5)
             ->values();
 
         if ($blockingProductions->isNotEmpty()) {
-            $blockers[] = __('Productions en cours/terminées présentes: :batches', [
+            $blockers[] = __('Productions historiques présentes: :batches', [
                 'batches' => $blockingProductions->implode(', '),
             ]);
         }
