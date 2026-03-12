@@ -839,48 +839,58 @@ class ProductionItemsEditor extends Component
             $productionItem = ProductionItem::find($item['id']);
 
             if ($productionItem) {
-                $hasActiveAllocations = $productionItem->allocations()
-                    ->whereIn('status', ['reserved', 'consumed'])
-                    ->exists();
+                try {
+                    $hasActiveAllocations = $productionItem->allocations()
+                        ->whereIn('status', ['reserved', 'consumed'])
+                        ->exists();
 
-                if ($hasActiveAllocations) {
-                    Notification::make()
-                        ->title(__('Suppression impossible'))
-                        ->body(__('Cet item a des allocations actives. Désallouez-le avant suppression.'))
-                        ->warning()
-                        ->send();
-
-                    return;
-                }
-
-                if ($productionItem->isSplitChild()) {
-                    $mergedItem = $this->allocationService->mergeSplitItem($productionItem);
-
-                    if ($mergedItem->id === $productionItem->id) {
-                        $productionItem->forceDelete();
-
+                    if ($hasActiveAllocations) {
                         Notification::make()
-                            ->title(__('Item supprimé'))
-                            ->body(__('Parent introuvable: item supprimé sans fusion.'))
+                            ->title(__('Suppression impossible'))
+                            ->body(__('Cet item a des allocations actives. Désallouez-le avant suppression.'))
                             ->warning()
                             ->send();
-                    } else {
-                        Notification::make()
-                            ->title(__('Item fusionné'))
-                            ->body(__('L\'item divisé a été fusionné avec son parent.'))
-                            ->success()
-                            ->send();
+
+                        return;
                     }
-                } elseif ($productionItem->splitChildren()->exists()) {
+
+                    if ($productionItem->isSplitChild()) {
+                        $mergedItem = $this->allocationService->mergeSplitItem($productionItem);
+
+                        if ($mergedItem->id === $productionItem->id) {
+                            $productionItem->delete();
+
+                            Notification::make()
+                                ->title(__('Item supprimé'))
+                                ->body(__('Parent introuvable : item supprimé sans fusion.'))
+                                ->warning()
+                                ->send();
+                        } else {
+                            Notification::make()
+                                ->title(__('Item fusionné'))
+                                ->body(__('L\'item divisé a été fusionné avec son parent.'))
+                                ->success()
+                                ->send();
+                        }
+                    } elseif ($productionItem->splitChildren()->exists()) {
+                        Notification::make()
+                            ->title(__('Suppression impossible'))
+                            ->body(__('Cet item est parent de divisions. Fusionnez ou supprimez les divisions d\'abord.'))
+                            ->warning()
+                            ->send();
+
+                        return;
+                    } else {
+                        $productionItem->delete();
+                    }
+                } catch (\InvalidArgumentException $exception) {
                     Notification::make()
                         ->title(__('Suppression impossible'))
-                        ->body(__('Cet item est parent de divisions. Fusionnez ou supprimez les divisions d\'abord.'))
+                        ->body($exception->getMessage())
                         ->warning()
                         ->send();
 
                     return;
-                } else {
-                    $productionItem->forceDelete();
                 }
             }
 

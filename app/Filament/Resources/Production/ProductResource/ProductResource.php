@@ -16,7 +16,6 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class ProductResource extends Resource
 {
@@ -65,18 +64,10 @@ class ProductResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->with(['formulas'])
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
+            ->with(['formulas']);
     }
 
     public static function canDelete(Model $record): bool
-    {
-        return ! $record->hasProductionHistory();
-    }
-
-    public static function canForceDelete(Model $record): bool
     {
         return ! $record->hasProductionHistory();
     }

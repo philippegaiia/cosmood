@@ -3,29 +3,22 @@
 namespace App\Filament\Resources\Supply\SupplierOrderResource\RelationManagers;
 
 use App\Models\Supply\SupplierListing;
-use Filament\Actions\BulkActionGroup;
+use App\Models\Supply\SupplierOrderItem;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Infolists\Components\TextEntry;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 
 class SupplierOrderItemsRelationManager extends RelationManager
 {
@@ -142,26 +135,36 @@ class SupplierOrderItemsRelationManager extends RelationManager
                 TextColumn::make('unit_weight'),
             ])
             ->filters([
-                TrashedFilter::make(),
+                //
             ])
             ->headerActions([
                 CreateAction::make(),
             ])
             ->recordActions([
                 EditAction::make(),
-                DeleteAction::make(),
-                ForceDeleteAction::make(),
-                RestoreAction::make(),
+                DeleteAction::make()
+                    ->requiresConfirmation()
+                    ->action(function (SupplierOrderItem $record): void {
+                        if ($record->isInSupplies() || $record->supply()->exists()) {
+                            Notification::make()
+                                ->title(__('Opération impossible'))
+                                ->body(__('Cet ingrédient commandé est déjà passé en stock. Supprimez d\'abord le lot correspondant.'))
+                                ->danger()
+                                ->send();
+
+                            return;
+                        }
+
+                        $record->delete();
+
+                        Notification::make()
+                            ->title(__('Ingrédient commandé supprimé'))
+                            ->success()
+                            ->send();
+                    }),
             ])
             ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                ]),
-            ])
-            ->modifyQueryUsing(fn (Builder $query) => $query->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]));
+                //
+            ]);
     }
 }

@@ -4,6 +4,7 @@ namespace App\Observers;
 
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
+use App\Models\Production\ProductionWave;
 use App\Services\Production\ManufacturedIngredientStockService;
 use App\Services\Production\PermanentBatchNumberService;
 use App\Services\Production\ProductionAllocationService;
@@ -14,7 +15,7 @@ use App\Services\Production\WaveRequirementStatusService;
 
 class ProductionObserver
 {
-    private const TASK_DELETION_STATUSES = [
+    private const TASK_CANCELLATION_STATUSES = [
         ProductionStatus::Cancelled,
     ];
 
@@ -39,6 +40,15 @@ class ProductionObserver
         private readonly WaveRequirementStatusService $waveRequirementStatusService,
     ) {}
 
+    /**
+     * Apply production side effects at creation time.
+     *
+     * Invariants:
+     * - items and QC are always generated from the current product/formula/type,
+     * - tasks are generated for all non-legacy-cancelled batches,
+     * - finished creations are rare but still supported for deterministic seeding
+     *   and must therefore create internal stock immediately when relevant.
+     */
     public function created(Production $production): void
     {
         $this->productionItemGenerationService->generateFromFormula($production);
@@ -60,14 +70,24 @@ class ProductionObserver
         $this->syncWaveRequirementStatuses([$production->production_wave_id]);
     }
 
+    /**
+     * React to lifecycle changes while preserving planning/execution semantics.
+     *
+     * Key rules:
+     * - `production_date` moves reschedule tasks only for active planning states,
+     * - status transitions drive staged allocation consumption/release,
+     * - `finished` may create internal stock from production outputs,
+     * - legacy `cancelled` keeps task history by cancelling unfinished tasks,
+     * - wave requirement status must stay synchronized on wave or status changes.
+     */
     public function updated(Production $production): void
     {
         if ($production->wasChanged('product_type_id') && ! $production->productionQcChecks()->exists()) {
             $this->productionQcGenerationService->generateChecksForProduction($production);
         }
 
-        if (in_array($production->status, self::TASK_DELETION_STATUSES, true)) {
-            $production->productionTasks()->delete();
+        if (in_array($production->status, self::TASK_CANCELLATION_STATUSES, true)) {
+            $this->taskGenerationService->cancelTasks($production, __('Production annulée (héritage).'));
         }
 
         if ($production->wasChanged('production_date') && in_array($production->status, self::RESCHEDULABLE_STATUSES, true)) {
@@ -113,6 +133,13 @@ class ProductionObserver
         $this->syncWaveRequirementStatuses([$production->production_wave_id]);
     }
 
+    /**
+     * Applies staged stock side effects for production lifecycle milestones.
+     *
+     * - `ongoing`: consume non-packaging items only.
+     * - `finished`: consume remaining packaging and create internal output stock.
+     * - legacy `cancelled`: release reservations for historical compatibility.
+     */
     private function handleAllocationLifecycle(Production $production): void
     {
         match ($production->status) {
@@ -141,7 +168,7 @@ class ProductionObserver
             ->map(fn (mixed $waveId): int => (int) $waveId)
             ->unique()
             ->each(function (int $waveId): void {
-                $wave = \App\Models\Production\ProductionWave::query()->find($waveId);
+                $wave = ProductionWave::query()->find($waveId);
 
                 if (! $wave) {
                     return;

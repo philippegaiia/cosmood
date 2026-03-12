@@ -135,7 +135,7 @@ describe('allocate', function () {
         ]);
 
         $this->service->allocate($item, $supply);
-    })->throws(\InvalidArgumentException::class, 'has no available quantity');
+    })->throws(InvalidArgumentException::class, 'has no available quantity');
 
     it('throws when item is already fully allocated', function () {
         $supply = Supply::factory()->inStock(50.0)->create();
@@ -154,7 +154,7 @@ describe('allocate', function () {
         $supply2 = Supply::factory()->inStock(50.0)->create();
 
         $this->service->allocate($item, $supply2);
-    })->throws(\InvalidArgumentException::class, 'already fully allocated');
+    })->throws(InvalidArgumentException::class, 'already fully allocated');
 });
 
 describe('release', function () {
@@ -238,7 +238,7 @@ describe('release', function () {
         ]);
 
         // Create initial allocation movement
-        \App\Models\Supply\SuppliesMovement::factory()->create([
+        SuppliesMovement::factory()->create([
             'supply_id' => $supply->id,
             'production_id' => $item->production_id,
             'movement_type' => 'allocation',
@@ -255,7 +255,7 @@ describe('release', function () {
         $allocation = ProductionItemAllocation::factory()->consumed()->create();
 
         $this->service->release($allocation);
-    })->throws(\InvalidArgumentException::class, 'Only reserved allocations can be released');
+    })->throws(InvalidArgumentException::class, 'Only reserved allocations can be released');
 });
 
 describe('releaseAll', function () {
@@ -330,7 +330,7 @@ describe('consume', function () {
         ]);
 
         // Create initial positive allocation movement
-        \App\Models\Supply\SuppliesMovement::factory()->create([
+        SuppliesMovement::factory()->create([
             'supply_id' => $supply->id,
             'production_id' => $item->production_id,
             'movement_type' => 'allocation',
@@ -361,7 +361,7 @@ describe('consume', function () {
         ]);
 
         // Create initial allocation movement
-        \App\Models\Supply\SuppliesMovement::factory()->create([
+        SuppliesMovement::factory()->create([
             'supply_id' => $supply->id,
             'production_id' => $item->production_id,
             'movement_type' => 'allocation',
@@ -433,7 +433,7 @@ describe('getAvailableSupplies', function () {
         ]);
 
         // Create allocation movement
-        \App\Models\Supply\SuppliesMovement::factory()->create([
+        SuppliesMovement::factory()->create([
             'supply_id' => $supply->id,
             'movement_type' => 'allocation',
             'quantity' => 20.0,
@@ -484,7 +484,7 @@ describe('getTotalAvailable', function () {
         ]);
 
         // Create allocation movement
-        \App\Models\Supply\SuppliesMovement::factory()->create([
+        SuppliesMovement::factory()->create([
             'supply_id' => $supply1->id,
             'movement_type' => 'allocation',
             'quantity' => 5.0,
@@ -609,7 +609,7 @@ describe('createSplitItem', function () {
         $this->service->createSplitItem($rootItem);
 
         $this->service->createSplitItem($rootItem->fresh());
-    })->throws(\InvalidArgumentException::class, 'No unallocated quantity to split');
+    })->throws(InvalidArgumentException::class, 'No unallocated quantity to split');
 
     it('prevents split when there is no allocated quantity', function () {
         $production = Production::factory()->create(['planned_quantity' => 100.0]);
@@ -623,7 +623,7 @@ describe('createSplitItem', function () {
         ]);
 
         $this->service->createSplitItem($rootItem);
-    })->throws(\InvalidArgumentException::class, 'Cannot split an item without allocated quantity');
+    })->throws(InvalidArgumentException::class, 'Cannot split an item without allocated quantity');
 
     it('prevents split when allocations are consumed', function () {
         $production = Production::factory()->create(['planned_quantity' => 100.0]);
@@ -641,7 +641,7 @@ describe('createSplitItem', function () {
         $this->service->consume($rootItem->fresh());
 
         $this->service->createSplitItem($rootItem->fresh());
-    })->throws(\InvalidArgumentException::class, 'Cannot split an item with consumed allocations');
+    })->throws(InvalidArgumentException::class, 'Cannot split an item with consumed allocations');
 });
 
 describe('mergeSplitItem', function () {
@@ -665,16 +665,15 @@ describe('mergeSplitItem', function () {
         $this->service->allocate($splitItem1, $supply2, 10.0);
         $splitItem2 = $this->service->createSplitItem($splitItem1);
 
-        ProductionItem::query()
-            ->whereKey($splitItem1->id)
-            ->update(['deleted_at' => now()]);
+        $this->service->releaseAll($splitItem1->fresh());
+        $splitItem1->fresh()->delete();
 
-        $mergedParent = $this->service->mergeSplitItem($splitItem2);
+        $mergedParent = $this->service->mergeSplitItem($splitItem2->fresh());
 
         expect($mergedParent->id)->toBe($rootItem->id)
             ->and((float) $rootItem->fresh()->percentage_of_oils)->toBe(40.0)
             ->and((float) $rootItem->fresh()->required_quantity)->toBe(40.0)
-            ->and(ProductionItem::withTrashed()->find($splitItem2->id))->toBeNull();
+            ->and(ProductionItem::find($splitItem2->id))->toBeNull();
     });
 
     it('reparents direct children before deleting merged split item', function () {
@@ -702,7 +701,7 @@ describe('mergeSplitItem', function () {
         expect($mergedParent->id)->toBe($rootItem->id)
             ->and((float) $rootItem->fresh()->percentage_of_oils)->toBe(30.0)
             ->and((float) $rootItem->fresh()->required_quantity)->toBe(30.0)
-            ->and(ProductionItem::withTrashed()->find($splitItem1->id))->toBeNull();
+            ->and(ProductionItem::find($splitItem1->id))->toBeNull();
 
         $reparentedChild = ProductionItem::find($splitItem2->id);
 
@@ -711,7 +710,7 @@ describe('mergeSplitItem', function () {
             ->and($reparentedChild->split_root_item_id)->toBe($rootItem->id);
     });
 
-    it('keeps split item standalone when no active parent exists', function () {
+    it('keeps split item standalone when its root item is deleted', function () {
         $production = Production::factory()->create(['planned_quantity' => 100.0]);
         $ingredient = Ingredient::factory()->create();
 
@@ -727,9 +726,14 @@ describe('mergeSplitItem', function () {
         $this->service->allocate($rootItem, $supply1, 20.0);
         $splitItem = $this->service->createSplitItem($rootItem);
 
-        ProductionItem::query()
-            ->whereKey($rootItem->id)
-            ->update(['deleted_at' => now()]);
+        $this->service->releaseAll($rootItem->fresh());
+        $rootItem->fresh()->delete();
+
+        $splitItem = $splitItem->fresh();
+
+        expect($splitItem)->not->toBeNull()
+            ->and($splitItem->split_from_item_id)->toBeNull()
+            ->and($splitItem->split_root_item_id)->toBeNull();
 
         $result = $this->service->mergeSplitItem($splitItem);
 
@@ -760,5 +764,5 @@ describe('mergeSplitItem', function () {
         $this->service->consume($splitItem->fresh());
 
         $this->service->mergeSplitItem($splitItem->fresh());
-    })->throws(\InvalidArgumentException::class, 'Cannot merge a split item with consumed allocations');
+    })->throws(InvalidArgumentException::class, 'Cannot merge a split item with consumed allocations');
 });

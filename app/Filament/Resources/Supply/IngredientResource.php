@@ -7,10 +7,9 @@ use App\Filament\Resources\Supply\IngredientResource\Pages\CreateIngredient;
 use App\Filament\Resources\Supply\IngredientResource\Pages\EditIngredient;
 use App\Filament\Resources\Supply\IngredientResource\Pages\ListIngredients;
 use App\Models\Supply\Ingredient;
+use App\Models\Supply\IngredientCategory;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -199,9 +198,7 @@ class IngredientResource extends Resource
 
             ])
             ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
+                //
             ]);
     }
 
@@ -230,7 +227,7 @@ class IngredientResource extends Resource
             return null;
         }
 
-        $category = \App\Models\Supply\IngredientCategory::query()->find($categoryId);
+        $category = IngredientCategory::query()->find($categoryId);
 
         if (! $category || empty($category->code)) {
             return null;
@@ -250,7 +247,7 @@ class IngredientResource extends Resource
             return 'ING'.str_pad((string) (Ingredient::max('id') + 1), 4, '0', STR_PAD_LEFT);
         }
 
-        $category = \App\Models\Supply\IngredientCategory::query()->find($categoryId);
+        $category = IngredientCategory::query()->find($categoryId);
 
         if (! $category || empty($category->code)) {
             return 'ING'.str_pad((string) (Ingredient::max('id') + 1), 4, '0', STR_PAD_LEFT);

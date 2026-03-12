@@ -170,4 +170,26 @@ describe('SupplierOrder Model', function () {
 
         expect((float) $item->fresh()->committed_quantity_kg)->toBe(0.0);
     });
+
+    it('deletes supplier orders permanently when they are empty', function () {
+        $order = SupplierOrder::factory()->create();
+        $orderId = $order->id;
+
+        $order->delete();
+
+        expect(SupplierOrder::query()->find($orderId))->toBeNull();
+    });
+
+    it('blocks deleting supplier orders that still contain items', function () {
+        $order = SupplierOrder::factory()->create();
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+        ]);
+
+        expect(fn () => $order->delete())
+            ->toThrow(InvalidArgumentException::class, 'Cette commande contient des ingrédients commandés.');
+
+        expect(SupplierOrder::query()->find($order->id))->not->toBeNull();
+    });
 });

@@ -27,7 +27,12 @@ class ManufacturedIngredientStockService
     ) {}
 
     /**
-     * Ensures one output supply lot exists for a finished production.
+     * Ensures the single stock-creating output lot exists for a finished production.
+     *
+     * V1 intentionally keeps one produced supply per production because stock
+     * identity still hangs on `supplies.source_production_id`. The output row
+     * that may create stock is therefore resolved upstream by
+     * `Production::getStockCreatingOutput()`.
      */
     public function ensureStockFromFinishedProduction(Production $production): ?Supply
     {
@@ -103,7 +108,7 @@ class ManufacturedIngredientStockService
     }
 
     /**
-     * Resolves the produced ingredient from production or product defaults.
+     * Resolves the internal ingredient created by an internal/manufactured batch.
      */
     private function resolveProducedIngredient(Production $production): ?Ingredient
     {
@@ -130,6 +135,12 @@ class ManufacturedIngredientStockService
         return $ingredient;
     }
 
+    /**
+     * Resolve the ingredient target for the selected stock-creating output.
+     *
+     * - `main_product` reuses the production/product manufactured ingredient.
+     * - `rework_material` points directly to the chosen rebatch ingredient.
+     */
     private function resolveIngredientForOutput(Production $production, ProductionOutput $output): ?Ingredient
     {
         if ($output->kind->value === 'main_product') {

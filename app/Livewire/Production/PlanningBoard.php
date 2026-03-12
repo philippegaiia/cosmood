@@ -233,6 +233,13 @@ class PlanningBoard extends Component
     }
 
     /**
+     * Build the weekly planning board with separated capacity and execution layers.
+     *
+     * Capacity rows are production-first and use `production_date`.
+     * The dedicated `tasks` row is execution-first and uses `scheduled_date`.
+     * This separation is intentional: task timing must stay visible without
+     * implying that later curing/packaging/labeling still occupies the line.
+     *
      * @return array{
      *     lines: array<int, array{id: int|null, key: string, name: string, capacity: int|null, type: string}>,
      *     days: array<int, string>,

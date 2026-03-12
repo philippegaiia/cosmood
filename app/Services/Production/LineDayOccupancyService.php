@@ -6,6 +6,7 @@ use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionLine;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 
 class LineDayOccupancyService
 {
@@ -15,6 +16,7 @@ class LineDayOccupancyService
      * Capacity is anchored to the production manufacturing date, not to task dates.
      * A production consumes one slot on a line/day when its production_date falls
      * on that day and the batch is still in an active planning/execution state.
+     * This is intentionally batch-count based, not task-count based.
      *
      * @param  array<int, int>  $lineIds
      * @return array<int, array<string, array{used: int, capacity: int, is_near_capacity: bool, is_over_capacity: bool, is_closed: bool, has_issue: bool}>>
@@ -97,10 +99,15 @@ class LineDayOccupancyService
     }
 
     /**
+     * Fetch productions that consume one planning slot on the requested day range.
+     *
+     * Only active planning/execution states are included. Historical states stay
+     * visible elsewhere in the board but do not reserve future capacity.
+     *
      * @param  array<int, int>  $lineIds
-     * @return \Illuminate\Support\Collection<int, Production>
+     * @return Collection<int, Production>
      */
-    private function getCapacityProductions(array $lineIds, Carbon $from, Carbon $to): \Illuminate\Support\Collection
+    private function getCapacityProductions(array $lineIds, Carbon $from, Carbon $to): Collection
     {
         return Production::query()
             ->whereIn('production_line_id', $lineIds)

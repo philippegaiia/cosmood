@@ -5,8 +5,6 @@ namespace App\Filament\Resources\Supply\SupplierOrderResource\Pages;
 use App\Filament\Resources\Supply\SupplierOrderResource;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Icons\Heroicon;
@@ -47,26 +45,24 @@ class EditSupplierOrder extends EditRecord
                 ->url(fn (): string => route('supplier-orders.po-email-copy', $this->record))
                 ->openUrlInNewTab(),
             DeleteAction::make()->action(function ($data, $record) {
-                if ($record->supplier_order_items()->count() > 0) {
+                try {
+                    $record->delete();
+
+                    Notification::make()
+                        ->success()
+                        ->title(__('Commande supprimée'))
+                        ->body(__('La commande :reference a été supprimée avec succès.', [
+                            'reference' => $record->order_ref,
+                        ]))
+                        ->send();
+                } catch (\InvalidArgumentException $exception) {
                     Notification::make()
                         ->danger()
-                        ->title('Opération Impossible')
-                        ->body('Cette commande contient des ingrédients commandés. Effacez les pour la supprimer.')
+                        ->title(__('Opération impossible'))
+                        ->body($exception->getMessage())
                         ->send();
-
-                    return;
                 }
-
-                Notification::make()
-                    ->success()
-                    ->title('Commande Supprimée')
-                    ->body('La Commande '.$record->order_ref.'a été supprimée avec succès.')
-                    ->send();
-
-                $record->delete();
             }),
-            ForceDeleteAction::make(),
-            RestoreAction::make(),
         ];
     }
 }

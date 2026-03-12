@@ -4,6 +4,7 @@ use App\Models\Production\Production;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
+use App\Models\Supply\Supply;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
@@ -62,7 +63,7 @@ describe('SupplierOrderItem Model', function () {
                 'unit_weight' => 10,
                 'committed_quantity_kg' => 12,
             ]);
-        })->toThrow(\InvalidArgumentException::class, 'ne peut pas dépasser la quantité commandée');
+        })->toThrow(InvalidArgumentException::class, 'ne peut pas dépasser la quantité commandée');
     });
 
     it('allows commitments equal to ordered quantity', function () {
@@ -106,6 +107,34 @@ describe('SupplierOrderItem Model', function () {
                 'unit_weight' => 25,
                 'committed_quantity_kg' => 0,
             ]);
-        })->toThrow(\InvalidArgumentException::class, 'quantité commandée doit être supérieure à zéro');
+        })->toThrow(InvalidArgumentException::class, 'quantité commandée doit être supérieure à zéro');
+    });
+
+    it('deletes supplier order items permanently before stock transfer', function () {
+        $item = SupplierOrderItem::factory()->create();
+        $itemId = $item->id;
+
+        $item->delete();
+
+        expect(SupplierOrderItem::query()->find($itemId))->toBeNull();
+    });
+
+    it('blocks deleting supplier order items once stock exists', function () {
+        $listing = SupplierListing::factory()->create();
+        $item = SupplierOrderItem::factory()->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_supplies' => 'Stock',
+            'moved_to_stock_at' => now(),
+        ]);
+
+        Supply::factory()->create([
+            'supplier_listing_id' => $listing->id,
+            'supplier_order_item_id' => $item->id,
+        ]);
+
+        expect(fn () => $item->delete())
+            ->toThrow(InvalidArgumentException::class, 'déjà passé en stock');
+
+        expect(SupplierOrderItem::query()->find($item->id))->not->toBeNull();
     });
 });

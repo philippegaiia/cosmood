@@ -271,6 +271,12 @@ class ProductionWave extends Model
             ->all();
     }
 
+    /**
+     * Temporarily allows direct wave deletion inside the guarded service only.
+     *
+     * Waves must not be deleted ad hoc because their productions need to be
+     * deleted in the same transaction and with the same blocker checks.
+     */
     public static function allowManagedDeletion(callable $callback): mixed
     {
         self::$allowsManagedDeletion = true;

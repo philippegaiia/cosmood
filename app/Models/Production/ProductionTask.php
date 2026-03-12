@@ -5,15 +5,14 @@ namespace App\Models\Production;
 use App\Filament\Resources\Production\ProductionResource;
 use App\Models\User;
 use Guava\Calendar\Contracts\Eventable;
+use Guava\Calendar\ValueObjects\CalendarEvent;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProductionTask extends Model implements Eventable
 {
     use HasFactory;
-    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -72,14 +71,14 @@ class ProductionTask extends Model implements Eventable
     /**
      * Convert to calendar event for Guava Calendar.
      */
-    public function toCalendarEvent(): \Guava\Calendar\ValueObjects\CalendarEvent
+    public function toCalendarEvent(): CalendarEvent
     {
         $productName = (string) ($this->production?->product?->name ?? __('Sans nom'));
         $taskName = (string) ($this->name ?? __('Tâche'));
         $backgroundColor = $this->productionTaskType?->color ?? '#6b7280';
         $temporaryLot = (string) ($this->production?->batch_number ?? '');
         $permanentLot = (string) ($this->production?->permanent_batch_number ?? '');
-        $event = \Guava\Calendar\ValueObjects\CalendarEvent::make($this)
+        $event = CalendarEvent::make($this)
             ->title($productName)
             ->start($this->scheduled_date)
             ->end($this->scheduled_date)

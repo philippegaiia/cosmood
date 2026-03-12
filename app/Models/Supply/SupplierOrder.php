@@ -10,13 +10,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use InvalidArgumentException;
 
 class SupplierOrder extends Model
 {
     use HasFactory;
-    use SoftDeletes;
 
     /*protected $filllable = [
         'supplier_id','order_status','order_ref','order_date','delivery_date','confirmation_number','invoice_number','bl_number','freight_cost','description', 'series'
@@ -39,7 +37,7 @@ class SupplierOrder extends Model
     {
         static::creating(function (SupplierOrder $order): void {
             if (blank($order->serial_number)) {
-                $order->serial_number = (int) (self::withTrashed()->max('serial_number') ?? 0) + 1;
+                $order->serial_number = (int) (self::max('serial_number') ?? 0) + 1;
             }
 
             if (blank($order->order_ref) && filled($order->supplier_id)) {
@@ -109,6 +107,12 @@ class SupplierOrder extends Model
         static::saved(function (SupplierOrder $order): void {
             $order->resetCommittedQuantitiesWhenWaveRemoved();
             $order->syncWaveRequirementStatuses();
+        });
+
+        static::deleting(function (SupplierOrder $order): void {
+            if ($order->supplier_order_items()->exists()) {
+                throw new InvalidArgumentException(__('Cette commande contient des ingrédients commandés. Supprimez-les avant de supprimer la commande.'));
+            }
         });
 
         static::deleted(function (SupplierOrder $order): void {

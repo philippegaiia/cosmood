@@ -15,13 +15,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 use InvalidArgumentException;
 
 class ProductionItem extends Model
 {
     use HasFactory;
-    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -51,12 +50,8 @@ class ProductionItem extends Model
                 ? $item->production
                 : $item->production()->first();
 
-            if ($production?->status === ProductionStatus::Finished) {
-                throw new InvalidArgumentException('Production items cannot be deleted once production is finished.');
-            }
-
-            if (! $item->isForceDeleting()) {
-                throw new InvalidArgumentException('Production items must be permanently deleted.');
+            if ($production && ! in_array($production->status, [ProductionStatus::Planned, ProductionStatus::Confirmed], true)) {
+                throw new InvalidArgumentException(__('Les items de production ne peuvent plus être supprimés une fois la fabrication démarrée.'));
             }
 
             $hasActiveAllocations = $item->allocations()
@@ -64,7 +59,7 @@ class ProductionItem extends Model
                 ->exists();
 
             if ($hasActiveAllocations) {
-                throw new InvalidArgumentException('Production items with active allocations cannot be deleted.');
+                throw new InvalidArgumentException(__('Les items de production avec des allocations actives ne peuvent pas être supprimés.'));
             }
         });
     }
@@ -137,15 +132,15 @@ class ProductionItem extends Model
      */
     public function isSplitChild(): bool
     {
-        return $this->split_from_item_id !== null;
+        return $this->split_from_item_id !== null || $this->split_root_item_id !== null;
     }
 
     /**
      * Get all items in the split chain.
      *
-     * @return \Illuminate\Support\Collection<int, ProductionItem>
+     * @return Collection<int, ProductionItem>
      */
-    public function getSplitChain(): \Illuminate\Support\Collection
+    public function getSplitChain(): Collection
     {
         if ($this->split_root_item_id === null) {
             return collect([$this])->merge($this->splitChildren);

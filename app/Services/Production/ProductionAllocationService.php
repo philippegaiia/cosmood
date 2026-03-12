@@ -2,6 +2,7 @@
 
 namespace App\Services\Production;
 
+use App\Enums\AllocationStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
@@ -383,7 +384,7 @@ class ProductionAllocationService
                 'organic' => $lockedOriginalItem->organic,
                 'is_supplied' => false,
                 'procurement_status' => $lockedOriginalItem->procurement_status,
-                'allocation_status' => \App\Enums\AllocationStatus::Unassigned,
+                'allocation_status' => AllocationStatus::Unassigned,
                 'sort' => $lockedOriginalItem->sort + 1,
                 'split_from_item_id' => $lockedOriginalItem->id,
                 'split_root_item_id' => $rootItemId,
@@ -421,7 +422,7 @@ class ProductionAllocationService
             }
 
             if (! $lockedSplitItem->isSplitChild()) {
-                throw new \InvalidArgumentException('Item is not a split child.');
+                return $lockedSplitItem;
             }
 
             $splitHasConsumedAllocations = $lockedSplitItem->allocations()
@@ -476,7 +477,7 @@ class ProductionAllocationService
                 'required_quantity' => round($this->calculateRequiredQuantity($mergeTarget, $newParentCoefficient), 3),
             ]);
 
-            $lockedSplitItem->forceDelete();
+            $lockedSplitItem->delete();
 
             $mergeTarget->updateAllocationStatus();
 
@@ -500,25 +501,25 @@ class ProductionAllocationService
         );
     }
 
+    /**
+     * Resolve the active merge target for a split item.
+     *
+     * With transactional hard deletes, deleted split parents are no longer available through
+     * soft-delete lookups. Children therefore merge back to the first live parent if it still
+     * exists, otherwise they fall back to the live split root tracked on the item itself.
+     */
     private function resolveActiveMergeTarget(ProductionItem $splitItem): ?ProductionItem
     {
-        $nextParentId = $splitItem->split_from_item_id;
-        $visitedParentIds = [];
+        if ($splitItem->split_from_item_id !== null) {
+            $directParent = ProductionItem::query()->find($splitItem->split_from_item_id);
 
-        while ($nextParentId !== null && ! in_array($nextParentId, $visitedParentIds, true)) {
-            $visitedParentIds[] = $nextParentId;
-
-            $candidateParent = ProductionItem::withTrashed()->find($nextParentId);
-
-            if (! $candidateParent) {
-                return null;
+            if ($directParent) {
+                return $directParent;
             }
+        }
 
-            if (! $candidateParent->trashed()) {
-                return $candidateParent;
-            }
-
-            $nextParentId = $candidateParent->split_from_item_id;
+        if ($splitItem->split_root_item_id !== null && $splitItem->split_root_item_id !== $splitItem->id) {
+            return ProductionItem::query()->find($splitItem->split_root_item_id);
         }
 
         return null;

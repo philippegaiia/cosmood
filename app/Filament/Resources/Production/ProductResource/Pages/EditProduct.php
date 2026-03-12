@@ -4,8 +4,6 @@ namespace App\Filament\Resources\Production\ProductResource\Pages;
 
 use App\Filament\Resources\Production\ProductResource\ProductResource;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
 use Filament\Resources\Pages\EditRecord;
 
 class EditProduct extends EditRecord
@@ -22,9 +20,6 @@ class EditProduct extends EditRecord
         return [
             DeleteAction::make()
                 ->visible(fn (): bool => ! $this->record->hasProductionHistory()),
-            ForceDeleteAction::make()
-                ->visible(fn (): bool => ! $this->record->hasProductionHistory()),
-            RestoreAction::make(),
         ];
     }
 

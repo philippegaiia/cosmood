@@ -8,12 +8,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\SoftDeletes;
+use InvalidArgumentException;
 
 class SupplierOrderItem extends Model
 {
     use HasFactory;
-    use SoftDeletes;
 
     protected $guarded = [];
 
@@ -36,7 +35,7 @@ class SupplierOrderItem extends Model
             $orderedUnits = round((float) ($item->quantity ?? 0), 3);
 
             if ($orderedUnits <= 0) {
-                throw new \InvalidArgumentException(__('La quantité commandée doit être supérieure à zéro.'));
+                throw new InvalidArgumentException(__('La quantité commandée doit être supérieure à zéro.'));
             }
 
             $item->quantity = $orderedUnits;
@@ -46,11 +45,11 @@ class SupplierOrderItem extends Model
             $item->committed_quantity_kg = $committedQuantityKg;
 
             if ($committedQuantityKg < 0) {
-                throw new \InvalidArgumentException(__('La quantité engagée ne peut pas être négative.'));
+                throw new InvalidArgumentException(__('La quantité engagée ne peut pas être négative.'));
             }
 
             if ($committedQuantityKg > $orderedQuantityKg) {
-                throw new \InvalidArgumentException(__('La quantité engagée (:committed kg) ne peut pas dépasser la quantité commandée (:ordered kg).', [
+                throw new InvalidArgumentException(__('La quantité engagée (:committed kg) ne peut pas dépasser la quantité commandée (:ordered kg).', [
                     'committed' => number_format($committedQuantityKg, 3, ',', ' '),
                     'ordered' => number_format($orderedQuantityKg, 3, ',', ' '),
                 ]));
@@ -59,6 +58,12 @@ class SupplierOrderItem extends Model
 
         static::saved(function (SupplierOrderItem $item): void {
             $item->syncWaveRequirementStatuses();
+        });
+
+        static::deleting(function (SupplierOrderItem $item): void {
+            if ($item->isInSupplies() || $item->supply()->exists()) {
+                throw new InvalidArgumentException(__('Cet ingrédient commandé est déjà passé en stock. Supprimez d\'abord le lot correspondant.'));
+            }
         });
 
         static::deleted(function (SupplierOrderItem $item): void {

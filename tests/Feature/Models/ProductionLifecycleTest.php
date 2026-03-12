@@ -272,15 +272,15 @@ describe('Production lifecycle orchestration', function () {
         expect($production->fresh()->productionTasks)->toHaveCount(2);
     });
 
-    it('prevents deleting production items when production is finished', function () {
-        $production = Production::factory()->finished()->create();
+    it('prevents deleting production items once production has started', function () {
+        $production = Production::factory()->inProgress()->create();
 
         $item = ProductionItem::factory()->create([
             'production_id' => $production->id,
         ]);
 
         expect(fn () => $item->delete())
-            ->toThrow(InvalidArgumentException::class, 'Production items cannot be deleted once production is finished.');
+            ->toThrow(InvalidArgumentException::class, 'Les items de production ne peuvent plus être supprimés une fois la fabrication démarrée.');
 
         expect(ProductionItem::query()->find($item->id))->not->toBeNull();
     });

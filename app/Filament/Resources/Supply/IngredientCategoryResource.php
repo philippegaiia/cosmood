@@ -7,9 +7,7 @@ use App\Filament\Resources\Supply\IngredientCategoryResource\Pages\EditIngredien
 use App\Filament\Resources\Supply\IngredientCategoryResource\Pages\ListIngredientCategories;
 use App\Models\Supply\IngredientCategory;
 use Filament\Actions\ActionGroup;
-use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\MarkdownEditor;
 use Filament\Forms\Components\Select;
@@ -143,9 +141,7 @@ class IngredientCategoryResource extends Resource
                 ]),
             ])
             ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
+                //
             ]);
     }
 

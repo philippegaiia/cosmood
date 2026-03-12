@@ -5,8 +5,6 @@ namespace App\Filament\Resources\Production\FormulaResource\Pages;
 use App\Enums\Phases;
 use App\Filament\Resources\Production\FormulaResource;
 use Filament\Actions\DeleteAction;
-use Filament\Actions\ForceDeleteAction;
-use Filament\Actions\RestoreAction;
 use Filament\Actions\ViewAction;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
@@ -28,8 +26,6 @@ class EditFormula extends EditRecord
             ViewAction::make(),
             FormulaResource::makeDuplicateAction(),
             DeleteAction::make(),
-            ForceDeleteAction::make(),
-            RestoreAction::make(),
         ];
     }
 

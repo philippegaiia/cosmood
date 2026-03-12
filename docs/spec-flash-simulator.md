@@ -78,6 +78,9 @@ The simulator can now generate persistent planning records:
   - production items generation,
   - QC checks generation,
   - task generation.
+- The simulator remains planning-first:
+  - it creates the intended production batches only,
+  - finish-side reconciliation (`production_outputs`, rebatch, scrap) happens later on the real production records and is intentionally outside simulator scope.
 
 Planner options exposed from simulator:
 

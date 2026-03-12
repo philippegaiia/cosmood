@@ -268,6 +268,14 @@ class Production extends Model implements Eventable
         return (float) ($this->actual_units ?? $this->expected_units ?? 0);
     }
 
+    /**
+     * Resolve the single output row that may create internal stock in v1.
+     *
+     * Stock identity is still one-to-one through `supplies.source_production_id`,
+     * so the model intentionally allows only one stock-creating output per batch:
+     * - internal/manufactured production -> `main_product`
+     * - normal sellable production -> `rework_material`
+     */
     public function getStockCreatingOutput(): ?ProductionOutput
     {
         $outputs = $this->relationLoaded('productionOutputs')
@@ -338,11 +346,26 @@ class Production extends Model implements Eventable
         };
     }
 
+    /**
+     * Whether this production can still be deleted as a planning rollback.
+     *
+     * Deletion is intentionally narrow:
+     * - only before true execution,
+     * - never once stock was consumed or produced,
+     * - no restore semantics.
+     */
     public function canBeDeleted(): bool
     {
         return $this->getDeletionBlockerMessage() === null;
     }
 
+    /**
+     * Human-readable blocker for permanent deletion.
+     *
+     * Returning a message instead of just a boolean keeps UI actions and model
+     * guardrails aligned: the same rule powers both button state and the final
+     * domain exception when deletion is attempted.
+     */
     public function getDeletionBlockerMessage(): ?string
     {
         if ($this->producedSupply()->exists()) {

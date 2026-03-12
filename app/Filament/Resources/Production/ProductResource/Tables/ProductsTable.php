@@ -4,13 +4,10 @@ namespace App\Filament\Resources\Production\ProductResource\Tables;
 
 use App\Filament\Resources\Production\ProductResource\ProductResource;
 use App\Models\Production\Product;
-use Filament\Actions\BulkActionGroup;
 use Filament\Actions\EditAction;
 use Filament\Actions\ReplicateAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
-use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
@@ -55,10 +52,6 @@ class ProductsTable
                     ->toggleable(isToggledHiddenByDefault: true),
                 ToggleColumn::make('is_active')
                     ->sortable(),
-                TextColumn::make('deleted_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -69,7 +62,7 @@ class ProductsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                TrashedFilter::make(),
+                //
             ])
             ->recordActions([
                 EditAction::make(),
@@ -88,11 +81,6 @@ class ProductsTable
                         return $data;
                     })
                     ->successRedirectUrl(fn (Model $replica): string => ProductResource::getUrl('edit', ['record' => $replica])),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    RestoreBulkAction::make(),
-                ]),
             ]);
     }
 }

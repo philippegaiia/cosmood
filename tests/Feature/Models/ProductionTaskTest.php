@@ -5,6 +5,7 @@ use App\Models\Production\ProductionTask;
 use App\Models\Production\ProductionTaskType;
 use App\Models\Production\TaskTemplateItem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 
 uses(RefreshDatabase::class);
 
@@ -58,11 +59,20 @@ describe('ProductionTask Model', function () {
             ->and($task->fresh()->cancelled_reason)->toBe('Test cancellation');
     });
 
+    it('deletes tasks permanently', function () {
+        $task = ProductionTask::factory()->create();
+        $taskId = $task->id;
+
+        $task->delete();
+
+        expect(ProductionTask::query()->find($taskId))->toBeNull();
+    });
+
     it('casts dates correctly', function () {
         $task = ProductionTask::factory()->create();
 
-        expect($task->date)->toBeInstanceOf(\Illuminate\Support\Carbon::class)
-            ->and($task->scheduled_date)->toBeInstanceOf(\Illuminate\Support\Carbon::class);
+        expect($task->date)->toBeInstanceOf(Carbon::class)
+            ->and($task->scheduled_date)->toBeInstanceOf(Carbon::class);
     });
 
     it('uses task type color and exposes lot references in calendar event', function () {

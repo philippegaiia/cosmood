@@ -158,6 +158,52 @@ it('prevents deleting a parent item that still has split children', function ():
         ->and(ProductionItem::find($splitItem->id))->not->toBeNull();
 });
 
+it('blocks removing a production item once production is ongoing', function (): void {
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formule ongoing delete guard',
+        'slug' => 'formule-ongoing-delete-guard',
+        'code' => 'FRM-DEL-ONGOING',
+        'is_active' => true,
+    ]);
+
+    $production = Production::query()->create([
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'slug' => 'batch-ongoing-delete-guard',
+        'batch_number' => 'T90002A',
+        'status' => ProductionStatus::Ongoing,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 100,
+        'expected_units' => 100,
+    ]);
+
+    $ingredient = Ingredient::factory()->create();
+
+    $item = ProductionItem::query()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'supplier_listing_id' => null,
+        'percentage_of_oils' => 30,
+        'phase' => Phases::Saponification,
+        'calculation_mode' => FormulaItemCalculationMode::PercentOfOils,
+        'required_quantity' => 30,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+        'allocation_status' => AllocationStatus::Unassigned,
+        'organic' => true,
+        'is_supplied' => false,
+        'sort' => 1,
+    ]);
+
+    Livewire::test(ProductionItemsEditor::class, ['productionId' => $production->id])
+        ->call('removeItem', 0);
+
+    expect(ProductionItem::find($item->id))->not->toBeNull();
+});
+
 it('keeps ingredient and phase immutable when editing an existing item', function (): void {
     $product = Product::factory()->create();
     $formula = Formula::query()->create([

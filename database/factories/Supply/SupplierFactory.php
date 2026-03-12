@@ -12,13 +12,13 @@ class SupplierFactory extends Factory
 
     public function definition(): array
     {
-        $name = $this->faker->company();
+        $name = $this->faker->unique()->company();
 
         return [
             'name' => $name,
-            'code' => strtoupper($this->faker->bothify('SUP-####')),
+            'code' => strtoupper($this->faker->unique()->bothify('SUP-####')),
             'slug' => Str::slug($name),
-            'customer_code' => strtoupper($this->faker->bothify('CUST-####')),
+            'customer_code' => strtoupper($this->faker->unique()->bothify('CUST-####')),
             'estimated_delivery_days' => 8,
             'address1' => $this->faker->streetAddress(),
             'address2' => null,
@@ -26,7 +26,7 @@ class SupplierFactory extends Factory
             'zipcode' => $this->faker->postcode(),
             'city' => $this->faker->city(),
             'country' => $this->faker->country(),
-            'email' => $this->faker->companyEmail(),
+            'email' => $this->faker->unique()->companyEmail(),
             'phone' => $this->faker->phoneNumber(),
             'website' => $this->faker->url(),
             'description' => $this->faker->sentence(),

@@ -41,6 +41,13 @@ class WaveDeletionService
     }
 
     /**
+     * Returns business blockers for permanent wave deletion.
+     *
+     * The service treats waves as planning containers with strict historical
+     * boundaries: once linked productions became historical (`ongoing`,
+     * `finished`, legacy `cancelled`) or stock/procurement side effects exist,
+     * the wave must stay in the database.
+     *
      * @return array<int, string>
      */
     public function getHardDeleteBlockers(ProductionWave $wave): array
