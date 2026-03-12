@@ -3,16 +3,26 @@
 namespace App\Filament\Resources\Supply\SupplyResource\RelationManagers;
 
 use App\Models\Supply\SuppliesMovement;
+use App\Models\User;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 
 class StockMovementsRelationManager extends RelationManager
 {
     protected static string $relationship = 'movements';
 
     protected static ?string $title = 'Historique des mouvements';
+
+    public static function canViewForRecord(Model $ownerRecord, string $pageClass): bool
+    {
+        /** @var User|null $user */
+        $user = auth()->user();
+
+        return $user?->canAccessStockMovements() ?? false;
+    }
 
     public function table(Table $table): Table
     {

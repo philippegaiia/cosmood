@@ -22,7 +22,8 @@ class ViewSupply extends ViewRecord
     protected function getHeaderActions(): array
     {
         return [
-            EditAction::make(),
+            EditAction::make()
+                ->visible(fn (): bool => auth()->user()?->canManageSupplyInventory() ?? false),
             Action::make('releaseAllAllocations')
                 ->label('Libérer toutes les réservations')
                 ->color('danger')
@@ -31,8 +32,18 @@ class ViewSupply extends ViewRecord
                 ->modalHeading('Libérer toutes les réservations')
                 ->modalDescription('Cette action va libérer toutes les réservations actives pour ce lot. Les productions concernées ne seront plus approvisionnées.')
                 ->modalSubmitActionLabel('Oui, libérer')
-                ->visible(fn () => auth()->check())
+                ->visible(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                 ->action(function (): void {
+                    if (! (auth()->user()?->canManageProductionPlanning() ?? false)) {
+                        Notification::make()
+                            ->title(__('Accès refusé'))
+                            ->body(__('Vous n’avez pas l’autorisation de libérer les réservations de ce lot.'))
+                            ->warning()
+                            ->send();
+
+                        return;
+                    }
+
                     $supply = $this->record;
                     $allocationService = app(ProductionAllocationService::class);
 

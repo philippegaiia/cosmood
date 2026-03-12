@@ -86,7 +86,8 @@ class EditProductionWave extends EditRecord
                 ->icon('heroicon-o-trash')
                 ->color('danger')
                 ->requiresConfirmation()
-                ->visible(fn (): bool => ! $this->record->isInProgress() && ! $this->record->isCompleted())
+                ->visible(fn (): bool => ! $this->record->isInProgress() && ! $this->record->isCompleted() && (auth()->user()?->canDeleteWaves() ?? false))
+                ->authorize(fn (): bool => auth()->user()?->canDeleteWaves() ?? false)
                 ->modalDescription('Supprime définitivement la vague et ses productions. Les allocations doivent être désallouées et les engagements PO retirés manuellement.')
                 ->action(function (): void {
                     try {

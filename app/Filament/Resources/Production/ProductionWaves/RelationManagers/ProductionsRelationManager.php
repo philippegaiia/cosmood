@@ -74,7 +74,8 @@ class ProductionsRelationManager extends RelationManager
                     ->icon(Heroicon::OutlinedCheckCircle)
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (Production $record): bool => $record->status === ProductionStatus::Planned)
+                    ->visible(fn (Production $record): bool => $record->status === ProductionStatus::Planned && (auth()->user()?->canManageProductionPlanning() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->action(function (Production $record): void {
                         $summary = app(ProductionStatusTransitionService::class)
                             ->confirmPlannedProductions(collect([$record]));
@@ -88,6 +89,7 @@ class ProductionsRelationManager extends RelationManager
                     ->icon(Heroicon::OutlinedCheckCircle)
                     ->requiresConfirmation()
                     ->deselectRecordsAfterCompletion()
+                    ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->action(function (Collection $records): void {
                         $summary = app(ProductionStatusTransitionService::class)
                             ->confirmPlannedProductions($records);

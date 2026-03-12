@@ -7,18 +7,25 @@ use Database\Seeders\Supply\IngredientCategorySeeder;
 use Database\Seeders\Supply\IngredientSeeder;
 use Database\Seeders\Supply\SupplierSeeder;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Role;
 
 class ProductionDatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        User::query()->updateOrCreate(
+        $adminUser = User::query()->updateOrCreate(
             ['email' => 'admin@admin.com'],
             [
                 'name' => 'Admin',
                 'password' => bcrypt('password'),
             ]
         );
+
+        $this->call(ShieldRolesSeeder::class);
+
+        $adminUser->syncRoles([
+            Role::findOrCreate(config('filament-shield.super_admin.name', 'super_admin')),
+        ]);
 
         $this->call(SupplierSeeder::class);
         $this->call(SupplierContactSeeder::class);

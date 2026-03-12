@@ -27,6 +27,16 @@ Avoid factory-generated fake formulas/products in production-like environments.
 
 ## Data Ownership
 
+### Access/bootstrap seeders
+
+- `database/seeders/ShieldRolesSeeder.php`
+  - Generates Shield permissions for the `admin` panel when missing in non-production environments.
+  - Syncs the base roles:
+    - `super_admin`
+    - `manager`
+    - `planner`
+    - `operator`
+
 ### Real-data seeders (source of truth)
 
 - `database/seeders/ProductSeeder.php`
@@ -54,6 +64,8 @@ Avoid factory-generated fake formulas/products in production-like environments.
 - Legacy overlapping seeders removed to avoid duplicate/conflicting sources.
 - Formula seeders use `updateOrInsert` (idempotent, non-destructive).
 - Several demo seeders early-return when data already exists, reducing accidental re-seeding conflicts.
+- `ProductionDatabaseSeeder` now bootstraps Shield roles before domain data and reassigns `admin@admin.com` to `super_admin`.
+- `ShieldRolesSeeder` refuses to auto-generate permissions in production, so production deployments must keep Shield generation explicit.
 
 ## Rules
 

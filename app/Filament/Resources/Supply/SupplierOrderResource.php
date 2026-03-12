@@ -13,11 +13,7 @@ use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
 use App\Services\InventoryMovementService;
 use Filament\Actions\Action;
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
-use Filament\Actions\ForceDeleteBulkAction;
-use Filament\Actions\RestoreBulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\MarkdownEditor;
@@ -36,11 +32,9 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
-use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletingScope;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
@@ -117,7 +111,7 @@ class SupplierOrderResource extends Resource
                             ->disabledOn('edit')
                             ->numeric()
                             ->default(function () {
-                                $serie = (SupplierOrder::withTrashed()->max('serial_number') ?? 0) + 1;
+                                $serie = (SupplierOrder::max('serial_number') ?? 0) + 1;
                                 // dd($serie);
                                 $serie = str_pad($serie, 4, '0', STR_PAD_LEFT);
 
@@ -348,12 +342,13 @@ class SupplierOrderResource extends Resource
                                 Action::make('createNewInventory')
                                     ->label('Créer Stock')
                                     ->hidden(
-                                        fn (array $arguments, Repeater $component, $record) => ! isset($component->getRawItemState($arguments['item'])['id'])
-                                        || ! isset($record->id)
-                                        || ($record->order_status !== OrderStatus::Checked)
-                                        || ! isset($record->delivery_date)
-                                        || (($item = SupplierOrderItem::query()->find((int) $component->getRawItemState($arguments['item'])['id']))
-                                            && ($item->isInSupplies() || $item->supply()->exists()))
+                                        fn (array $arguments, Repeater $component, $record) => ! (auth()->user()?->canReceiveSupplierOrdersIntoStock() ?? false)
+                                            || ! isset($component->getRawItemState($arguments['item'])['id'])
+                                            || ! isset($record->id)
+                                            || ($record->order_status !== OrderStatus::Checked)
+                                            || ! isset($record->delivery_date)
+                                            || (($item = SupplierOrderItem::query()->find((int) $component->getRawItemState($arguments['item'])['id']))
+                                                && ($item->isInSupplies() || $item->supply()->exists()))
                                     )
                                     ->icon('heroicon-m-arrow-trending-up')
                                     ->requiresConfirmation()
@@ -362,6 +357,16 @@ class SupplierOrderResource extends Resource
                                 //      $livewire->dispatch('refreshIsInSupplies');
                                 //  })
                                     ->action(function (array $arguments, Repeater $component, $record): void {
+                                        if (! (auth()->user()?->canReceiveSupplierOrdersIntoStock() ?? false)) {
+                                            Notification::make()
+                                                ->title(__('Accès refusé'))
+                                                ->body(__('Vous n’avez pas l’autorisation de réceptionner ce lot en stock.'))
+                                                ->warning()
+                                                ->send();
+
+                                            return;
+                                        }
+
                                         $rawItemState = $component->getRawItemState($arguments['item']);
                                         $itemData = $component->getItemState($arguments['item']);
 
@@ -539,11 +544,6 @@ class SupplierOrderResource extends Resource
                 TextColumn::make('freight_cost')
                     ->toggleable(isToggledHiddenByDefault: true),
 
-                TextColumn::make('deleted_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -555,7 +555,6 @@ class SupplierOrderResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                TrashedFilter::make(),
                 SelectFilter::make('production_wave_id')
                     ->label('Vague')
                     ->relationship('wave', 'name'),
@@ -579,13 +578,8 @@ class SupplierOrderResource extends Resource
                     ->openUrlInNewTab(),
                 EditAction::make(),
             ])
-
             ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                    ForceDeleteBulkAction::make(),
-                    RestoreBulkAction::make(),
-                ]),
+                //
             ]);
     }
 
@@ -636,18 +630,6 @@ class SupplierOrderResource extends Resource
             'create' => CreateSupplierOrder::route('/create'),
             'edit' => EditSupplierOrder::route('/{record}/edit'),
         ];
-    }
-
-    /**
-     * Gets the Eloquent query builder for the model, without the soft deleting global scope.
-     * This allows access to soft deleted models.
-     */
-    public static function getEloquentQuery(): Builder
-    {
-        return parent::getEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
     }
 
     protected function getRedirectUrl(): string

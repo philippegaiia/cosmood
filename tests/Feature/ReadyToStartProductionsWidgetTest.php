@@ -11,9 +11,13 @@ use App\Models\Supply\Supply;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 
 beforeEach(function (): void {
-    $this->actingAs(User::factory()->create());
+    $user = User::factory()->create();
+    $user->assignRole(Role::findOrCreate('operator'));
+
+    $this->actingAs($user);
 });
 
 it('does not move a production to ongoing from the widget when allocations are incomplete', function (): void {

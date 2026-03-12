@@ -77,6 +77,8 @@ class ReadyToStartProductionsWidget extends BaseWidget
                     ->icon(Heroicon::Play)
                     ->color('success')
                     ->requiresConfirmation()
+                    ->visible(fn (): bool => auth()->user()?->canStartProductionRuns() ?? false)
+                    ->authorize(fn (): bool => auth()->user()?->canStartProductionRuns() ?? false)
                     ->action(function (Production $record): void {
                         $record->refresh();
 

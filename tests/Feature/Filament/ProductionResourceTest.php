@@ -30,9 +30,11 @@ use App\Models\Supply\Supply;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
+    $this->user->assignRole(Role::findOrCreate('manager'));
 });
 
 describe('Production Model', function () {

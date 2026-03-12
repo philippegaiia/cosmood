@@ -179,6 +179,7 @@ class SuppliesTable
                         ->label('Ajuster')
                         ->icon(Heroicon::AdjustmentsHorizontal)
                         ->color('warning')
+                        ->visible(fn (): bool => auth()->user()?->canManageSupplyInventory() ?? false)
                         ->schema([
                             TextInput::make('adjustment_quantity')
                                 ->label('Quantité d\'ajustement')
@@ -198,6 +199,16 @@ class SuppliesTable
                                 ->placeholder('Ex: Inventaire, correction erreur, etc.'),
                         ])
                         ->action(function (array $data, Supply $record): void {
+                            if (! (auth()->user()?->canManageSupplyInventory() ?? false)) {
+                                Notification::make()
+                                    ->title(__('Accès refusé'))
+                                    ->body(__('Vous n’avez pas l’autorisation d’ajuster ce lot.'))
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
                             SuppliesMovement::create([
                                 'supply_id' => $record->id,
                                 'quantity' => $data['adjustment_quantity'],
@@ -221,11 +232,21 @@ class SuppliesTable
                         ->label('Marquer épuisé')
                         ->icon(Heroicon::ArchiveBoxXMark)
                         ->color('danger')
+                        ->visible(fn (Supply $record): bool => $record->is_in_stock && (auth()->user()?->canManageSupplyInventory() ?? false))
                         ->requiresConfirmation()
                         ->modalHeading('Marquer ce lot comme épuisé?')
                         ->modalDescription('Cette action marquera le lot comme hors stock. Assurez-vous d\'avoir effectué un ajustement manuel si nécessaire.')
-                        ->visible(fn (Supply $record): bool => $record->is_in_stock)
                         ->action(function (Supply $record): void {
+                            if (! (auth()->user()?->canManageSupplyInventory() ?? false)) {
+                                Notification::make()
+                                    ->title(__('Accès refusé'))
+                                    ->body(__('Vous n’avez pas l’autorisation de modifier le statut stock de ce lot.'))
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
                             $record->update(['is_in_stock' => false]);
 
                             Notification::make()
@@ -255,10 +276,21 @@ class SuppliesTable
                         ->label('Marquer épuisés')
                         ->icon(Heroicon::ArchiveBoxXMark)
                         ->color('danger')
+                        ->visible(fn (): bool => auth()->user()?->canManageSupplyInventory() ?? false)
                         ->requiresConfirmation()
                         ->modalHeading('Marquer les lots comme épuisés?')
                         ->modalDescription('Cette action marquera tous les lots sélectionnés comme hors stock.')
                         ->action(function (Collection $records): void {
+                            if (! (auth()->user()?->canManageSupplyInventory() ?? false)) {
+                                Notification::make()
+                                    ->title(__('Accès refusé'))
+                                    ->body(__('Vous n’avez pas l’autorisation de modifier le statut stock de ces lots.'))
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
                             $count = 0;
                             foreach ($records as $record) {
                                 if ($record->is_in_stock) {

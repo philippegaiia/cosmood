@@ -2,8 +2,11 @@
 
 namespace App\Filament\Resources\Supply\SupplyResource\Pages;
 
+use App\Filament\Resources\Supply\StockMovements\StockMovementResource;
 use App\Filament\Resources\Supply\SupplyResource;
+use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
+use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Support\Enums\Width;
@@ -39,7 +42,7 @@ class ListSupplies extends ListRecords
                     });
                 })
                 ->badge(function (): int {
-                    return \App\Models\Supply\Ingredient::query()
+                    return Ingredient::query()
                         ->where('stock_min', '>', 0)
                         ->get()
                         ->filter(fn ($i) => $i->getTotalAvailableStock() < $i->stock_min)
@@ -57,11 +60,12 @@ class ListSupplies extends ListRecords
     public function getHeaderActions(): array
     {
         return [
-            \Filament\Actions\Action::make('movements')
+            Action::make('movements')
                 ->label('Voir mouvements')
                 ->icon('heroicon-o-arrows-right-left')
-                ->url(\App\Filament\Resources\Supply\StockMovements\StockMovementResource::getUrl('index'))
-                ->openUrlInNewTab(),
+                ->url(StockMovementResource::getUrl('index'))
+                ->openUrlInNewTab()
+                ->visible(fn (): bool => auth()->user()?->canAccessStockMovements() ?? false),
         ];
     }
 }

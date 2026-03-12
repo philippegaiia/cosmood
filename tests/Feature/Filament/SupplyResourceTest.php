@@ -1,9 +1,15 @@
 <?php
 
+use App\Filament\Resources\Supply\SupplyResource;
+use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
+use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
+use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
+use App\Filament\Resources\Supply\SupplyResource\RelationManagers\StockMovementsRelationManager;
 use App\Models\Supply\Supply;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 
 uses(RefreshDatabase::class);
 
@@ -14,7 +20,7 @@ beforeEach(function () {
 it('lists supplies in table', function () {
     $supplies = Supply::factory()->count(3)->create();
 
-    Livewire::test(\App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies::class)
+    Livewire::test(ListSupplies::class)
         ->assertCanSeeTableRecords($supplies);
 });
 
@@ -22,13 +28,13 @@ it('loads supplies list page successfully', function () {
     $supplyA = Supply::factory()->create(['batch_number' => 'BATCH-ALPHA-01']);
     $supplyB = Supply::factory()->create(['batch_number' => 'BATCH-BETA-01']);
 
-    Livewire::test(\App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies::class)
+    Livewire::test(ListSupplies::class)
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$supplyA, $supplyB]);
 });
 
 it('disables manual supply creation from inventory resource', function () {
-    expect(\App\Filament\Resources\Supply\SupplyResource::canCreate())->toBeFalse();
+    expect(SupplyResource::canCreate())->toBeFalse();
 });
 
 it('does not persist direct edits on stock quantity fields', function () {
@@ -38,7 +44,11 @@ it('does not persist direct edits on stock quantity fields', function () {
         'quantity_out' => 3,
     ]);
 
-    Livewire::test(\App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply::class, ['record' => $supply->id])
+    $manager = User::factory()->create();
+    $manager->assignRole(Role::findOrCreate('manager'));
+    $this->actingAs($manager);
+
+    Livewire::test(EditSupply::class, ['record' => $supply->id])
         ->fillForm([
             'initial_quantity' => 999,
             'quantity_in' => 888,
@@ -50,4 +60,42 @@ it('does not persist direct edits on stock quantity fields', function () {
     expect((float) $supply->fresh()->initial_quantity)->toBe(5.0)
         ->and((float) $supply->fresh()->quantity_in)->toBe(12.0)
         ->and((float) $supply->fresh()->quantity_out)->toBe(3.0);
+});
+
+it('limits supply edit access to managers', function () {
+    $supply = Supply::factory()->create();
+
+    $planner = User::factory()->create();
+    $planner->assignRole(Role::findOrCreate('planner'));
+    $this->actingAs($planner);
+
+    expect(SupplyResource::canEdit($supply))->toBeFalse();
+
+    $manager = User::factory()->create();
+    $manager->assignRole(Role::findOrCreate('manager'));
+    $this->actingAs($manager);
+
+    expect(SupplyResource::canEdit($supply))->toBeTrue();
+});
+
+it('limits stock movement relation visibility to managers', function () {
+    $supply = Supply::factory()->create();
+
+    $planner = User::factory()->create();
+    $planner->assignRole(Role::findOrCreate('planner'));
+    $this->actingAs($planner);
+
+    expect(StockMovementsRelationManager::canViewForRecord(
+        $supply,
+        ViewSupply::class,
+    ))->toBeFalse();
+
+    $manager = User::factory()->create();
+    $manager->assignRole(Role::findOrCreate('manager'));
+    $this->actingAs($manager);
+
+    expect(StockMovementsRelationManager::canViewForRecord(
+        $supply,
+        ViewSupply::class,
+    ))->toBeTrue();
 });

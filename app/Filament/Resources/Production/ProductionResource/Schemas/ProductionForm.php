@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Production\ProductionResource\Schemas;
 
+use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Enums\WaveStatus;
@@ -12,6 +13,8 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductType;
+use App\Models\User;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
@@ -27,6 +30,7 @@ use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
@@ -77,7 +81,7 @@ class ProductionForm
     private static function getPlanningTab(): Tab
     {
         return Tab::make('Planification')
-            ->icon(\Filament\Support\Icons\Heroicon::OutlinedCalendarDays)
+            ->icon(Heroicon::OutlinedCalendarDays)
             ->schema([
                 self::getBatchIdentificationSection(),
                 self::getProductSelectionSection(),
@@ -358,7 +362,7 @@ class ProductionForm
     private static function getExecutionTab(): Tab
     {
         return Tab::make('Exécution')
-            ->icon(\Filament\Support\Icons\Heroicon::OutlinedPlay)
+            ->icon(Heroicon::OutlinedPlay)
             ->hiddenOn('create')
             ->schema([
                 self::getProductionFlowSection(),
@@ -444,7 +448,7 @@ class ProductionForm
     private static function getCompositionTab(): Tab
     {
         return Tab::make('Composition & lots')
-            ->icon(\Filament\Support\Icons\Heroicon::OutlinedBeaker)
+            ->icon(Heroicon::OutlinedBeaker)
             ->hiddenOn('create')
             ->schema([
                 Section::make('Gestion des items')
@@ -455,9 +459,9 @@ class ProductionForm
                             ->state('Cliquez sur le bouton ci-dessous pour ouvrir l\'éditeur de composition.'),
                     ])
                     ->footer([
-                        \Filament\Actions\Action::make('manageItems')
+                        Action::make('manageItems')
                             ->label('Gérer les items')
-                            ->icon(\Filament\Support\Icons\Heroicon::OutlinedBeaker)
+                            ->icon(Heroicon::OutlinedBeaker)
                             ->color('primary')
                             ->modalHeading('Composition & lots de production')
                             ->modalDescription('Gérez les ingrédients, phases et lots supply de cette production.')
@@ -824,7 +828,11 @@ class ProductionForm
             ];
         }
 
+        /** @var User|null $user */
+        $user = auth()->user();
+
         return collect(Production::allowedTransitionsFor($record->status))
+            ->filter(fn (ProductionStatus $status): bool => $user?->canSetProductionStatus($record->status, $status) ?? false)
             ->mapWithKeys(fn (ProductionStatus $status): array => [$status->value => $status->getLabel()])
             ->all();
     }
@@ -850,7 +858,7 @@ class ProductionForm
                     'saponified_oils' => 'Huiles Saponifiées',
                     'lye' => 'Milieux Réactionnel',
                     'additives' => 'Additifs',
-                    default => \App\Enums\Phases::tryFrom((string) $masterbatch->replaces_phase)?->getLabel() ?? 'Phase inconnue',
+                    default => Phases::tryFrom((string) $masterbatch->replaces_phase)?->getLabel() ?? 'Phase inconnue',
                 };
 
                 return [

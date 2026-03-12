@@ -8,6 +8,7 @@ use App\Models\Supply\SuppliesMovement;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Model;
 
 /**
  * Stock Movement Resource.
@@ -27,13 +28,9 @@ class StockMovementResource extends Resource
 
     protected static ?int $navigationSort = 4;
 
-    /**
-     * Only authenticated users can view stock movements.
-     * TODO: Implement proper admin check when roles are set up.
-     */
     public static function canViewAny(): bool
     {
-        return auth()->check();
+        return auth()->user()?->canAccessStockMovements() ?? false;
     }
 
     public static function canCreate(): bool
@@ -41,12 +38,12 @@ class StockMovementResource extends Resource
         return false;
     }
 
-    public static function canEdit(\Illuminate\Database\Eloquent\Model $record): bool
+    public static function canEdit(Model $record): bool
     {
         return false;
     }
 
-    public static function canDelete(\Illuminate\Database\Eloquent\Model $record): bool
+    public static function canDelete(Model $record): bool
     {
         return false;
     }

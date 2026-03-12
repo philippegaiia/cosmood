@@ -12,9 +12,13 @@ use App\Models\Supply\Supply;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 
 beforeEach(function (): void {
-    $this->actingAs(User::factory()->create());
+    $user = User::factory()->create();
+    $user->assignRole(Role::findOrCreate('planner'));
+
+    $this->actingAs($user);
 });
 
 it('does not finish a production from the dashboard when tasks are incomplete', function (): void {

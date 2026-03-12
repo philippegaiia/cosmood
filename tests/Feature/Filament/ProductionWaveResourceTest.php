@@ -28,9 +28,11 @@ use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
     $this->user = User::factory()->create();
+    $this->user->assignRole(Role::findOrCreate('manager'));
     $this->actingAs($this->user);
 });
 

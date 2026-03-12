@@ -180,4 +180,9 @@ class SupplyResource extends Resource
     {
         return false;
     }
+
+    public static function canEdit(Model $record): bool
+    {
+        return auth()->user()?->canManageSupplyInventory() ?? false;
+    }
 }

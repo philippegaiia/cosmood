@@ -6,6 +6,7 @@ use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Filament\Resources\Production\ProductionResource;
 use App\Models\Production\Formula;
+use App\Models\User;
 use App\Services\Production\MasterbatchService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -64,6 +65,16 @@ class EditProduction extends EditRecord
 
     protected function beforeSave(): void
     {
+        if ($notificationData = $this->getStatusTransitionAuthorizationNotificationData()) {
+            Notification::make()
+                ->warning()
+                ->title($notificationData['title'])
+                ->body($notificationData['body'])
+                ->send();
+
+            throw new Halt;
+        }
+
         if ($this->isTransitioningToOngoing()) {
             if ($notificationData = $this->getOngoingBlockerNotificationData()) {
                 Notification::make()
@@ -121,6 +132,30 @@ class EditProduction extends EditRecord
             ->send();
 
         throw new Halt;
+    }
+
+    /**
+     * @return array{title: string, body: string}|null
+     */
+    private function getStatusTransitionAuthorizationNotificationData(): ?array
+    {
+        $currentStatus = $this->record->status instanceof ProductionStatus
+            ? $this->record->status
+            : ProductionStatus::tryFrom((string) ($this->record->status ?? ''));
+
+        $nextStatus = ProductionStatus::tryFrom((string) ($this->data['status'] ?? ''));
+
+        /** @var User|null $user */
+        $user = auth()->user();
+
+        if (! $currentStatus || ! $nextStatus || ! $user || $user->canSetProductionStatus($currentStatus, $nextStatus)) {
+            return null;
+        }
+
+        return [
+            'title' => __('Permission insuffisante'),
+            'body' => __('Vous ne pouvez pas appliquer cette transition de statut.'),
+        ];
     }
 
     private function getStatusTransitionConfirmationSessionKey(): string
@@ -351,6 +386,7 @@ class EditProduction extends EditRecord
             DeleteAction::make()
                 ->label(__('Supprimer définitivement'))
                 ->modalDescription(__('Supprime définitivement cette production avant démarrage.'))
+                ->authorize(fn (): bool => auth()->user()?->canDeleteProductionRuns() ?? false)
                 ->disabled(fn (): bool => ! $this->record->canBeDeleted())
                 ->tooltip(fn (): ?string => $this->record->getDeletionBlockerMessage()),
         ];

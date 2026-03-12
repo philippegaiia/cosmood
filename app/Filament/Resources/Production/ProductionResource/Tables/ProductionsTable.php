@@ -122,7 +122,8 @@ class ProductionsTable
                     ->icon(Heroicon::OutlinedCheckCircle)
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (Production $record): bool => $record->status === ProductionStatus::Planned)
+                    ->visible(fn (Production $record): bool => $record->status === ProductionStatus::Planned && (auth()->user()?->canManageProductionPlanning() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->action(function (Production $record): void {
                         $summary = app(ProductionStatusTransitionService::class)
                             ->confirmPlannedProductions(collect([$record]));
@@ -153,6 +154,7 @@ class ProductionsTable
                 BulkAction::make('rescheduleSelected')
                     ->label('Replanifier sélection')
                     ->icon(Heroicon::OutlinedCalendarDays)
+                    ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->schema([
                         DatePicker::make('start_date')
                             ->label('Nouveau départ')
@@ -197,6 +199,7 @@ class ProductionsTable
                     ->icon(Heroicon::OutlinedCheckCircle)
                     ->requiresConfirmation()
                     ->deselectRecordsAfterCompletion()
+                    ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->action(function (Collection $records): void {
                         $summary = app(ProductionStatusTransitionService::class)
                             ->confirmPlannedProductions($records);
@@ -206,6 +209,7 @@ class ProductionsTable
                 DeleteBulkAction::make()
                     ->label(__('Supprimer définitivement'))
                     ->modalDescription(__('Supprime définitivement les productions sélectionnées avant démarrage.'))
+                    ->authorize(fn (): bool => auth()->user()?->canDeleteProductionRuns() ?? false)
                     ->authorizeIndividualRecords(fn (Production $record): bool => $record->canBeDeleted()),
             ])
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['productionItems', 'productionLine']))

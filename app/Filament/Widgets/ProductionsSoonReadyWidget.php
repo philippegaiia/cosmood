@@ -76,6 +76,8 @@ class ProductionsSoonReadyWidget extends BaseWidget
                     ->icon(Heroicon::Check)
                     ->color('success')
                     ->requiresConfirmation()
+                    ->visible(fn (): bool => auth()->user()?->canFinishProductionRuns() ?? false)
+                    ->authorize(fn (): bool => auth()->user()?->canFinishProductionRuns() ?? false)
                     ->action(function (Production $record): void {
                         $record->refresh();
 

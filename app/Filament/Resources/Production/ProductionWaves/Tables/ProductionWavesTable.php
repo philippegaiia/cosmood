@@ -83,7 +83,8 @@ class ProductionWavesTable
                     ->icon(Heroicon::OutlinedCheckBadge)
                     ->color('info')
                     ->requiresConfirmation()
-                    ->visible(fn (ProductionWave $record): bool => $record->isDraft())
+                    ->visible(fn (ProductionWave $record): bool => $record->isDraft() && (auth()->user()?->canManageWaveLifecycle() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canManageWaveLifecycle() ?? false)
                     ->action(function (ProductionWave $record): void {
                         $user = Auth::user();
 
@@ -105,7 +106,8 @@ class ProductionWavesTable
                     ->icon(Heroicon::OutlinedPlay)
                     ->color('warning')
                     ->requiresConfirmation()
-                    ->visible(fn (ProductionWave $record): bool => $record->isApproved())
+                    ->visible(fn (ProductionWave $record): bool => $record->isApproved() && (auth()->user()?->canManageWaveLifecycle() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canManageWaveLifecycle() ?? false)
                     ->action(function (ProductionWave $record): void {
                         $record->start();
                     }),
@@ -114,7 +116,8 @@ class ProductionWavesTable
                     ->icon(Heroicon::OutlinedCheck)
                     ->color('success')
                     ->requiresConfirmation()
-                    ->visible(fn (ProductionWave $record): bool => $record->isInProgress())
+                    ->visible(fn (ProductionWave $record): bool => $record->isInProgress() && (auth()->user()?->canManageWaveLifecycle() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canManageWaveLifecycle() ?? false)
                     ->disabled(fn (ProductionWave $record): bool => $record->hasNonTerminalProductions())
                     ->tooltip(fn (ProductionWave $record): ?string => $record->hasNonTerminalProductions()
                         ? __('Toutes les productions liées doivent être terminées ou annulées pour clôturer la vague.')
@@ -135,7 +138,8 @@ class ProductionWavesTable
                     ->icon(Heroicon::OutlinedXMark)
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->visible(fn (ProductionWave $record): bool => ! $record->isCancelled() && ! $record->isCompleted())
+                    ->visible(fn (ProductionWave $record): bool => ! $record->isCancelled() && ! $record->isCompleted() && (auth()->user()?->canManageWaveLifecycle() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canManageWaveLifecycle() ?? false)
                     ->action(function (ProductionWave $record): void {
                         $record->cancel();
                     }),
@@ -144,7 +148,8 @@ class ProductionWavesTable
                     ->icon(Heroicon::OutlinedTrash)
                     ->color('danger')
                     ->requiresConfirmation()
-                    ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCompleted())
+                    ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCompleted() && (auth()->user()?->canDeleteWaves() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canDeleteWaves() ?? false)
                     ->modalDescription('Supprime définitivement la vague et ses productions. Les allocations doivent être désallouées et les engagements PO retirés manuellement.')
                     ->action(function (ProductionWave $record): void {
                         try {
@@ -166,7 +171,8 @@ class ProductionWavesTable
                     ->label('Replanifier')
                     ->icon(Heroicon::OutlinedCalendarDays)
                     ->color('info')
-                    ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCancelled() && ! $record->isCompleted() && (int) ($record->productions_count ?? 0) > 0)
+                    ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCancelled() && ! $record->isCompleted() && (int) ($record->productions_count ?? 0) > 0 && (auth()->user()?->canManageProductionPlanning() ?? false))
+                    ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->schema([
                         DatePicker::make('start_date')
                             ->label('Nouveau départ')
