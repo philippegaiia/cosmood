@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Production\ProductionResource\RelationManagers;
 
+use App\Enums\ProductionStatus;
 use App\Models\Production\ProductionTask;
 use App\Services\Production\TaskGenerationService;
 use Filament\Actions\Action;
@@ -123,8 +124,28 @@ class ProductionTasksRelationManager extends RelationManager
                     ->label('Terminer')
                     ->color('success')
                     ->icon(Heroicon::OutlinedCheckCircle)
-                    ->visible(fn (ProductionTask $record): bool => ! $record->is_finished && ! $record->isCancelled() && ! app(TaskGenerationService::class)->isBlockedByDependencies($record))
+                    ->visible(fn (ProductionTask $record): bool => $this->canFinishTask($record))
                     ->action(function (ProductionTask $record): void {
+                        if (! $this->canExecuteTaskOnCurrentProduction($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Exécution non autorisée'))
+                                ->body(__('Les tâches ne peuvent être terminées que sur une production en cours.'))
+                                ->send();
+
+                            return;
+                        }
+
+                        if ($this->isTaskScheduledInFuture($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Tâche planifiée plus tard'))
+                                ->body(__('Impossible de terminer une tâche prévue dans le futur sans replanification préalable.'))
+                                ->send();
+
+                            return;
+                        }
+
                         try {
                             app(TaskGenerationService::class)->markTaskAsFinished($record);
                         } catch (InvalidArgumentException $exception) {
@@ -138,7 +159,7 @@ class ProductionTasksRelationManager extends RelationManager
                     ->label('Forcer terminer')
                     ->color('warning')
                     ->icon(Heroicon::OutlinedExclamationTriangle)
-                    ->visible(fn (ProductionTask $record): bool => ! $record->is_finished && ! $record->isCancelled() && app(TaskGenerationService::class)->isBlockedByDependencies($record))
+                    ->visible(fn (ProductionTask $record): bool => $this->canForceFinishTask($record))
                     ->schema([
                         Textarea::make('reason')
                             ->label('Raison du bypass')
@@ -146,6 +167,36 @@ class ProductionTasksRelationManager extends RelationManager
                             ->rows(3),
                     ])
                     ->action(function (ProductionTask $record, array $data): void {
+                        if (! $this->canExecuteTaskOnCurrentProduction($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Exécution non autorisée'))
+                                ->body(__('Les tâches ne peuvent être forcées que sur une production en cours.'))
+                                ->send();
+
+                            return;
+                        }
+
+                        if (! (Auth::user()?->canManageProductionPlanning() ?? false)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Permission insuffisante'))
+                                ->body(__('Seuls les profils planification peuvent forcer une tâche.'))
+                                ->send();
+
+                            return;
+                        }
+
+                        if ($this->isTaskScheduledInFuture($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Tâche planifiée plus tard'))
+                                ->body(__('Impossible de forcer une tâche prévue dans le futur sans replanification préalable.'))
+                                ->send();
+
+                            return;
+                        }
+
                         $user = Auth::user();
 
                         if (! $user) {
@@ -164,7 +215,7 @@ class ProductionTasksRelationManager extends RelationManager
                 Action::make('reschedule')
                     ->label('Planifier')
                     ->icon(Heroicon::OutlinedCalendarDays)
-                    ->visible(fn (ProductionTask $record): bool => ! $record->is_finished && ! $record->isCancelled())
+                    ->visible(fn (ProductionTask $record): bool => $this->canManageTaskPlanning($record))
                     ->schema([
                         DatePicker::make('scheduled_date')
                             ->label('Nouvelle date')
@@ -172,29 +223,100 @@ class ProductionTasksRelationManager extends RelationManager
                             ->required(),
                     ])
                     ->action(function (ProductionTask $record, array $data): void {
+                        if (! $this->canManageTaskPlanning($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Permission insuffisante'))
+                                ->body(__('Seuls les profils planification peuvent replanifier les tâches actives.'))
+                                ->send();
+
+                            return;
+                        }
+
                         app(TaskGenerationService::class)->setManualSchedule($record, $data['scheduled_date']);
                     }),
                 Action::make('reset_auto')
                     ->label('Retour auto')
                     ->icon(Heroicon::OutlinedArrowPath)
-                    ->visible(fn (ProductionTask $record): bool => $record->is_manual_schedule && ! $record->is_finished && ! $record->isCancelled())
+                    ->visible(fn (ProductionTask $record): bool => $record->is_manual_schedule && $this->canManageTaskPlanning($record))
                     ->action(function (ProductionTask $record): void {
+                        if (! $this->canManageTaskPlanning($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Permission insuffisante'))
+                                ->body(__('Seuls les profils planification peuvent restaurer le planning automatique.'))
+                                ->send();
+
+                            return;
+                        }
+
                         app(TaskGenerationService::class)->resetToAutoSchedule($record);
                     }),
                 Action::make('cancel')
                     ->label('Annuler')
                     ->icon(Heroicon::OutlinedXCircle)
                     ->color('danger')
-                    ->visible(fn (ProductionTask $record): bool => ! $record->isCancelled())
+                    ->visible(fn (ProductionTask $record): bool => ! $record->isCancelled() && $this->canManageTaskPlanning($record))
                     ->schema([
                         Textarea::make('reason')
                             ->label('Raison')
                             ->required(),
                     ])
                     ->action(function (ProductionTask $record, array $data): void {
+                        if (! $this->canManageTaskPlanning($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Permission insuffisante'))
+                                ->body(__('Seuls les profils planification peuvent annuler une tâche.'))
+                                ->send();
+
+                            return;
+                        }
+
                         $record->cancel($data['reason']);
                     }),
             ])
             ->defaultSort('scheduled_date');
+    }
+
+    private function canFinishTask(ProductionTask $record): bool
+    {
+        return $this->canExecuteTaskOnCurrentProduction($record)
+            && ! $this->isTaskScheduledInFuture($record)
+            && ! app(TaskGenerationService::class)->isBlockedByDependencies($record);
+    }
+
+    private function canForceFinishTask(ProductionTask $record): bool
+    {
+        return $this->canExecuteTaskOnCurrentProduction($record)
+            && ! $this->isTaskScheduledInFuture($record)
+            && (Auth::user()?->canManageProductionPlanning() ?? false)
+            && app(TaskGenerationService::class)->isBlockedByDependencies($record);
+    }
+
+    private function canManageTaskPlanning(ProductionTask $record): bool
+    {
+        return ! $record->is_finished
+            && ! $record->isCancelled()
+            && in_array($this->getOwnerRecord()->status, [
+                ProductionStatus::Planned,
+                ProductionStatus::Confirmed,
+                ProductionStatus::Ongoing,
+            ], true)
+            && (Auth::user()?->canManageProductionPlanning() ?? false);
+    }
+
+    private function canExecuteTaskOnCurrentProduction(ProductionTask $record): bool
+    {
+        return ! $record->is_finished
+            && ! $record->isCancelled()
+            && $this->getOwnerRecord()->status === ProductionStatus::Ongoing
+            && (Auth::user()?->canStartProductionRuns() ?? false);
+    }
+
+    private function isTaskScheduledInFuture(ProductionTask $record): bool
+    {
+        return $record->scheduled_date !== null
+            && Carbon::parse($record->scheduled_date)->isFuture();
     }
 }

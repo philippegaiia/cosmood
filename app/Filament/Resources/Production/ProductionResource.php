@@ -13,8 +13,11 @@ use App\Filament\Resources\Production\ProductionResource\RelationManagers\Produc
 use App\Filament\Resources\Production\ProductionResource\Schemas\ProductionForm;
 use App\Filament\Resources\Production\ProductionResource\Tables\ProductionsTable;
 use App\Models\Production\Production;
+use App\Services\Production\StatusColorScheme;
 use BackedEnum;
+use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
@@ -69,6 +72,41 @@ class ProductionResource extends Resource
     public static function table(Table $table): Table
     {
         return ProductionsTable::configure($table);
+    }
+
+    public static function infolist(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                Section::make(__('Exécution'))
+                    ->schema([
+                        TextEntry::make('status')
+                            ->label(__('Statut'))
+                            ->state(fn (Production $record): string => StatusColorScheme::forProduction($record)['label'])
+                            ->badge()
+                            ->color(fn (Production $record): string => StatusColorScheme::forProduction($record)['color']),
+                        TextEntry::make('production_date')
+                            ->label(__('Date production'))
+                            ->date('d/m/Y')
+                            ->placeholder(__('Non définie')),
+                        TextEntry::make('ready_date')
+                            ->label(__('Date prête'))
+                            ->date('d/m/Y')
+                            ->placeholder(__('Non définie')),
+                        TextEntry::make('productionLine.name')
+                            ->label(__('Ligne'))
+                            ->placeholder(__('Sans ligne')),
+                        TextEntry::make('supply_coverage')
+                            ->label(__('Approvisionnement'))
+                            ->state(fn (Production $record): string => $record->getSupplyCoverageLabel())
+                            ->badge()
+                            ->color(fn (Production $record): string => $record->getSupplyCoverageColor()),
+                        TextEntry::make('wave.name')
+                            ->label(__('Vague'))
+                            ->placeholder(__('Aucune')),
+                    ])
+                    ->columns(3),
+            ]);
     }
 
     /**

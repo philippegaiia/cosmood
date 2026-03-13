@@ -3,13 +3,15 @@
 namespace App\Models;
 
 use App\Enums\ProductionStatus;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     private const ROLE_MANAGER = 'manager';
 
@@ -53,6 +55,18 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    /**
+     * Only operational roles may enter the Filament admin panel.
+     */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->hasOperationalRole([
+            self::ROLE_OPERATOR,
+            self::ROLE_PLANNER,
+            self::ROLE_MANAGER,
+        ]);
     }
 
     /**

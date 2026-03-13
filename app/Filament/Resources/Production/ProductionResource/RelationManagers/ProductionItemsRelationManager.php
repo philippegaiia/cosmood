@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Production\ProductionResource\RelationManagers;
 
 use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
+use App\Enums\ProductionStatus;
 use App\Models\Production\ProductionItem;
 use App\Services\Production\WaveRequirementStatusService;
 use Filament\Actions\Action;
@@ -100,7 +101,18 @@ class ProductionItemsRelationManager extends RelationManager
                         : Heroicon::OutlinedCheckCircle)
                     ->color(fn (ProductionItem $record): string => $record->is_order_marked ? 'warning' : 'info')
                     ->requiresConfirmation()
+                    ->visible(fn (): bool => $this->canManageItemProcurementState())
                     ->action(function (ProductionItem $record): void {
+                        if (! $this->canManageItemProcurementState()) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Permission insuffisante'))
+                                ->body(__('Seuls les profils planification peuvent ajuster le statut commande des items.'))
+                                ->send();
+
+                            return;
+                        }
+
                         $record->loadMissing('production.wave');
 
                         $nextMarkState = ! $record->is_order_marked;
@@ -124,5 +136,13 @@ class ProductionItemsRelationManager extends RelationManager
             ])
             ->modifyQueryUsing(fn (EloquentBuilder $query): EloquentBuilder => $query->with(['ingredient', 'supplierListing', 'supply', 'production', 'allocations.supply']))
             ->defaultSort('sort');
+    }
+
+    private function canManageItemProcurementState(): bool
+    {
+        return in_array($this->getOwnerRecord()->status, [
+            ProductionStatus::Planned,
+            ProductionStatus::Confirmed,
+        ], true) && (auth()->user()?->canManageProductionPlanning() ?? false);
     }
 }

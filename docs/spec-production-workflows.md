@@ -238,6 +238,30 @@ Output semantics:
   - list action on production table (`planned -> confirmed`),
   - bulk confirm on production table,
   - row and bulk confirm on wave related productions table.
+- Production relation-manager execution matrix:
+  - `Items de production`:
+    - operator stays read-only,
+    - procurement/order-mark actions stay planning-only on `planned` and `confirmed`,
+  - `Tâches`:
+    - task completion is only available when the parent production is `ongoing`,
+    - future-dated tasks cannot be finished early,
+    - operator may finish due tasks,
+    - planning profiles keep replan / cancel / force-finish actions,
+  - `Sorties`:
+    - outputs stay read-only before start,
+    - operator/planner/manager may prepare outputs while the production is `ongoing`,
+    - outputs lock again once the production is `finished`,
+  - `Contrôles QC`:
+    - QC values can only be recorded while the production is `ongoing`,
+    - operators may record QC values during execution,
+    - only planning profiles may reset a completed QC entry,
+    - finished productions are read-only.
+- Task execution contract:
+  - task completion is only available once the parent production is `ongoing`,
+  - future-dated tasks stay non-executable until their scheduled day or an explicit replan,
+  - predecessor sequence is still enforced by task service logic,
+  - task reschedule / reset / cancel remain planning actions for planning roles.
+- Production view pages expose an execution summary so operators can read the current production status without needing the edit form.
 - `finished` is terminal for the active production lifecycle.
 - Legacy `cancelled` productions remain terminal historical records, but `cancelled` is no longer offered as a normal production transition in the UI/domain flow.
 - Backward transitions are not allowed (`confirmed -> planned`, `cancelled -> planned`, etc.).

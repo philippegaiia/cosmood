@@ -30,7 +30,10 @@ it('syncs all permissions to the super admin role', function () {
 
 it('keeps operator permissions narrow', function () {
     Permission::findOrCreate('View:HomeDashboard');
+    Permission::findOrCreate('ViewAny:Production');
     Permission::findOrCreate('Update:ProductionTask');
+    Permission::findOrCreate('Create:ProductionOutput');
+    Permission::findOrCreate('Update:ProductionQcCheck');
     Permission::findOrCreate('Delete:Production');
     Permission::findOrCreate('View:User');
 
@@ -39,7 +42,10 @@ it('keeps operator permissions narrow', function () {
     $operatorRole = Role::findByName('operator');
 
     expect($operatorRole->hasPermissionTo('View:HomeDashboard'))->toBeTrue()
+        ->and($operatorRole->hasPermissionTo('ViewAny:Production'))->toBeTrue()
         ->and($operatorRole->hasPermissionTo('Update:ProductionTask'))->toBeTrue()
+        ->and($operatorRole->hasPermissionTo('Create:ProductionOutput'))->toBeTrue()
+        ->and($operatorRole->hasPermissionTo('Update:ProductionQcCheck'))->toBeTrue()
         ->and($operatorRole->hasPermissionTo('Delete:Production'))->toBeFalse()
         ->and($operatorRole->hasPermissionTo('View:User'))->toBeFalse();
 });

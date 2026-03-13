@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
@@ -49,5 +50,25 @@ describe('User Model', function () {
             ->and($planner->canReceiveSupplierOrdersIntoStock())->toBeFalse()
             ->and($manager->canManageSupplyInventory())->toBeTrue()
             ->and($manager->canReceiveSupplierOrdersIntoStock())->toBeTrue();
+    });
+
+    it('limits filament admin panel access to operational roles', function () {
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('operator'));
+
+        $manager = User::factory()->create();
+        $manager->assignRole(Role::findOrCreate('manager'));
+
+        $superAdmin = User::factory()->create();
+        $superAdmin->assignRole(Role::findOrCreate(config('filament-shield.super_admin.name', 'super_admin')));
+
+        $visitor = User::factory()->create();
+
+        $panel = Filament::getPanel('admin');
+
+        expect($operator->canAccessPanel($panel))->toBeTrue()
+            ->and($manager->canAccessPanel($panel))->toBeTrue()
+            ->and($superAdmin->canAccessPanel($panel))->toBeTrue()
+            ->and($visitor->canAccessPanel($panel))->toBeFalse();
     });
 });

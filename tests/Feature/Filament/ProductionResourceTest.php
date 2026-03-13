@@ -9,6 +9,7 @@ use App\Filament\Resources\Production\ProductionResource;
 use App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction;
 use App\Filament\Resources\Production\ProductionResource\Pages\EditProduction;
 use App\Filament\Resources\Production\ProductionResource\Pages\ListProductions;
+use App\Filament\Resources\Production\ProductionResource\Pages\ViewProduction;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionItemsRelationManager;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager;
@@ -30,6 +31,7 @@ use App\Models\Supply\Supply;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Livewire\Livewire;
+use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
@@ -238,6 +240,86 @@ describe('Production - Relationships', function () {
             ->assertSee($production->product->name);
     });
 
+    it('shows outputs as read-only before production starts', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->confirmed()->create();
+
+        Livewire::test(ProductionOutputsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])->assertTableHeaderActionsExistInOrder([]);
+    });
+
+    it('lets operators prepare outputs during an ongoing production', function () {
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('operator'));
+        $this->actingAs($operator);
+
+        $production = Production::factory()->inProgress()->create();
+
+        Livewire::test(ProductionOutputsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])->assertTableHeaderActionsExistInOrder(['create']);
+    });
+
+    it('shows QC entry action only while production is ongoing', function () {
+        $this->actingAs($this->user);
+
+        $confirmedProduction = Production::factory()->confirmed()->create();
+        $confirmedQcCheck = ProductionQcCheck::factory()->create([
+            'production_id' => $confirmedProduction->id,
+            'checked_at' => null,
+            'value_number' => null,
+            'value_boolean' => null,
+            'value_text' => null,
+        ]);
+
+        Livewire::test(ProductionQcChecksRelationManager::class, [
+            'ownerRecord' => $confirmedProduction,
+            'pageClass' => ViewProduction::class,
+        ])->assertTableActionHidden('recordResult', $confirmedQcCheck);
+
+        $ongoingProduction = Production::factory()->inProgress()->create();
+        $ongoingQcCheck = ProductionQcCheck::factory()->create([
+            'production_id' => $ongoingProduction->id,
+            'checked_at' => null,
+            'value_number' => null,
+            'value_boolean' => null,
+            'value_text' => null,
+        ]);
+
+        Livewire::test(ProductionQcChecksRelationManager::class, [
+            'ownerRecord' => $ongoingProduction,
+            'pageClass' => ViewProduction::class,
+        ])->assertTableActionVisible('recordResult', $ongoingQcCheck);
+    });
+
+    it('keeps QC reset as a planning-only action', function () {
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('operator'));
+
+        $production = Production::factory()->inProgress()->create();
+        $qcCheck = ProductionQcCheck::factory()->passed()->create([
+            'production_id' => $production->id,
+        ]);
+
+        $this->actingAs($operator);
+
+        Livewire::test(ProductionQcChecksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])->assertTableActionHidden('markUndone', $qcCheck);
+
+        $this->actingAs($this->user);
+
+        Livewire::test(ProductionQcChecksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])->assertTableActionVisible('markUndone', $qcCheck->fresh());
+    });
+
     it('shows total product cost summary in production items relation manager', function () {
         $production = Production::factory()->create([
             'planned_quantity' => 100,
@@ -405,6 +487,134 @@ describe('Production - Relationships', function () {
             ->call('save');
 
         expect($production->fresh()->product_id)->toBe($originalProduct->id);
+    });
+
+    it('lets operators open the production view page', function () {
+        $this->disableAuthorizationBypass();
+
+        $operatorRole = Role::findOrCreate('operator');
+        $operatorRole->syncPermissions([
+            Permission::findOrCreate('ViewAny:Production'),
+            Permission::findOrCreate('View:Production'),
+            Permission::findOrCreate('ViewAny:ProductionTask'),
+        ]);
+
+        $operator = User::factory()->create();
+        $operator->assignRole($operatorRole);
+
+        $production = Production::factory()->create();
+
+        $this->actingAs($operator);
+
+        expect(ProductionResource::canViewAny())->toBeTrue()
+            ->and(ProductionResource::canView($production))->toBeTrue();
+
+        $response = $this->get(ProductionResource::getUrl('view', ['record' => $production]));
+
+        $response->assertOk();
+    });
+
+    it('shows an execution status summary on the production view page', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->planned()->create();
+
+        $response = $this->get(ProductionResource::getUrl('view', ['record' => $production]));
+
+        $response->assertOk()
+            ->assertSee('Exécution')
+            ->assertSee('Statut')
+            ->assertSee(ProductionStatus::Planned->getLabel());
+    });
+
+    it('hides task completion actions before the production starts', function () {
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('operator'));
+        $this->actingAs($operator);
+
+        $production = Production::factory()->confirmed()->create();
+        $task = ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'scheduled_date' => now()->toDateString(),
+            'date' => now()->toDateString(),
+            'is_finished' => false,
+            'cancelled_at' => null,
+            'sequence_order' => 1,
+            'source' => 'template',
+        ]);
+
+        Livewire::test(ProductionTasksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])
+            ->assertTableActionHidden('finish', $task)
+            ->assertTableActionHidden('force_finish', $task);
+    });
+
+    it('hides task completion actions for future-dated tasks', function () {
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('operator'));
+        $this->actingAs($operator);
+
+        $production = Production::factory()->inProgress()->create();
+        $task = ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'scheduled_date' => now()->addDay()->toDateString(),
+            'date' => now()->addDay()->toDateString(),
+            'is_finished' => false,
+            'cancelled_at' => null,
+            'sequence_order' => 1,
+            'source' => 'template',
+        ]);
+
+        Livewire::test(ProductionTasksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])
+            ->assertTableActionHidden('finish', $task)
+            ->assertTableActionHidden('force_finish', $task);
+    });
+
+    it('keeps the task completion action available for ongoing tasks due today', function () {
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('operator'));
+        $this->actingAs($operator);
+
+        $production = Production::factory()->inProgress()->create();
+        $task = ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'scheduled_date' => now()->toDateString(),
+            'date' => now()->toDateString(),
+            'is_finished' => false,
+            'cancelled_at' => null,
+            'sequence_order' => 1,
+            'source' => 'template',
+        ]);
+
+        Livewire::test(ProductionTasksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])
+            ->assertTableActionVisible('finish', $task)
+            ->assertTableActionHidden('force_finish', $task);
+    });
+
+    it('hides procurement mark action from operators in production items view', function () {
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('operator'));
+        $this->actingAs($operator);
+
+        $production = Production::factory()->planned()->create();
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'is_order_marked' => false,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        Livewire::test(ProductionItemsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])->assertTableActionHidden('toggleOrderMark', $item);
     });
 
     it('refreshes permanent batch number in edit form after moving to ongoing', function () {

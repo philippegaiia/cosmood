@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Production\ProductionResource\RelationManagers;
 
+use App\Enums\ProductionStatus;
 use App\Enums\QcInputType;
 use App\Models\Production\ProductionQcCheck;
 use Filament\Actions\Action;
@@ -15,6 +16,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 
 class ProductionQcChecksRelationManager extends RelationManager
@@ -75,6 +77,8 @@ class ProductionQcChecksRelationManager extends RelationManager
                 Action::make('recordResult')
                     ->label('Saisir')
                     ->icon(Heroicon::OutlinedPencilSquare)
+                    ->visible(fn (ProductionQcCheck $record): bool => $this->canRecordQc($record))
+                    ->authorize(fn (ProductionQcCheck $record): bool => $this->canRecordQc($record))
                     ->schema([
                         Hidden::make('input_type'),
                         TextInput::make('value_number')
@@ -104,6 +108,16 @@ class ProductionQcChecksRelationManager extends RelationManager
                         'notes' => $record->notes,
                     ])
                     ->action(function (ProductionQcCheck $record, array $data): void {
+                        if (! $this->canRecordQc($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Exécution non autorisée'))
+                                ->body(__('Les contrôles QC ne peuvent être saisis que pendant une production en cours.'))
+                                ->send();
+
+                            return;
+                        }
+
                         $record->update([
                             'value_number' => $data['value_number'] ?? null,
                             'value_boolean' => array_key_exists('value_boolean', $data) && $data['value_boolean'] !== null
@@ -124,9 +138,20 @@ class ProductionQcChecksRelationManager extends RelationManager
                     ->label('Marquer non fait')
                     ->icon(Heroicon::OutlinedArrowUturnLeft)
                     ->color('warning')
-                    ->visible(fn (ProductionQcCheck $record): bool => $record->isDone())
+                    ->visible(fn (ProductionQcCheck $record): bool => $record->isDone() && $this->canResetQc($record))
+                    ->authorize(fn (ProductionQcCheck $record): bool => $record->isDone() && $this->canResetQc($record))
                     ->requiresConfirmation()
                     ->action(function (ProductionQcCheck $record): void {
+                        if (! $this->canResetQc($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Permission insuffisante'))
+                                ->body(__('Seuls les profils planification peuvent réinitialiser un contrôle QC en cours.'))
+                                ->send();
+
+                            return;
+                        }
+
                         $record->update([
                             'value_number' => null,
                             'value_boolean' => null,
@@ -141,6 +166,23 @@ class ProductionQcChecksRelationManager extends RelationManager
                             ->send();
                     }),
             ])
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['checkedBy', 'production']))
             ->defaultSort('sort_order');
+    }
+
+    private function canRecordQc(ProductionQcCheck $record): bool
+    {
+        return ! $record->production || (
+            $record->production->status === ProductionStatus::Ongoing
+            && (Auth::user()?->canStartProductionRuns() ?? false)
+        );
+    }
+
+    private function canResetQc(ProductionQcCheck $record): bool
+    {
+        return ! $record->production || (
+            $record->production->status === ProductionStatus::Ongoing
+            && (Auth::user()?->canManageProductionPlanning() ?? false)
+        );
     }
 }

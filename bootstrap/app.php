@@ -6,6 +6,7 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
@@ -34,7 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->body(__('Vous n’avez pas l’autorisation d’accéder à cet écran ou d’exécuter cette action.'))
                 ->send();
 
-            return redirect()->to(Filament::getHomeUrl());
+            return new RedirectResponse(Filament::getHomeUrl());
         };
 
         $exceptions->render(function (AuthorizationException $exception, Request $request) use ($renderForbiddenAdminRedirect) {

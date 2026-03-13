@@ -38,7 +38,7 @@ class ViewProduction extends ViewRecord
 
     protected function getHeaderActions(): array
     {
-        return [
+        $actions = [
             Action::make('exportPdf')
                 ->label('Exporter PDF')
                 ->icon(Heroicon::OutlinedDocumentArrowDown)
@@ -54,7 +54,12 @@ class ViewProduction extends ViewRecord
                 ->icon(Heroicon::OutlinedDocumentText)
                 ->url(fn (): string => route('productions.follow-sheet', $this->record))
                 ->openUrlInNewTab(),
-            EditAction::make(),
         ];
+
+        if (auth()->user()?->can('Update:Production') ?? false) {
+            $actions[] = EditAction::make();
+        }
+
+        return $actions;
     }
 }

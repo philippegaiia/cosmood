@@ -12,6 +12,7 @@ use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Notifications\Notification;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -115,17 +116,31 @@ class ProductionOutputsRelationManager extends RelationManager
             ->headerActions([
                 CreateAction::make()
                     ->label(__('Ajouter une sortie'))
-                    ->visible(fn (): bool => ! $this->areOutputsLocked() && $this->canCreateMoreOutputs()),
+                    ->visible(fn (): bool => $this->canManageOutputs() && ! $this->areOutputsLocked() && $this->canCreateMoreOutputs())
+                    ->authorize(fn (): bool => $this->canManageOutputs())
+                    ->before(function (): void {
+                        if ($this->canManageOutputs()) {
+                            return;
+                        }
+
+                        Notification::make()
+                            ->warning()
+                            ->title(__('Exécution non autorisée'))
+                            ->body(__('Les sorties ne peuvent être renseignées que pendant une production en cours.'))
+                            ->send();
+                    }),
             ])
             ->recordActions([
                 EditAction::make()
-                    ->visible(fn (): bool => ! $this->areOutputsLocked()),
+                    ->visible(fn (): bool => $this->canManageOutputs() && ! $this->areOutputsLocked())
+                    ->authorize(fn (): bool => $this->canManageOutputs()),
                 DeleteAction::make()
-                    ->visible(fn (): bool => ! $this->areOutputsLocked()),
+                    ->visible(fn (): bool => $this->canManageOutputs() && ! $this->areOutputsLocked())
+                    ->authorize(fn (): bool => $this->canManageOutputs()),
             ])
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['product', 'ingredient'])->orderBy('kind'))
             ->emptyStateHeading(__('Aucune sortie renseignée'))
-            ->emptyStateDescription(__('Déclarez au minimum la sortie principale avant de terminer le lot.'));
+            ->emptyStateDescription(__('Déclarez au minimum la sortie principale pendant l\'exécution avant de terminer le lot.'));
     }
 
     /**
@@ -163,6 +178,12 @@ class ProductionOutputsRelationManager extends RelationManager
     private function canCreateMoreOutputs(): bool
     {
         return $this->getOwnerRecord()->productionOutputs()->count() < count(ProductionOutputKind::cases());
+    }
+
+    private function canManageOutputs(): bool
+    {
+        return $this->getOwnerRecord()->status === ProductionStatus::Ongoing
+            && (auth()->user()?->canStartProductionRuns() ?? false);
     }
 
     private function getProduction(): Production

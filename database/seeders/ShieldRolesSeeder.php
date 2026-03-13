@@ -45,6 +45,8 @@ class ShieldRolesSeeder extends Seeder
         'PlanningBoard',
         'ProductionCalendar',
         'Production',
+        'ProductionOutput',
+        'ProductionQcCheck',
         'ProductionTask',
         'ProductionWave',
         'Supply',
@@ -58,7 +60,21 @@ class ShieldRolesSeeder extends Seeder
      *
      * @var array<int, string>
      */
-    private const OPERATOR_UPDATE_SUBJECTS = ['ProductionTask'];
+    private const OPERATOR_CREATE_SUBJECTS = ['ProductionOutput'];
+
+    /**
+     * Resource update permissions needed by operators to advance live work.
+     *
+     * @var array<int, string>
+     */
+    private const OPERATOR_UPDATE_SUBJECTS = ['ProductionTask', 'ProductionQcCheck', 'ProductionOutput'];
+
+    /**
+     * Resource delete permissions needed by operators to correct execution-only outputs.
+     *
+     * @var array<int, string>
+     */
+    private const OPERATOR_DELETE_SUBJECTS = ['ProductionOutput'];
 
     public function run(): void
     {
@@ -125,12 +141,22 @@ class ShieldRolesSeeder extends Seeder
         }
 
         if ($affix === 'ViewAny') {
-            return in_array($subject, self::OPERATOR_UPDATE_SUBJECTS, true)
-                || in_array($subject, ['Supply', 'Product', 'ProductType', 'QcTemplate', 'ProductionWave'], true);
+            return in_array($subject, self::OPERATOR_CREATE_SUBJECTS, true)
+                || in_array($subject, self::OPERATOR_UPDATE_SUBJECTS, true)
+                || in_array($subject, self::OPERATOR_DELETE_SUBJECTS, true)
+                || in_array($subject, ['Production', 'Supply', 'Product', 'ProductType', 'QcTemplate', 'ProductionWave'], true);
+        }
+
+        if ($affix === 'Create') {
+            return in_array($subject, self::OPERATOR_CREATE_SUBJECTS, true);
         }
 
         if ($affix === 'Update') {
             return in_array($subject, self::OPERATOR_UPDATE_SUBJECTS, true);
+        }
+
+        if ($affix === 'Delete') {
+            return in_array($subject, self::OPERATOR_DELETE_SUBJECTS, true);
         }
 
         return false;
