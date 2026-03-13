@@ -2,6 +2,7 @@
 
 namespace App\Services\Production;
 
+use App\Enums\ProductionStatus;
 use App\Models\Production\Holiday;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
@@ -21,100 +22,22 @@ class TaskGenerationService
      */
     public function generateFromTemplate(Production $production, TaskTemplate $template): void
     {
-        // Eager load relationships to prevent lazy loading violations
-        $template->loadMissing(['taskTemplateTaskTypes.taskType', 'items']);
-
+        $templateDefinitions = $this->getTemplateTaskDefinitions($template);
         $lastScheduledDate = null;
 
-        if ($template->taskTemplateTaskTypes->isNotEmpty()) {
-            $existingTaskTypeIds = $production->productionTasks()
-                ->where('source', 'template')
-                ->pluck('production_task_type_id')
-                ->filter()
-                ->toArray();
-
-            foreach ($template->taskTemplateTaskTypes as $pivot) {
-                $taskType = $pivot->taskType;
-
-                if (! $taskType || in_array($taskType->id, $existingTaskTypeIds, true)) {
-                    continue;
-                }
-
-                $scheduledDate = $this->calculateScheduledDate(
-                    $production->production_date,
-                    $pivot->offset_days,
-                    $pivot->skip_weekends
-                );
-
-                if ($lastScheduledDate && $scheduledDate->lt($lastScheduledDate)) {
-                    $scheduledDate = $lastScheduledDate->copy();
-                }
-
-                $durationMinutes = $pivot->duration_override ?? $taskType->duration ?? 60;
-
-                ProductionTask::create([
-                    'production_id' => $production->id,
-                    'task_template_item_id' => null,
-                    'name' => $taskType->name,
-                    'description' => null,
-                    'production_task_type_id' => $taskType->id,
-                    'source' => 'template',
-                    'sequence_order' => $pivot->sort_order,
-                    'scheduled_date' => $scheduledDate,
-                    'date' => $scheduledDate,
-                    'duration_minutes' => $durationMinutes,
-                    'is_finished' => false,
-                    'is_manual_schedule' => false,
-                    'cancelled_at' => null,
-                    'cancelled_reason' => null,
-                    'notes' => null,
-                ]);
-
-                $lastScheduledDate = $scheduledDate;
-            }
-
-            return;
-        }
-
-        $existingTemplateItemIds = $production->productionTasks()
-            ->where('source', 'template')
-            ->pluck('task_template_item_id')
-            ->filter()
-            ->toArray();
-
-        foreach ($template->items as $item) {
-            if (in_array($item->id, $existingTemplateItemIds, true)) {
+        foreach ($templateDefinitions as $definition) {
+            if ($this->productionAlreadyHasTemplateTask($production, $definition)) {
                 continue;
             }
 
-            $scheduledDate = $this->calculateScheduledDate(
+            $scheduledDate = $this->resolveScheduledDate(
                 $production->production_date,
-                $item->offset_days,
-                $item->skip_weekends
+                $definition['offset_days'],
+                $definition['skip_weekends'],
+                $lastScheduledDate
             );
 
-            if ($lastScheduledDate && $scheduledDate->lt($lastScheduledDate)) {
-                $scheduledDate = $lastScheduledDate->copy();
-            }
-
-            ProductionTask::create([
-                'production_id' => $production->id,
-                'task_template_item_id' => $item->id,
-                'name' => $item->name,
-                'description' => null,
-                'production_task_type_id' => null,
-                'source' => 'template',
-                'sequence_order' => $item->sort_order,
-                'scheduled_date' => $scheduledDate,
-                'date' => $scheduledDate,
-                'duration_minutes' => $item->duration_minutes,
-                'is_finished' => false,
-                'is_manual_schedule' => false,
-                'cancelled_at' => null,
-                'cancelled_reason' => null,
-                'notes' => null,
-            ]);
-
+            $this->createProductionTask($production, $definition, $scheduledDate);
             $lastScheduledDate = $scheduledDate;
         }
     }
@@ -138,37 +61,8 @@ class TaskGenerationService
      */
     public function rescheduleTasks(Production $production, bool $force = false): void
     {
-        // Get the template and task type pivot data for lookups
         $template = $this->getTaskTemplateForProduction($production);
-
-        $taskTypeLookup = [];
-        $templateItemLookup = [];
-
-        if ($template) {
-            // Ensure relationships are loaded to prevent lazy loading violations
-            $template->loadMissing(['taskTemplateTaskTypes.taskType', 'items']);
-
-            // Build lookup of task type pivot data by task type ID
-            $taskTypeLookup = $template->taskTemplateTaskTypes
-                ->mapWithKeys(fn ($pivot) => [
-                    $pivot->taskType->id => [
-                        'offset_days' => $pivot->offset_days,
-                        'skip_weekends' => $pivot->skip_weekends,
-                        'sort_order' => $pivot->sort_order,
-                    ],
-                ])
-                ->all();
-
-            $templateItemLookup = $template->items
-                ->mapWithKeys(fn ($item) => [
-                    $item->id => [
-                        'offset_days' => $item->offset_days,
-                        'skip_weekends' => $item->skip_weekends,
-                        'sort_order' => $item->sort_order,
-                    ],
-                ])
-                ->all();
-        }
+        $templateLookups = $this->buildTemplateLookups($template);
 
         /**
          * Load tasks explicitly because this method is also reached from observers
@@ -187,7 +81,7 @@ class TaskGenerationService
         $lastScheduledDate = null;
 
         foreach ($tasks as $task) {
-            if ($task->is_finished || $task->isCancelled()) {
+            if ($this->shouldPreserveCurrentScheduledDate($task, $force)) {
                 if ($task->scheduled_date) {
                     $lastScheduledDate = Carbon::parse($task->scheduled_date);
                 }
@@ -195,23 +89,18 @@ class TaskGenerationService
                 continue;
             }
 
-            $isFirstTemplateTask = $task->source === 'template' && $task->sequence_order === 1;
-
-            if ($isFirstTemplateTask) {
+            if ($this->isAnchorTask($task)) {
                 $anchorDate = Carbon::parse($production->production_date);
 
-                $task->update([
-                    'scheduled_date' => $anchorDate,
-                    'date' => $anchorDate,
-                    'is_manual_schedule' => false,
-                ]);
-
+                $this->updateTaskSchedule($task, $anchorDate);
                 $lastScheduledDate = $anchorDate;
 
                 continue;
             }
 
-            if (! $force && $task->is_manual_schedule) {
+            $schedulingRule = $this->resolveTaskSchedulingRule($task, $templateLookups);
+
+            if ($schedulingRule === null) {
                 if ($task->scheduled_date) {
                     $lastScheduledDate = Carbon::parse($task->scheduled_date);
                 }
@@ -219,48 +108,14 @@ class TaskGenerationService
                 continue;
             }
 
-            $taskTypeData = null;
-
-            if ($task->production_task_type_id !== null) {
-                $taskTypeData = $taskTypeLookup[$task->production_task_type_id] ?? null;
-            }
-
-            if ($taskTypeData === null && $task->task_template_item_id !== null) {
-                $taskTypeData = $templateItemLookup[$task->task_template_item_id] ?? null;
-            }
-
-            if ($taskTypeData === null && $task->task_template_item_id !== null && $task->templateItem) {
-                $taskTypeData = [
-                    'offset_days' => $task->templateItem->offset_days,
-                    'skip_weekends' => $task->templateItem->skip_weekends,
-                    'sort_order' => $task->templateItem->sort_order,
-                ];
-            }
-
-            if (! $taskTypeData) {
-                if ($task->scheduled_date) {
-                    $lastScheduledDate = Carbon::parse($task->scheduled_date);
-                }
-
-                continue;
-            }
-
-            $scheduledDate = $this->calculateScheduledDate(
+            $scheduledDate = $this->resolveScheduledDate(
                 $production->production_date,
-                $taskTypeData['offset_days'],
-                $taskTypeData['skip_weekends']
+                $schedulingRule['offset_days'],
+                $schedulingRule['skip_weekends'],
+                $lastScheduledDate
             );
 
-            if ($lastScheduledDate && $scheduledDate->lt($lastScheduledDate)) {
-                $scheduledDate = $lastScheduledDate->copy();
-            }
-
-            $task->update([
-                'scheduled_date' => $scheduledDate,
-                'date' => $scheduledDate,
-                'is_manual_schedule' => false,
-            ]);
-
+            $this->updateTaskSchedule($task, $scheduledDate);
             $lastScheduledDate = $scheduledDate;
         }
     }
@@ -270,8 +125,10 @@ class TaskGenerationService
      */
     public function markTaskAsFinished(ProductionTask $task, bool $bypassSequence = false): void
     {
+        $this->assertTaskCanBeExecuted($task);
+
         if ($task->isCancelled()) {
-            throw new InvalidArgumentException('Cancelled task cannot be finished');
+            throw new InvalidArgumentException(__('Cancelled task cannot be finished'));
         }
 
         if ($task->is_finished) {
@@ -279,7 +136,7 @@ class TaskGenerationService
         }
 
         if (! $bypassSequence && $this->hasUnfinishedPredecessor($task)) {
-            throw new InvalidArgumentException('Previous tasks must be finished first');
+            throw new InvalidArgumentException(__('Previous tasks must be finished first'));
         }
 
         $task->update([
@@ -295,12 +152,14 @@ class TaskGenerationService
      */
     public function forceFinishTask(ProductionTask $task, User $user, string $reason): void
     {
+        $this->assertTaskCanBeExecuted($task);
+
         if ($task->isCancelled()) {
-            throw new InvalidArgumentException('Cancelled task cannot be finished');
+            throw new InvalidArgumentException(__('Cancelled task cannot be finished'));
         }
 
         if (trim($reason) === '') {
-            throw new InvalidArgumentException('Reason is required to bypass dependencies');
+            throw new InvalidArgumentException(__('Reason is required to bypass dependencies'));
         }
 
         if ($task->is_finished) {
@@ -339,7 +198,7 @@ class TaskGenerationService
 
         $date = Carbon::parse($scheduledDate);
 
-        if ($task->source === 'template' && $task->sequence_order === 1) {
+        if ($this->isAnchorTask($task)) {
             $task->update([
                 'scheduled_date' => $date,
                 'date' => $date,
@@ -452,6 +311,256 @@ class TaskGenerationService
         }
 
         return Production::query()->find($task->production_id);
+    }
+
+    /**
+     * Ensures a task is executable in the current production context.
+     *
+     * Task completion belongs to execution, not planning. A task may only be
+     * finished once the parent production is ongoing and the task is due on or
+     * before today. This keeps the domain contract aligned with the production
+     * lifecycle even if another UI path bypasses relation-manager visibility.
+     */
+    private function assertTaskCanBeExecuted(ProductionTask $task): void
+    {
+        $production = $this->resolveProduction($task);
+
+        if (! $production || $production->status !== ProductionStatus::Ongoing) {
+            throw new InvalidArgumentException(__('Tasks can only be completed while the production is ongoing'));
+        }
+
+        if ($task->scheduled_date !== null && Carbon::parse($task->scheduled_date)->isFuture()) {
+            throw new InvalidArgumentException(__('Task cannot be completed before its scheduled date'));
+        }
+    }
+
+    /**
+     * Normalizes task template sources into one task-definition shape.
+     *
+     * @return array<int, array{
+     *     name: string,
+     *     production_task_type_id: int|null,
+     *     task_template_item_id: int|null,
+     *     sequence_order: int|null,
+     *     offset_days: int,
+     *     skip_weekends: bool,
+     *     duration_minutes: int
+     * }>
+     */
+    private function getTemplateTaskDefinitions(TaskTemplate $template): array
+    {
+        $template->loadMissing(['taskTemplateTaskTypes.taskType', 'items']);
+
+        if ($template->taskTemplateTaskTypes->isNotEmpty()) {
+            return $template->taskTemplateTaskTypes
+                ->filter(fn ($pivot): bool => $pivot->taskType !== null)
+                ->map(fn ($pivot): array => [
+                    'name' => $pivot->taskType->name,
+                    'production_task_type_id' => $pivot->taskType->id,
+                    'task_template_item_id' => null,
+                    'sequence_order' => $pivot->sort_order,
+                    'offset_days' => $pivot->offset_days,
+                    'skip_weekends' => $pivot->skip_weekends,
+                    'duration_minutes' => $pivot->duration_override ?? $pivot->taskType->duration ?? 60,
+                ])
+                ->values()
+                ->all();
+        }
+
+        return $template->items
+            ->map(fn ($item): array => [
+                'name' => $item->name,
+                'production_task_type_id' => null,
+                'task_template_item_id' => $item->id,
+                'sequence_order' => $item->sort_order,
+                'offset_days' => $item->offset_days,
+                'skip_weekends' => $item->skip_weekends,
+                'duration_minutes' => $item->duration_minutes,
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Persists one normalized template task onto a production.
+     *
+     * @param  array{
+     *     name: string,
+     *     production_task_type_id: int|null,
+     *     task_template_item_id: int|null,
+     *     sequence_order: int|null,
+     *     duration_minutes: int
+     * }  $definition
+     */
+    private function createProductionTask(Production $production, array $definition, Carbon $scheduledDate): void
+    {
+        ProductionTask::create([
+            'production_id' => $production->id,
+            'task_template_item_id' => $definition['task_template_item_id'],
+            'name' => $definition['name'],
+            'description' => null,
+            'production_task_type_id' => $definition['production_task_type_id'],
+            'source' => 'template',
+            'sequence_order' => $definition['sequence_order'],
+            'scheduled_date' => $scheduledDate,
+            'date' => $scheduledDate,
+            'duration_minutes' => $definition['duration_minutes'],
+            'is_finished' => false,
+            'is_manual_schedule' => false,
+            'cancelled_at' => null,
+            'cancelled_reason' => null,
+            'notes' => null,
+        ]);
+    }
+
+    /**
+     * Determines whether a normalized template task already exists on the production.
+     *
+     * @param  array{production_task_type_id: int|null, task_template_item_id: int|null}  $definition
+     */
+    private function productionAlreadyHasTemplateTask(Production $production, array $definition): bool
+    {
+        $query = $production->productionTasks()->where('source', 'template');
+
+        if ($definition['production_task_type_id'] !== null) {
+            return $query
+                ->where('production_task_type_id', $definition['production_task_type_id'])
+                ->exists();
+        }
+
+        if ($definition['task_template_item_id'] === null) {
+            return false;
+        }
+
+        return $query
+            ->where('task_template_item_id', $definition['task_template_item_id'])
+            ->exists();
+    }
+
+    /**
+     * Builds fast template lookups for task-type and legacy template-item scheduling rules.
+     *
+     * @return array{
+     *     task_types: array<int, array{offset_days: int, skip_weekends: bool, sort_order: int|null}>,
+     *     template_items: array<int, array{offset_days: int, skip_weekends: bool, sort_order: int|null}>
+     * }
+     */
+    private function buildTemplateLookups(?TaskTemplate $template): array
+    {
+        if ($template === null) {
+            return [
+                'task_types' => [],
+                'template_items' => [],
+            ];
+        }
+
+        $template->loadMissing(['taskTemplateTaskTypes.taskType', 'items']);
+
+        return [
+            'task_types' => $template->taskTemplateTaskTypes
+                ->filter(fn ($pivot): bool => $pivot->taskType !== null)
+                ->mapWithKeys(fn ($pivot): array => [
+                    $pivot->taskType->id => [
+                        'offset_days' => $pivot->offset_days,
+                        'skip_weekends' => $pivot->skip_weekends,
+                        'sort_order' => $pivot->sort_order,
+                    ],
+                ])
+                ->all(),
+            'template_items' => $template->items
+                ->mapWithKeys(fn ($item): array => [
+                    $item->id => [
+                        'offset_days' => $item->offset_days,
+                        'skip_weekends' => $item->skip_weekends,
+                        'sort_order' => $item->sort_order,
+                    ],
+                ])
+                ->all(),
+        ];
+    }
+
+    /**
+     * Resolves scheduling metadata for a production task from template lookups or legacy template item.
+     *
+     * @param  array{
+     *     task_types: array<int, array{offset_days: int, skip_weekends: bool, sort_order: int|null}>,
+     *     template_items: array<int, array{offset_days: int, skip_weekends: bool, sort_order: int|null}>
+     * }  $templateLookups
+     * @return array{offset_days: int, skip_weekends: bool, sort_order: int|null}|null
+     */
+    private function resolveTaskSchedulingRule(ProductionTask $task, array $templateLookups): ?array
+    {
+        if ($task->production_task_type_id !== null) {
+            return $templateLookups['task_types'][$task->production_task_type_id] ?? null;
+        }
+
+        if ($task->task_template_item_id !== null) {
+            $templateItemRule = $templateLookups['template_items'][$task->task_template_item_id] ?? null;
+
+            if ($templateItemRule !== null) {
+                return $templateItemRule;
+            }
+        }
+
+        if ($task->task_template_item_id !== null && $task->templateItem !== null) {
+            return [
+                'offset_days' => $task->templateItem->offset_days,
+                'skip_weekends' => $task->templateItem->skip_weekends,
+                'sort_order' => $task->templateItem->sort_order,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Returns whether the task should keep its current scheduled date during auto-reschedule.
+     */
+    private function shouldPreserveCurrentScheduledDate(ProductionTask $task, bool $force): bool
+    {
+        if ($task->is_finished || $task->isCancelled()) {
+            return true;
+        }
+
+        return ! $force && $task->is_manual_schedule;
+    }
+
+    /**
+     * Returns whether the task is the template anchor that must match production_date.
+     */
+    protected function isAnchorTask(ProductionTask $task): bool
+    {
+        return $task->source === 'template' && $task->sequence_order === 1;
+    }
+
+    /**
+     * Applies one scheduled date update while clearing manual mode.
+     */
+    private function updateTaskSchedule(ProductionTask $task, Carbon $scheduledDate): void
+    {
+        $task->update([
+            'scheduled_date' => $scheduledDate,
+            'date' => $scheduledDate,
+            'is_manual_schedule' => false,
+        ]);
+    }
+
+    /**
+     * Calculates one scheduled date and keeps sequence monotonicity.
+     */
+    private function resolveScheduledDate(
+        Carbon|string $productionDate,
+        int $offsetDays,
+        bool $skipWeekends,
+        ?Carbon $lastScheduledDate
+    ): Carbon {
+        $scheduledDate = $this->calculateScheduledDate($productionDate, $offsetDays, $skipWeekends);
+
+        if ($lastScheduledDate !== null && $scheduledDate->lt($lastScheduledDate)) {
+            return $lastScheduledDate->copy();
+        }
+
+        return $scheduledDate;
     }
 
     /**

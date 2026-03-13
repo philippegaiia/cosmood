@@ -111,7 +111,9 @@ describe('TaskGenerationService', function () {
                 ->production()
                 ->create();
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create([
+                'production_date' => now()->subDays(2)->toDateString(),
+            ]);
 
             $this->service->generateFromTemplate($production, $template);
             $this->service->generateFromTemplate($production, $template);
@@ -130,7 +132,9 @@ describe('TaskGenerationService', function () {
                 'offset_days' => 2,
             ]);
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create([
+                'production_date' => now()->subDays(2)->toDateString(),
+            ]);
 
             $this->service->generateFromTemplate($production, $template);
 
@@ -139,6 +143,54 @@ describe('TaskGenerationService', function () {
             expect($task->sequence_order)->toBe(3)
                 ->and($task->duration_minutes)->toBe(180)
                 ->and($task->name)->toBe('Stamping');
+        });
+
+        it('can generate tasks from template task types without duplicating them', function () {
+            $productType = ProductType::factory()->create();
+            $template = TaskTemplate::factory()->forProductType($productType)->create();
+            $mixingTaskType = ProductionTaskType::factory()->create([
+                'name' => 'Mélange',
+                'duration' => 90,
+            ]);
+            $cuttingTaskType = ProductionTaskType::factory()->create([
+                'name' => 'Découpe',
+                'duration' => 120,
+            ]);
+
+            TaskTemplateTaskType::query()->create([
+                'task_template_id' => $template->id,
+                'production_task_type_id' => $mixingTaskType->id,
+                'sort_order' => 1,
+                'offset_days' => 0,
+                'skip_weekends' => false,
+                'duration_override' => null,
+            ]);
+
+            TaskTemplateTaskType::query()->create([
+                'task_template_id' => $template->id,
+                'production_task_type_id' => $cuttingTaskType->id,
+                'sort_order' => 2,
+                'offset_days' => 3,
+                'skip_weekends' => false,
+                'duration_override' => 150,
+            ]);
+
+            $production = Production::factory()->confirmed()->create([
+                'production_date' => '2026-03-02',
+            ]);
+
+            $this->service->generateFromTemplate($production, $template);
+            $this->service->generateFromTemplate($production, $template);
+
+            $tasks = $production->fresh()->productionTasks->sortBy('sequence_order')->values();
+
+            expect($tasks)->toHaveCount(2)
+                ->and($tasks[0]->production_task_type_id)->toBe($mixingTaskType->id)
+                ->and($tasks[0]->task_template_item_id)->toBeNull()
+                ->and($tasks[0]->duration_minutes)->toBe(90)
+                ->and($tasks[1]->production_task_type_id)->toBe($cuttingTaskType->id)
+                ->and($tasks[1]->duration_minutes)->toBe(150)
+                ->and($tasks[1]->scheduled_date->format('Y-m-d'))->toBe('2026-03-05');
         });
     });
 
@@ -155,7 +207,9 @@ describe('TaskGenerationService', function () {
                 ->cutting()
                 ->create();
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create([
+                'production_date' => now()->subDays(2)->toDateString(),
+            ]);
 
             $this->service->generateFromTemplate($production, $template);
 
@@ -179,7 +233,9 @@ describe('TaskGenerationService', function () {
                 ->cutting()
                 ->create();
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create([
+                'production_date' => now()->subDays(2)->toDateString(),
+            ]);
 
             $this->service->generateFromTemplate($production, $template);
 
@@ -335,6 +391,54 @@ describe('TaskGenerationService', function () {
             expect(Carbon::parse($scheduledDate)->toDateString())->toBe('2026-03-10');
         });
 
+        it('can reschedule tasks generated from task template task types', function () {
+            $productType = ProductType::factory()->create();
+            $template = TaskTemplate::factory()->forProductType($productType)->create();
+            $product = Product::factory()->withProductType($productType)->create();
+            $mixingTaskType = ProductionTaskType::factory()->create([
+                'name' => 'Mélange',
+                'duration' => 90,
+            ]);
+            $cuttingTaskType = ProductionTaskType::factory()->create([
+                'name' => 'Découpe',
+                'duration' => 120,
+            ]);
+
+            TaskTemplateTaskType::query()->create([
+                'task_template_id' => $template->id,
+                'production_task_type_id' => $mixingTaskType->id,
+                'sort_order' => 1,
+                'offset_days' => 0,
+                'skip_weekends' => true,
+                'duration_override' => null,
+            ]);
+
+            TaskTemplateTaskType::query()->create([
+                'task_template_id' => $template->id,
+                'production_task_type_id' => $cuttingTaskType->id,
+                'sort_order' => 2,
+                'offset_days' => 2,
+                'skip_weekends' => true,
+                'duration_override' => null,
+            ]);
+
+            $production = Production::factory()->confirmed()->create([
+                'product_id' => $product->id,
+                'product_type_id' => $productType->id,
+                'production_date' => '2026-03-02',
+            ]);
+
+            $this->service->generateFromTemplate($production, $template);
+
+            $production->update(['production_date' => '2026-03-06']);
+            $this->service->rescheduleTasks($production->fresh());
+
+            $tasks = $production->fresh()->productionTasks->sortBy('sequence_order')->values();
+
+            expect($tasks[0]->scheduled_date->format('Y-m-d'))->toBe('2026-03-06')
+                ->and($tasks[1]->scheduled_date->format('Y-m-d'))->toBe('2026-03-10');
+        });
+
         it('can reset manual schedule to automatic', function () {
             $productType = ProductType::factory()->create();
             $template = TaskTemplate::factory()->forProductType($productType)->create();
@@ -438,15 +542,19 @@ describe('TaskGenerationService', function () {
             $productType = ProductType::factory()->create();
             $template = TaskTemplate::factory()->forProductType($productType)->create();
 
-            $first = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1]);
-            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2]);
+            $first = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1, 'offset_days' => 0]);
+            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2, 'offset_days' => 1]);
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create();
             $this->service->generateFromTemplate($production, $template);
 
             $secondTask = $production->fresh()->productionTasks()->where('task_template_item_id', $second->id)->first();
+            $secondTask->update([
+                'scheduled_date' => now()->subDay()->toDateString(),
+                'date' => now()->subDay()->toDateString(),
+            ]);
 
-            expect(fn () => $this->service->markTaskAsFinished($secondTask))
+            expect(fn () => $this->service->markTaskAsFinished($secondTask->fresh()))
                 ->toThrow(InvalidArgumentException::class, 'Previous tasks must be finished first');
         });
 
@@ -454,16 +562,24 @@ describe('TaskGenerationService', function () {
             $productType = ProductType::factory()->create();
             $template = TaskTemplate::factory()->forProductType($productType)->create();
 
-            $first = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1]);
-            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2]);
+            $first = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1, 'offset_days' => 0]);
+            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2, 'offset_days' => 1]);
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create();
             $this->service->generateFromTemplate($production, $template);
 
             $firstTask = $production->fresh()->productionTasks()->where('task_template_item_id', $first->id)->first();
             $secondTask = $production->fresh()->productionTasks()->where('task_template_item_id', $second->id)->first();
+            $firstTask->update([
+                'scheduled_date' => now()->subDays(2)->toDateString(),
+                'date' => now()->subDays(2)->toDateString(),
+            ]);
+            $secondTask->update([
+                'scheduled_date' => now()->subDay()->toDateString(),
+                'date' => now()->subDay()->toDateString(),
+            ]);
 
-            $this->service->markTaskAsFinished($firstTask);
+            $this->service->markTaskAsFinished($firstTask->fresh());
             $this->service->markTaskAsFinished($secondTask->fresh());
 
             expect($secondTask->fresh()->is_finished)->toBeTrue();
@@ -473,16 +589,20 @@ describe('TaskGenerationService', function () {
             $productType = ProductType::factory()->create();
             $template = TaskTemplate::factory()->forProductType($productType)->create();
 
-            TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1]);
-            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2]);
+            TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1, 'offset_days' => 0]);
+            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2, 'offset_days' => 1]);
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create();
             $this->service->generateFromTemplate($production, $template);
 
             $blockedTask = $production->fresh()->productionTasks()->where('task_template_item_id', $second->id)->first();
+            $blockedTask->update([
+                'scheduled_date' => now()->subDay()->toDateString(),
+                'date' => now()->subDay()->toDateString(),
+            ]);
             $user = User::factory()->create();
 
-            $this->service->forceFinishTask($blockedTask, $user, 'Urgent shipping deadline');
+            $this->service->forceFinishTask($blockedTask->fresh(), $user, 'Urgent shipping deadline');
 
             $blockedTask = $blockedTask->fresh();
 
@@ -496,17 +616,68 @@ describe('TaskGenerationService', function () {
             $productType = ProductType::factory()->create();
             $template = TaskTemplate::factory()->forProductType($productType)->create();
 
-            TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1]);
-            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2]);
+            TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 1, 'offset_days' => 0]);
+            $second = TaskTemplateItem::factory()->forTemplate($template)->create(['sort_order' => 2, 'offset_days' => 1]);
 
-            $production = Production::factory()->create();
+            $production = Production::factory()->inProgress()->create();
             $this->service->generateFromTemplate($production, $template);
 
             $blockedTask = $production->fresh()->productionTasks()->where('task_template_item_id', $second->id)->first();
+            $blockedTask->update([
+                'scheduled_date' => now()->subDay()->toDateString(),
+                'date' => now()->subDay()->toDateString(),
+            ]);
             $user = User::factory()->create();
 
-            expect(fn () => $this->service->forceFinishTask($blockedTask, $user, '   '))
+            expect(fn () => $this->service->forceFinishTask($blockedTask->fresh(), $user, '   '))
                 ->toThrow(InvalidArgumentException::class, 'Reason is required to bypass dependencies');
+        });
+
+        it('blocks finishing a future-dated task even when production is ongoing', function () {
+            $production = Production::factory()->inProgress()->create();
+
+            $task = ProductionTask::factory()->create([
+                'production_id' => $production->id,
+                'scheduled_date' => now()->addDay()->toDateString(),
+                'date' => now()->addDay()->toDateString(),
+                'is_finished' => false,
+                'cancelled_at' => null,
+            ]);
+
+            expect(fn () => $this->service->markTaskAsFinished($task))
+                ->toThrow(InvalidArgumentException::class, 'Task cannot be completed before its scheduled date');
+        });
+
+        it('blocks finishing a task before the production is ongoing', function () {
+            $production = Production::factory()->confirmed()->create();
+
+            $task = ProductionTask::factory()->create([
+                'production_id' => $production->id,
+                'scheduled_date' => now()->toDateString(),
+                'date' => now()->toDateString(),
+                'is_finished' => false,
+                'cancelled_at' => null,
+            ]);
+
+            expect(fn () => $this->service->markTaskAsFinished($task))
+                ->toThrow(InvalidArgumentException::class, 'Tasks can only be completed while the production is ongoing');
+        });
+
+        it('blocks forced finish on a future-dated task', function () {
+            $production = Production::factory()->inProgress()->create();
+
+            $task = ProductionTask::factory()->create([
+                'production_id' => $production->id,
+                'scheduled_date' => now()->addDay()->toDateString(),
+                'date' => now()->addDay()->toDateString(),
+                'is_finished' => false,
+                'cancelled_at' => null,
+            ]);
+
+            $user = User::factory()->create();
+
+            expect(fn () => $this->service->forceFinishTask($task, $user, 'Override'))
+                ->toThrow(InvalidArgumentException::class, 'Task cannot be completed before its scheduled date');
         });
     });
 
