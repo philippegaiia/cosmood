@@ -42,11 +42,16 @@ class SuppliesTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
-                'supplierListing.ingredient',
-                'supplierListing.supplier',
-                'sourceProduction.product',
-            ]))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->with([
+                    'supplierListing.ingredient',
+                    'supplierListing.supplier',
+                    'sourceProduction.product',
+                ])
+                ->withSum([
+                    'movements as '.Supply::ALLOCATED_QUANTITY_SUM_ATTRIBUTE => fn (Builder $movementQuery): Builder => $movementQuery
+                        ->where('movement_type', 'allocation'),
+                ], 'quantity'))
             ->columns([
                 TextColumn::make('supplierListing.ingredient.name')
                     ->label('Ingrédient')
@@ -81,7 +86,7 @@ class SuppliesTable
                     ->getStateUsing(function (Supply $record): array {
                         $available = $record->getAvailableQuantity();
                         $total = $record->getTotalQuantity();
-                        $allocated = $record->allocated_quantity ?? 0;
+                        $allocated = $record->getAllocatedQuantity();
                         $ingredient = $record->supplierListing?->ingredient;
                         $minStock = $ingredient?->stock_min ?? null;
                         $isBelowMin = $minStock !== null && $minStock > 0 && $available < $minStock;
@@ -96,7 +101,7 @@ class SuppliesTable
                         ];
                     })
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query
-                        ->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE(allocated_quantity, 0)) '.$direction)),
+                        ->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE('.Supply::ALLOCATED_QUANTITY_SUM_ATTRIBUTE.', 0)) '.$direction)),
 
                 TextColumn::make('unit_price')
                     ->label('Prix unitaire')

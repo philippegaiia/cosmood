@@ -5,6 +5,7 @@ use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
 use App\Filament\Resources\Supply\SupplyResource\RelationManagers\StockMovementsRelationManager;
+use App\Models\Supply\SuppliesMovement;
 use App\Models\Supply\Supply;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -31,6 +32,28 @@ it('loads supplies list page successfully', function () {
     Livewire::test(ListSupplies::class)
         ->assertSuccessful()
         ->assertCanSeeTableRecords([$supplyA, $supplyB]);
+});
+
+it('shows allocated stock from movements in the supplies table', function () {
+    $supply = Supply::factory()->create([
+        'initial_quantity' => 50,
+        'quantity_in' => null,
+        'quantity_out' => 0,
+        'allocated_quantity' => 0,
+    ]);
+
+    SuppliesMovement::query()->create([
+        'supply_id' => $supply->id,
+        'quantity' => 15,
+        'movement_type' => 'allocation',
+        'moved_at' => now(),
+        'reason' => 'Planned production allocation',
+        'user_id' => auth()->id(),
+    ]);
+
+    Livewire::test(ListSupplies::class)
+        ->assertSee('35.00')
+        ->assertSee('Alloué: 15.00');
 });
 
 it('disables manual supply creation from inventory resource', function () {

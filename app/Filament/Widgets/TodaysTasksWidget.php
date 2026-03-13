@@ -2,11 +2,18 @@
 
 namespace App\Filament\Widgets;
 
+use App\Enums\ProductionStatus;
 use App\Filament\Resources\Production\ProductionResource;
 use App\Models\Production\ProductionTask;
+use App\Services\Production\TaskGenerationService;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Filament\Widgets\TableWidget as BaseWidget;
+use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 
 /**
  * Today's Tasks Widget.
@@ -49,6 +56,33 @@ class TodaysTasksWidget extends BaseWidget
                     ->searchable()
                     ->sortable(),
             ])
+            ->recordActions([
+                Action::make('finish')
+                    ->label(__('Terminer'))
+                    ->color('success')
+                    ->icon(Heroicon::OutlinedCheckCircle)
+                    ->visible(fn (ProductionTask $record): bool => $this->canFinishTask($record))
+                    ->action(function (ProductionTask $record): void {
+                        if (! $this->canExecuteTaskFromDashboard($record)) {
+                            Notification::make()
+                                ->warning()
+                                ->title(__('Exécution non autorisée'))
+                                ->body(__('Les tâches ne peuvent être terminées ici que sur une production en cours.'))
+                                ->send();
+
+                            return;
+                        }
+
+                        try {
+                            app(TaskGenerationService::class)->markTaskAsFinished($record);
+                        } catch (InvalidArgumentException $exception) {
+                            Notification::make()
+                                ->danger()
+                                ->title($exception->getMessage())
+                                ->send();
+                        }
+                    }),
+            ])
             ->recordUrl(fn ($record) => $record->production_id
                 ? ProductionResource::getUrl('view', ['record' => $record->production_id])
                 : null)
@@ -60,5 +94,21 @@ class TodaysTasksWidget extends BaseWidget
     public static function canView(): bool
     {
         return true;
+    }
+
+    private function canFinishTask(ProductionTask $task): bool
+    {
+        return $this->canExecuteTaskFromDashboard($task)
+            && ! app(TaskGenerationService::class)->isBlockedByDependencies($task);
+    }
+
+    private function canExecuteTaskFromDashboard(ProductionTask $task): bool
+    {
+        return ! $task->is_finished
+            && ! $task->isCancelled()
+            && $task->production?->status === ProductionStatus::Ongoing
+            && $task->scheduled_date !== null
+            && ! Carbon::parse($task->scheduled_date)->isFuture()
+            && (auth()->user()?->canStartProductionRuns() ?? false);
     }
 }

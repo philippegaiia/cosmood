@@ -14,6 +14,8 @@ class Supply extends Model
 {
     use HasFactory;
 
+    public const ALLOCATED_QUANTITY_SUM_ATTRIBUTE = 'allocation_movements_sum_quantity';
+
     protected $guarded = [];
 
     protected function casts(): array
@@ -99,6 +101,10 @@ class Supply extends Model
      */
     public function getAllocatedQuantity(): float
     {
+        if (array_key_exists(self::ALLOCATED_QUANTITY_SUM_ATTRIBUTE, $this->getAttributes())) {
+            return round((float) ($this->getAttribute(self::ALLOCATED_QUANTITY_SUM_ATTRIBUTE) ?? 0), 3);
+        }
+
         return $this->movements()
             ->where('movement_type', 'allocation')
             ->sum('quantity');
