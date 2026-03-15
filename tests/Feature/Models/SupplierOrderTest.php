@@ -96,11 +96,35 @@ describe('SupplierOrder Model', function () {
         ]))->toThrow(InvalidArgumentException::class, 'Transition de statut invalide');
     });
 
+    it('allows only forward transitions from draft', function () {
+        expect(SupplierOrder::allowedTransitionsFor(OrderStatus::Draft))
+            ->toBe([
+                OrderStatus::Draft,
+                OrderStatus::Passed,
+                OrderStatus::Cancelled,
+            ]);
+    });
+
+    it('rejects skipping directly from draft to checked', function () {
+        $order = SupplierOrder::factory()->draft()->create();
+
+        expect(fn () => $order->update([
+            'order_status' => OrderStatus::Checked,
+        ]))->toThrow(InvalidArgumentException::class, 'Transition de statut invalide');
+    });
+
     it('exposes checked as a terminal status transition set', function () {
         $allowed = SupplierOrder::allowedTransitionsFor(OrderStatus::Checked);
 
         expect($allowed)->toHaveCount(1)
             ->and($allowed[0])->toBe(OrderStatus::Checked);
+    });
+
+    it('exposes cancelled as a terminal status transition set', function () {
+        $allowed = SupplierOrder::allowedTransitionsFor(OrderStatus::Cancelled);
+
+        expect($allowed)->toHaveCount(1)
+            ->and($allowed[0])->toBe(OrderStatus::Cancelled);
     });
 
     it('updates ingredient last price when order is confirmed', function () {
@@ -111,7 +135,7 @@ describe('SupplierOrder Model', function () {
             'ingredient_id' => $ingredient->id,
         ]);
 
-        $order = SupplierOrder::factory()->draft()->create([
+        $order = SupplierOrder::factory()->passed()->create([
             'supplier_id' => $supplier->id,
         ]);
 

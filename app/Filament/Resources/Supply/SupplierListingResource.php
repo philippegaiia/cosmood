@@ -72,7 +72,7 @@ class SupplierListingResource extends Resource
                         $set(
                             'unit_of_measure',
                             ($ingredient->base_unit?->value ?? IngredientBaseUnit::Kg->value) === IngredientBaseUnit::Unit->value
-                                ? 'Unit'
+                                ? 'u'
                                 : 'kg'
                         );
                     })
@@ -89,13 +89,17 @@ class SupplierListingResource extends Resource
                     ->options(Packaging::class)
                     ->default(Packaging::Bidon->value),
                 TextInput::make('unit_weight')
+                    ->label(fn (Get $get): string => self::getUnitWeightFieldLabel($get))
                     ->numeric()
-                    ->inputMode('decimal'),
+                    ->inputMode(fn (Get $get): string => self::isUnitBasedIngredientSelection($get) ? 'numeric' : 'decimal')
+                    ->step(fn (Get $get): float|int => self::isUnitBasedIngredientSelection($get) ? 1 : 0.001)
+                    ->minValue(fn (Get $get): float|int => self::isUnitBasedIngredientSelection($get) ? 1 : 0.001)
+                    ->helperText(fn (Get $get): string => __('Contenu d\'une UOM fournisseur en :unit.', ['unit' => self::getUnitLabelForSelection($get)])),
                 Select::make('unit_of_measure')
                     ->options([
                         'kg' => 'kg',
                         'g' => 'Gramme',
-                        'Unit' => 'Unité',
+                        'u' => 'u',
                         'Meter' => 'Mètre',
                         'Litre' => 'Litre',
                     ])
@@ -128,7 +132,7 @@ class SupplierListingResource extends Resource
 
                 TextColumn::make('name')
                     ->label('designation')
-                    ->formatStateUsing(fn ($record) => $record->name.' '.$record->unit_weight.' '.$record->unit_of_measure)
+                    ->formatStateUsing(fn (SupplierListing $record) => $record->name.' ('.self::formatListingUom($record).')')
                     ->weight(FontWeight::Bold)
                     ->searchable(['name', 'unit_of_measure']),
 
@@ -151,7 +155,8 @@ class SupplierListingResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('unit_weight')
-                    ->label('Poids Unit.')
+                    ->label('UOM')
+                    ->formatStateUsing(fn (SupplierListing $record): string => self::formatListingUom($record))
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
@@ -237,5 +242,38 @@ class SupplierListingResource extends Resource
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery();
+    }
+
+    private static function isUnitBasedIngredientSelection(Get $get): bool
+    {
+        $ingredientId = $get('ingredient_id');
+
+        if (! filled($ingredientId)) {
+            return false;
+        }
+
+        return Ingredient::query()->whereKey($ingredientId)->value('base_unit') === IngredientBaseUnit::Unit->value;
+    }
+
+    private static function getUnitLabelForSelection(Get $get): string
+    {
+        return self::isUnitBasedIngredientSelection($get) ? 'u' : 'kg';
+    }
+
+    private static function getUnitWeightFieldLabel(Get $get): string
+    {
+        return self::isUnitBasedIngredientSelection($get)
+            ? __('UOM (unités)')
+            : __('UOM (kg)');
+    }
+
+    private static function formatListingUom(SupplierListing $record): string
+    {
+        $unit = $record->getNormalizedUnitOfMeasure();
+        $value = (float) ($record->unit_weight ?? 0);
+        $displayValue = $value > 0 ? $value : 1;
+        $decimals = $unit === 'u' || abs($displayValue - round($displayValue)) <= 0.0001 ? 0 : 3;
+
+        return trim(number_format($displayValue, $decimals, ',', ' ').' '.$unit);
     }
 }

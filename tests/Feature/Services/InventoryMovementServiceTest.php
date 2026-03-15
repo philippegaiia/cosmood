@@ -116,17 +116,17 @@ it('prevents receiving the same supplier order item twice', function () {
 
 it('receives unit-based supplier order items without kg conversion', function () {
     $user = User::factory()->create();
-    $ingredient = Ingredient::factory()->create();
+    $ingredient = Ingredient::factory()->unitBased()->create();
     $listing = SupplierListing::factory()->create([
         'ingredient_id' => $ingredient->id,
         'unit_of_measure' => 'u',
-        'unit_weight' => 0,
+        'unit_weight' => 24,
     ]);
 
     $item = SupplierOrderItem::factory()->create([
         'supplier_listing_id' => $listing->id,
-        'quantity' => 300,
-        'unit_weight' => 0,
+        'quantity' => 3,
+        'unit_weight' => 24,
         'unit_price' => 0.42,
         'batch_number' => 'BOX-300',
     ]);
@@ -140,9 +140,9 @@ it('receives unit-based supplier order items without kg conversion', function ()
 
     $movement = $supply->movements()->first();
 
-    expect((float) $supply->quantity_in)->toBe(300.0)
+    expect((float) $supply->quantity_in)->toBe(72.0)
         ->and($movement)->not->toBeNull()
-        ->and((float) $movement->quantity)->toBe(300.0)
+        ->and((float) $movement->quantity)->toBe(72.0)
         ->and($movement->unit)->toBe('u');
 });
 

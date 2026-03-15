@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Production\Production;
+use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
@@ -110,6 +111,60 @@ describe('SupplierOrderItem Model', function () {
         })->toThrow(InvalidArgumentException::class, 'quantité commandée doit être supérieure à zéro');
     });
 
+    it('rejects decimal ordered quantity for unit-based supplier listings', function () {
+        $ingredient = Ingredient::factory()->unitBased()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'unit_of_measure' => 'u',
+            'unit_weight' => 0,
+        ]);
+
+        expect(function () use ($listing): void {
+            SupplierOrderItem::factory()->create([
+                'supplier_listing_id' => $listing->id,
+                'quantity' => 3.5,
+                'unit_weight' => 0,
+            ]);
+        })->toThrow(InvalidArgumentException::class, 'nombre entier');
+    });
+
+    it('rejects decimal committed quantity for unit-based supplier listings', function () {
+        $ingredient = Ingredient::factory()->unitBased()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'unit_of_measure' => 'u',
+            'unit_weight' => 0,
+        ]);
+
+        expect(function () use ($listing): void {
+            SupplierOrderItem::factory()->create([
+                'supplier_listing_id' => $listing->id,
+                'quantity' => 5,
+                'unit_weight' => 0,
+                'committed_quantity_kg' => 2.5,
+            ]);
+        })->toThrow(InvalidArgumentException::class, 'nombre entier');
+    });
+
+    it('calculates ordered quantity from quantity times uom content for unit-based listings', function () {
+        $ingredient = Ingredient::factory()->unitBased()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'unit_of_measure' => 'u',
+            'unit_weight' => 24,
+        ]);
+
+        $item = SupplierOrderItem::factory()->create([
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 3,
+            'unit_weight' => 24,
+            'committed_quantity_kg' => 72,
+        ]);
+
+        expect($item->getDisplayUnit())->toBe('u')
+            ->and((float) $item->getOrderedQuantityKg())->toBe(72.0);
+    });
+
     it('deletes supplier order items permanently before stock transfer', function () {
         $item = SupplierOrderItem::factory()->create();
         $itemId = $item->id;
@@ -136,5 +191,26 @@ describe('SupplierOrderItem Model', function () {
             ->toThrow(InvalidArgumentException::class, 'déjà passé en stock');
 
         expect(SupplierOrderItem::query()->find($item->id))->not->toBeNull();
+    });
+
+    it('blocks editing locked procurement fields once stock exists', function () {
+        $listing = SupplierListing::factory()->create();
+        $item = SupplierOrderItem::factory()->create([
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 5,
+            'is_in_supplies' => 'Stock',
+            'moved_to_stock_at' => now(),
+        ]);
+
+        Supply::factory()->create([
+            'supplier_listing_id' => $listing->id,
+            'supplier_order_item_id' => $item->id,
+        ]);
+
+        expect(fn () => $item->update([
+            'quantity' => 6,
+        ]))->toThrow(InvalidArgumentException::class, 'déjà passée en stock');
+
+        expect((float) $item->fresh()->quantity)->toBe(5.0);
     });
 });

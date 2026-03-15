@@ -4,6 +4,7 @@ namespace App\Filament\Pages\Settings;
 
 use App\Models\Settings;
 use BackedEnum;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
@@ -44,6 +45,9 @@ class GeneralSettingsPage extends Page implements HasForms
         $this->form->fill([
             'internal_supplier_label' => Settings::get('internal_supplier_label', 'INT'),
             'date_format' => Settings::get('date_format', 'Y-m-d'),
+            'company_name' => Settings::companyName(),
+            'company_address' => Settings::companyAddress(),
+            'company_vat_number' => Settings::companyVatNumber(),
         ]);
     }
 
@@ -68,6 +72,24 @@ class GeneralSettingsPage extends Page implements HasForms
                             ->maxLength(20)
                             ->required(),
                     ]),
+                Section::make('Société émettrice')
+                    ->description('Informations affichées sur les bons de commande fournisseurs.')
+                    ->schema([
+                        TextInput::make('company_name')
+                            ->label('Nom société')
+                            ->default(config('app.name'))
+                            ->maxLength(255)
+                            ->required(),
+                        Textarea::make('company_address')
+                            ->label('Adresse société')
+                            ->helperText('Une ligne par information: rue, code postal, ville, pays...')
+                            ->rows(4)
+                            ->columnSpanFull(),
+                        TextInput::make('company_vat_number')
+                            ->label('N° TVA')
+                            ->maxLength(50),
+                    ])
+                    ->columns(2),
             ]);
     }
 
@@ -77,6 +99,9 @@ class GeneralSettingsPage extends Page implements HasForms
 
         Settings::set('internal_supplier_label', $data['internal_supplier_label']);
         Settings::set('date_format', $data['date_format']);
+        Settings::set('company_name', $data['company_name']);
+        Settings::set('company_address', $data['company_address']);
+        Settings::set('company_vat_number', $data['company_vat_number']);
 
         Notification::make()
             ->title('Paramètres enregistrés')

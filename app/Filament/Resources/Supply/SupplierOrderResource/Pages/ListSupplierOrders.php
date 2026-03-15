@@ -25,7 +25,7 @@ class ListSupplierOrders extends ListRecords
     {
         return [
             'all' => Tab::make()
-                ->badge(SupplierOrder::all()->count()),
+                ->badge(SupplierOrder::query()->count()),
 
             'draft' => Tab::make()
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Draft->value))
@@ -43,11 +43,45 @@ class ListSupplierOrders extends ListRecords
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Delivered->value))
                 ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Delivered->value)->count()),
 
+            'checked' => Tab::make('Contrôlées')
+                ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Checked->value))
+                ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Checked->value)->count()),
+
+            'stock-missing' => Tab::make('Stock manquant')
+                ->modifyQueryUsing(fn (Builder $query) => $query
+                    ->where('order_status', OrderStatus::Checked->value)
+                    ->whereHas('supplier_order_items', fn (Builder $itemsQuery): Builder => $itemsQuery->whereNull('moved_to_stock_at')))
+                ->badge(SupplierOrder::query()
+                    ->where('order_status', OrderStatus::Checked->value)
+                    ->whereHas('supplier_order_items', fn (Builder $itemsQuery): Builder => $itemsQuery->whereNull('moved_to_stock_at'))
+                    ->count()),
+
         ];
     }
 
     public function getDefaultActiveTab(): string|int|null
     {
-        return 'confirmed';
+        if (SupplierOrder::query()
+            ->where('order_status', OrderStatus::Checked->value)
+            ->whereHas('supplier_order_items', fn (Builder $itemsQuery): Builder => $itemsQuery->whereNull('moved_to_stock_at'))
+            ->exists()) {
+            return 'stock-missing';
+        }
+
+        foreach (['delivered', 'confirmed', 'passed', 'checked', 'draft'] as $tab) {
+            $status = match ($tab) {
+                'delivered' => OrderStatus::Delivered,
+                'confirmed' => OrderStatus::Confirmed,
+                'passed' => OrderStatus::Passed,
+                'checked' => OrderStatus::Checked,
+                'draft' => OrderStatus::Draft,
+            };
+
+            if (SupplierOrder::query()->where('order_status', $status->value)->exists()) {
+                return $tab;
+            }
+        }
+
+        return 'all';
     }
 }

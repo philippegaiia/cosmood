@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\OrderStatus;
 use App\Models\User;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -50,6 +51,19 @@ describe('User Model', function () {
             ->and($planner->canReceiveSupplierOrdersIntoStock())->toBeFalse()
             ->and($manager->canManageSupplyInventory())->toBeTrue()
             ->and($manager->canReceiveSupplierOrdersIntoStock())->toBeTrue();
+    });
+
+    it('limits supplier order status transitions by operational role', function () {
+        $planner = User::factory()->create();
+        $planner->assignRole(Role::findOrCreate('planner'));
+
+        $manager = User::factory()->create();
+        $manager->assignRole(Role::findOrCreate('manager'));
+
+        expect($planner->canSetSupplierOrderStatus(OrderStatus::Draft, OrderStatus::Passed))->toBeTrue()
+            ->and($planner->canSetSupplierOrderStatus(OrderStatus::Confirmed, OrderStatus::Delivered))->toBeFalse()
+            ->and($manager->canSetSupplierOrderStatus(OrderStatus::Confirmed, OrderStatus::Delivered))->toBeTrue()
+            ->and($manager->canSetSupplierOrderStatus(OrderStatus::Delivered, OrderStatus::Checked))->toBeTrue();
     });
 
     it('limits filament admin panel access to operational roles', function () {

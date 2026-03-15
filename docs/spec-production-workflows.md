@@ -143,6 +143,28 @@ This document describes the current production-side business rules implemented i
 - Hybrid rule:
   - procurement item statuses stay indicative,
   - planning views expose explicit warnings when coverage depends on non-committed provisional pool.
+  - wave-linked procurement sync consumes only `committed_quantity_kg`; extra ordered or received stock from the same PO line stays outside firm wave coverage until allocated through normal stock reservation.
+
+### Supplier order lifecycle guardrails
+
+- Allowed supplier order transitions are intentionally forward-only:
+  - `Brouillon -> Passée -> Confirmée -> Livrée -> Contrôlée`
+  - `Annulée` is terminal.
+- Shortcut allowed for operations when supplier confirmation is skipped:
+  - `Passée -> Livrée`.
+- Role gate:
+  - planners/managers may drive planning statuses (`Brouillon`, `Passée`, `Confirmée`, `Annulée`),
+  - inventory-capable users only may move orders to `Livrée` or `Contrôlée`.
+- Supplier order edit page surfaces status and stock-entry progress immediately (`x / y lignes en stock`, `x / y lignes prêtes`).
+- Once a supplier order line is moved to stock, receipt-driving fields become immutable on the PO line to avoid drift with the created stock lot.
+- Transition to `Contrôlée` is blocked while any pending PO line is missing receipt data (`date de livraison`, `prix`, `lot`, `DLUO`, positive quantity).
+- Supplier order list shows a dedicated stock warning marker for `Contrôlée` orders that still have lines not yet entered into stock.
+- Supplier email copy includes the supplier code when available and avoids fake zero pricing by showing `prix à confirmer` until rates are filled.
+- Supplier order creation supports entering PO lines in the initial create form; users no longer need to save an empty header first.
+- Supplier order list includes dedicated `Contrôlées` and `Stock manquant` tabs to surface receiving follow-up faster.
+- Supplier-facing PO print/PDF/email documents use the issuer company configured in `Paramètres généraux` (`Nom société`, `Adresse société`, `N° TVA`).
+- Supplier-facing PO print/PDF documents intentionally omit internal workflow status and DLUO, and only show `Facture` / `BL` when those references are filled.
+- Supplier order lines for unit-based ingredients use `u` as UOM, enforce whole-number quantities / commitments, and calculate totals as `quantité × contenu UOM` (e.g. `3 cartons × 24 u = 72 u`).
 
 ## Supply Lot Contract
 

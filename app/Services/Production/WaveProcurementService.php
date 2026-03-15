@@ -10,11 +10,9 @@ use App\Enums\WaveStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
-use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
 use App\Models\Supply\Supply;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 class WaveProcurementService
 {
@@ -451,75 +449,6 @@ class WaveProcurementService
         });
     }
 
-    public function generatePurchaseOrders(ProductionWave $wave): Collection
-    {
-        if (! $wave->isApproved()) {
-            throw new \InvalidArgumentException('Wave must be approved to generate purchase orders');
-        }
-
-        $aggregated = $this->aggregateRequirements($wave)
-            ->map(function (object $item): object {
-                $notOrderedItems = $item->items->where('procurement_status', ProcurementStatus::NotOrdered);
-
-                $item->to_order_quantity = (float) $notOrderedItems
-                    ->sum(fn (ProductionItem $item): float => $this->getRemainingQuantity($item));
-
-                $item->not_ordered_item_ids = $notOrderedItems->pluck('id')->values();
-
-                return $item;
-            })
-            ->filter(fn (object $item): bool => $item->to_order_quantity > 0)
-            ->values();
-
-        if ($aggregated->isEmpty()) {
-            return collect();
-        }
-
-        $orders = collect();
-
-        DB::transaction(function () use ($wave, $aggregated, &$orders): void {
-            $bySupplier = $aggregated
-                ->filter(fn ($item) => $item->supplier_listing_id !== null && $item->supplier_listing !== null)
-                ->groupBy(fn ($item) => $item->supplier_listing->supplier_id);
-
-            foreach ($bySupplier as $supplierId => $items) {
-                if (! $supplierId) {
-                    continue;
-                }
-
-                $order = SupplierOrder::create([
-                    'supplier_id' => $supplierId,
-                    'production_wave_id' => $wave->id,
-                    'serial_number' => $this->getNextSerialNumber(),
-                    'order_status' => OrderStatus::Draft,
-                    'order_date' => now(),
-                ]);
-
-                foreach ($items as $item) {
-                    $listing = $item->supplier_listing;
-
-                    SupplierOrderItem::create([
-                        'supplier_order_id' => $order->id,
-                        'supplier_listing_id' => $listing->id,
-                        'unit_weight' => $listing->unit_weight,
-                        'quantity' => $item->to_order_quantity,
-                        'unit_price' => $listing->price,
-                        'is_in_supplies' => false,
-                    ]);
-
-                    ProductionItem::query()
-                        ->whereIn('id', $item->not_ordered_item_ids)
-                        ->where('procurement_status', ProcurementStatus::NotOrdered)
-                        ->update(['procurement_status' => ProcurementStatus::Ordered]);
-                }
-
-                $orders->push($order->load('supplier_order_items'));
-            }
-        });
-
-        return $orders;
-    }
-
     public function getProcurementSummary(ProductionWave $wave): array
     {
         $items = $this->getWaveProductionItems($wave);
@@ -530,13 +459,6 @@ class WaveProcurementService
             'received' => $items->where('procurement_status', ProcurementStatus::Received)->count(),
             'total' => $items->count(),
         ];
-    }
-
-    protected function getNextSerialNumber(): int
-    {
-        $lastOrder = SupplierOrder::orderBy('id', 'desc')->first();
-
-        return $lastOrder ? $lastOrder->serial_number + 1 : 1001;
     }
 
     private function getWaveProductionItems(ProductionWave $wave): Collection

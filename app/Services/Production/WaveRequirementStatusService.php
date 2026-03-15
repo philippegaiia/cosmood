@@ -10,7 +10,6 @@ use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
 use App\Models\Supply\SupplierOrderItem;
-use App\Models\Supply\Supply;
 use Illuminate\Support\Collection;
 
 class WaveRequirementStatusService
@@ -40,24 +39,23 @@ class WaveRequirementStatusService
                 $remainingReceived = (float) ($receivedByIngredient->get((int) $ingredientId) ?? 0);
 
                 foreach ($ingredientItems as $item) {
-                    $requiredQuantity = (float) ($item->required_quantity > 0 ? $item->required_quantity : $item->getCalculatedQuantityKg());
+                    $remainingRequiredQuantity = round($item->getUnallocatedQuantity(), 3);
 
-                    if ($item->isFullyAllocated()) {
+                    if ($remainingRequiredQuantity <= 0) {
                         if ($item->procurement_status !== ProcurementStatus::Received) {
                             $item->update(['procurement_status' => ProcurementStatus::Received]);
                         }
-
-                        $remainingOrdered = max(0, $remainingOrdered - $requiredQuantity);
-                        $remainingReceived = max(0, $remainingReceived - $requiredQuantity);
 
                         continue;
                     }
 
                     $nextStatus = ProcurementStatus::NotOrdered;
+                    $isCoveredByReceivedCommitment = $remainingReceived >= $remainingRequiredQuantity;
+                    $isCoveredByOrderedCommitment = $remainingOrdered >= $remainingRequiredQuantity;
 
-                    if ($remainingReceived >= $requiredQuantity) {
+                    if ($isCoveredByReceivedCommitment) {
                         $nextStatus = ProcurementStatus::Received;
-                    } elseif ($remainingOrdered >= $requiredQuantity) {
+                    } elseif ($isCoveredByOrderedCommitment) {
                         $nextStatus = ProcurementStatus::Ordered;
                     } elseif ($item->is_order_marked) {
                         $nextStatus = ProcurementStatus::Ordered;
@@ -67,8 +65,12 @@ class WaveRequirementStatusService
                         $item->update(['procurement_status' => $nextStatus]);
                     }
 
-                    $remainingOrdered = max(0, $remainingOrdered - $requiredQuantity);
-                    $remainingReceived = max(0, $remainingReceived - $requiredQuantity);
+                    if (! $isCoveredByReceivedCommitment && ! $isCoveredByOrderedCommitment) {
+                        continue;
+                    }
+
+                    $remainingOrdered = max(0, $remainingOrdered - $remainingRequiredQuantity);
+                    $remainingReceived = max(0, $remainingReceived - min($remainingReceived, $remainingRequiredQuantity));
                 }
             });
     }
@@ -180,22 +182,52 @@ class WaveRequirementStatusService
             ->with('supplierListing:id,ingredient_id')
             ->get()
             ->groupBy(fn (SupplierOrderItem $item): ?int => $item->supplierListing?->ingredient_id)
-            ->map(fn (Collection $items): float => (float) $items->sum(fn (SupplierOrderItem $item): float => (float) ($item->quantity ?? 0) * (float) ($item->unit_weight ?? 0)))
+            ->map(fn (Collection $items): float => (float) $items->sum(fn (SupplierOrderItem $item): float => $this->getCommittedWaveQuantityKg($item)))
             ->filter(fn (float $quantity, $ingredientId): bool => $ingredientId !== null && $quantity > 0)
             ->mapWithKeys(fn (float $quantity, $ingredientId): array => [(int) $ingredientId => $quantity]);
     }
 
     private function getReceivedQuantitiesByIngredient(ProductionWave $wave): Collection
     {
-        return Supply::query()
-            ->whereHas('supplierOrderItem.supplierOrder', function ($query) use ($wave): void {
+        return SupplierOrderItem::query()
+            ->whereHas('supplierOrder', function ($query) use ($wave): void {
                 $query->where('production_wave_id', $wave->id);
             })
-            ->with('supplierListing:id,ingredient_id')
+            ->whereHas('supply')
+            ->with([
+                'supplierListing:id,ingredient_id',
+                'supply:id,supplier_order_item_id,initial_quantity,quantity_in',
+            ])
             ->get()
-            ->groupBy(fn (Supply $supply): ?int => $supply->supplierListing?->ingredient_id)
-            ->map(fn (Collection $supplies): float => (float) $supplies->sum(fn (Supply $supply): float => (float) ($supply->quantity_in ?? $supply->initial_quantity ?? 0)))
+            ->groupBy(fn (SupplierOrderItem $item): ?int => $item->supplierListing?->ingredient_id)
+            ->map(fn (Collection $items): float => (float) $items->sum(fn (SupplierOrderItem $item): float => $this->getReceivedCommittedWaveQuantityKg($item)))
             ->filter(fn (float $quantity, $ingredientId): bool => $ingredientId !== null && $quantity > 0)
             ->mapWithKeys(fn (float $quantity, $ingredientId): array => [(int) $ingredientId => $quantity]);
+    }
+
+    /**
+     * Wave-linked procurement statuses must consume only the explicit PO
+     * commitment for that wave. Any excess ordered quantity remains available in
+     * planning as a shared provisional pool, but it must not silently mark the
+     * linked wave as ordered.
+     */
+    private function getCommittedWaveQuantityKg(SupplierOrderItem $item): float
+    {
+        return round(max(0, min(
+            (float) ($item->committed_quantity_kg ?? 0),
+            $item->getOrderedQuantityKg(),
+        )), 3);
+    }
+
+    /**
+     * Received coverage for a linked wave is capped by the committed quantity on
+     * the originating PO line. Extra stock received into inventory from a large
+     * pack size stays available via stock/advisory flows until it is allocated.
+     */
+    private function getReceivedCommittedWaveQuantityKg(SupplierOrderItem $item): float
+    {
+        $receivedQuantityKg = (float) ($item->supply?->quantity_in ?? $item->supply?->initial_quantity ?? 0);
+
+        return round(min($receivedQuantityKg, $this->getCommittedWaveQuantityKg($item)), 3);
     }
 }

@@ -83,7 +83,7 @@ class InventoryMovementService
     public function recordInboundFromOrderItem(Supply $supply, SupplierOrderItem $item, ?User $user = null): SuppliesMovement
     {
         $quantity = $this->resolveOrderItemStockQuantity($item);
-        $unit = $item->supplierListing?->unit_of_measure ?: 'kg';
+        $unit = $item->getDisplayUnit();
 
         return SuppliesMovement::query()->create([
             'supply_id' => $supply->id,
@@ -138,7 +138,7 @@ class InventoryMovementService
             'user_id' => $user?->id,
             'movement_type' => 'out',
             'quantity' => $quantityKg,
-            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
+            'unit' => $supply->getUnitOfMeasure(),
             'reason' => $reason ?? 'Allocated to production',
             'meta' => [
                 'production_batch' => $production->getLotIdentifier(),
@@ -160,7 +160,7 @@ class InventoryMovementService
             'user_id' => $user?->id,
             'movement_type' => 'adjustment',
             'quantity' => $quantityKg,
-            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
+            'unit' => $supply->getUnitOfMeasure(),
             'reason' => $reason,
             'meta' => [
                 'supply_batch' => $supply->batch_number,
@@ -183,7 +183,7 @@ class InventoryMovementService
             'user_id' => null,
             'movement_type' => 'allocation',
             'quantity' => $quantityKg,
-            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
+            'unit' => $supply->getUnitOfMeasure(),
             'reason' => $reason ?? 'Reserved for production',
             'meta' => [
                 'production_batch' => $production->getLotIdentifier(),
@@ -210,7 +210,7 @@ class InventoryMovementService
             'user_id' => null,
             'movement_type' => 'allocation',
             'quantity' => -$quantityKg,
-            'unit' => $supply->supplierListing?->unit_of_measure ?: 'kg',
+            'unit' => $supply->getUnitOfMeasure(),
             'reason' => $reason ?? 'Released from production',
             'meta' => [
                 'production_batch' => $production->getLotIdentifier(),

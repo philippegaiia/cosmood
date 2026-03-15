@@ -2,6 +2,7 @@
 
 namespace App\Models\Supply;
 
+use App\Enums\IngredientBaseUnit;
 use App\Enums\Packaging;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,6 +14,13 @@ class SupplierListing extends Model
 {
     use HasFactory;
     use SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::saving(function (SupplierListing $listing): void {
+            $listing->unit_of_measure = self::normalizeUnitOfMeasure((string) ($listing->unit_of_measure ?? 'kg'));
+        });
+    }
 
     protected $fillable = [
         'id',
@@ -56,5 +64,28 @@ class SupplierListing extends Model
     public function supplier_order_items(): HasMany
     {
         return $this->hasMany(SupplierOrderItem::class);
+    }
+
+    public static function normalizeUnitOfMeasure(string $unitOfMeasure): string
+    {
+        $normalized = mb_strtolower(trim($unitOfMeasure));
+
+        return match ($normalized) {
+            'u', 'unit', 'units' => 'u',
+            default => trim($unitOfMeasure) !== '' ? trim($unitOfMeasure) : 'kg',
+        };
+    }
+
+    public function getNormalizedUnitOfMeasure(): string
+    {
+        return self::normalizeUnitOfMeasure((string) ($this->unit_of_measure ?? 'kg'));
+    }
+
+    public function isUnitBased(): bool
+    {
+        $this->loadMissing('ingredient:id,base_unit');
+
+        return $this->ingredient?->base_unit === IngredientBaseUnit::Unit
+            || $this->getNormalizedUnitOfMeasure() === 'u';
     }
 }

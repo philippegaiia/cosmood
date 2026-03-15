@@ -157,7 +157,13 @@
             <tr>
                 <td>
                     <div class="block-title">Emetteur</div>
-                    <div>{{ config('app.name') }}</div>
+                    <div><strong>{{ $issuer['name'] }}</strong></div>
+                    @foreach ($issuer['address_lines'] as $line)
+                        <div>{{ $line }}</div>
+                    @endforeach
+                    @if (filled($issuer['vat_number']))
+                        <div>TVA: {{ $issuer['vat_number'] }}</div>
+                    @endif
                 </td>
                 <td>
                     <div class="block-title">Fournisseur</div>
@@ -180,11 +186,14 @@
                 <td>
                     <div><strong>Date commande:</strong> {{ filled($supplierOrder->order_date) ? \Illuminate\Support\Carbon::parse($supplierOrder->order_date)->format('d/m/Y') : '-' }}</div>
                     <div><strong>Date livraison souhaitee:</strong> {{ filled($supplierOrder->delivery_date) ? \Illuminate\Support\Carbon::parse($supplierOrder->delivery_date)->format('d/m/Y') : '-' }}</div>
-                    <div><strong>Statut:</strong> {{ $supplierOrder->order_status?->getLabel() ?? '-' }}</div>
                 </td>
                 <td>
-                    <div><strong>Facture:</strong> {{ $supplierOrder->invoice_number ?? '-' }}</div>
-                    <div><strong>BL:</strong> {{ $supplierOrder->bl_number ?? '-' }}</div>
+                    @if (filled($supplierOrder->invoice_number))
+                        <div><strong>Facture:</strong> {{ $supplierOrder->invoice_number }}</div>
+                    @endif
+                    @if (filled($supplierOrder->bl_number))
+                        <div><strong>BL:</strong> {{ $supplierOrder->bl_number }}</div>
+                    @endif
                 </td>
             </tr>
         </table>
@@ -192,13 +201,13 @@
         <table class="items">
             <thead>
                 <tr>
-                    <th style="width: 30%;">Article</th>
+                    <th style="width: 24%;">Article</th>
+                    <th style="width: 12%;">Code fournisseur</th>
                     <th style="width: 10%;" class="text-right">Quantite</th>
-                    <th style="width: 12%;" class="text-right">Poids unit.</th>
-                    <th style="width: 12%;" class="text-right">Total kg</th>
-                    <th style="width: 14%;" class="text-right">Prix unit. EUR/kg</th>
-                    <th style="width: 14%;" class="text-right">Montant EUR</th>
-                    <th style="width: 8%;">DLUO</th>
+                    <th style="width: 12%;" class="text-right">UOM</th>
+                    <th style="width: 12%;" class="text-right">Total</th>
+                    <th style="width: 15%;" class="text-right">Prix unit.</th>
+                    <th style="width: 15%;" class="text-right">Montant EUR</th>
                 </tr>
             </thead>
             <tbody>
@@ -207,17 +216,19 @@
                         $quantity = (float) ($line->quantity ?? 0);
                         $unitWeight = (float) ($line->unit_weight ?? 0);
                         $unitPrice = (float) ($line->unit_price ?? 0);
-                        $lineKg = round($quantity * $unitWeight, 3);
-                        $lineAmount = round($lineKg * $unitPrice, 2);
+                        $displayUnit = $line->supplierListing?->getNormalizedUnitOfMeasure() ?? 'kg';
+                        $unitMultiplier = $unitWeight > 0 ? $unitWeight : 1;
+                        $lineTotal = round($quantity * $unitMultiplier, 3);
+                        $lineAmount = round($lineTotal * $unitPrice, 2);
                     @endphp
                     <tr>
                         <td>{{ $line->supplierListing?->name ?? '-' }}</td>
-                        <td class="text-right">{{ number_format($quantity, 3, ',', ' ') }}</td>
-                        <td class="text-right">{{ number_format($unitWeight, 3, ',', ' ') }}</td>
-                        <td class="text-right">{{ number_format($lineKg, 3, ',', ' ') }}</td>
+                        <td>{{ $line->supplierListing?->supplier_code ?? '-' }}</td>
+                        <td class="text-right">{{ $displayUnit === 'u' ? number_format($quantity, 0, ',', ' ') : number_format($quantity, 3, ',', ' ') }}</td>
+                        <td class="text-right">{{ $displayUnit === 'u' ? number_format($unitMultiplier, 0, ',', ' ') : number_format($unitMultiplier, 3, ',', ' ') }} {{ $displayUnit }}</td>
+                        <td class="text-right">{{ $displayUnit === 'u' ? number_format($lineTotal, 0, ',', ' ') : number_format($lineTotal, 3, ',', ' ') }} {{ $displayUnit }}</td>
                         <td class="text-right">{{ number_format($unitPrice, 2, ',', ' ') }}</td>
                         <td class="text-right">{{ number_format($lineAmount, 2, ',', ' ') }}</td>
-                        <td>{{ filled($line->expiry_date) ? \Illuminate\Support\Carbon::parse($line->expiry_date)->format('m/Y') : '-' }}</td>
                     </tr>
                 @empty
                     <tr>

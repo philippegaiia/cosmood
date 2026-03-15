@@ -14,6 +14,16 @@ class SupplierOrderItem extends Model
 {
     use HasFactory;
 
+    private const LOCKED_AFTER_STOCK_FIELDS = [
+        'supplier_listing_id',
+        'quantity',
+        'unit_weight',
+        'unit_price',
+        'batch_number',
+        'expiry_date',
+        'committed_quantity_kg',
+    ];
+
     protected $guarded = [];
 
     protected function casts(): array
@@ -32,16 +42,33 @@ class SupplierOrderItem extends Model
     protected static function booted(): void
     {
         static::saving(function (SupplierOrderItem $item): void {
+            if ($item->exists && $item->isLockedForEditingAfterStock() && $item->isDirty(self::LOCKED_AFTER_STOCK_FIELDS)) {
+                throw new InvalidArgumentException(__('Cette ligne est déjà passée en stock et ne peut plus être modifiée.'));
+            }
+
+            $item->loadMissing('supplierListing.ingredient');
+
             $orderedUnits = round((float) ($item->quantity ?? 0), 3);
+
+            if ($item->isUnitBased() && abs($orderedUnits - round($orderedUnits)) > 0.0001) {
+                throw new InvalidArgumentException(__('La quantité commandée doit être un nombre entier pour les ingrédients unitaires.'));
+            }
 
             if ($orderedUnits <= 0) {
                 throw new InvalidArgumentException(__('La quantité commandée doit être supérieure à zéro.'));
             }
 
-            $item->quantity = $orderedUnits;
+            $item->quantity = $item->isUnitBased()
+                ? (float) round($orderedUnits)
+                : $orderedUnits;
 
             $orderedQuantityKg = $item->getOrderedQuantityKg();
             $committedQuantityKg = round((float) ($item->committed_quantity_kg ?? 0), 3);
+
+            if ($item->isUnitBased() && abs($committedQuantityKg - round($committedQuantityKg)) > 0.0001) {
+                throw new InvalidArgumentException(__('La quantité engagée doit être un nombre entier pour les ingrédients unitaires.'));
+            }
+
             $item->committed_quantity_kg = $committedQuantityKg;
 
             if ($committedQuantityKg < 0) {
@@ -110,6 +137,20 @@ class SupplierOrderItem extends Model
         return round($quantity * $unitMultiplier, 3);
     }
 
+    public function isUnitBased(): bool
+    {
+        $this->loadMissing('supplierListing.ingredient');
+
+        return $this->supplierListing?->isUnitBased() ?? false;
+    }
+
+    public function getDisplayUnit(): string
+    {
+        $this->loadMissing('supplierListing');
+
+        return $this->supplierListing?->getNormalizedUnitOfMeasure() ?? 'kg';
+    }
+
     public function isInSupplies(): bool
     {
         return $this->is_in_supplies === 'Stock' || $this->moved_to_stock_at !== null;
@@ -120,5 +161,11 @@ class SupplierOrderItem extends Model
         $this->loadMissing('supplierOrder.wave');
 
         $this->supplierOrder?->syncWaveRequirementStatuses();
+    }
+
+    private function isLockedForEditingAfterStock(): bool
+    {
+        return filled($this->getRawOriginal('moved_to_stock_at'))
+            || $this->getRawOriginal('is_in_supplies') === 'Stock';
     }
 }

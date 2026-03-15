@@ -11,12 +11,14 @@ use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
+use App\Models\User;
 use App\Services\InventoryMovementService;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\MarkdownEditor;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -56,6 +58,25 @@ class SupplierOrderResource extends Resource
     {
         return $schema
             ->components([
+                Section::make(__('Suivi commande'))
+                    ->visibleOn('edit')
+                    ->schema([
+                        Placeholder::make('status_summary')
+                            ->label(__('Statut'))
+                            ->content(fn (?SupplierOrder $record): string => self::getOrderStatusSummary($record)),
+                        Placeholder::make('stock_progress_summary')
+                            ->label(__('Réception stock'))
+                            ->content(fn (?SupplierOrder $record): string => self::getStockProgressSummary($record)),
+                        Placeholder::make('receipt_ready_summary')
+                            ->label(__('Prêt à réceptionner'))
+                            ->content(fn (?SupplierOrder $record): string => self::getReceiptReadySummary($record)),
+                        Placeholder::make('stock_alert_summary')
+                            ->label(__('Alerte'))
+                            ->content(fn (?SupplierOrder $record): string => self::getStockAlertSummary($record)),
+                    ])
+                    ->columns(4)
+                    ->columnSpanFull(),
+
                 Section::make('Détails Commande')
                     ->schema([
                         Select::make('supplier_id')
@@ -209,7 +230,13 @@ class SupplierOrderResource extends Resource
                     ->schema([
                         Repeater::make('supplier_order_items')
                             ->relationship()
-                            ->hiddenOn('create')
+                            ->helperText(function (Get $get): string {
+                                if (! filled($get('supplier_id'))) {
+                                    return __('Sélectionner un fournisseur pour filtrer les articles disponibles.');
+                                }
+
+                                return __('Ajoutez les lignes de commande directement ici avant d’enregistrer la commande.');
+                            })
                             ->schema([
                                 Select::make('supplier_listing_id')
                                     ->relationship(
@@ -217,7 +244,7 @@ class SupplierOrderResource extends Resource
                                         titleAttribute: 'name',
                                         modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query->where('supplier_id', $get('../../supplier_id')),
                                     )
-                                    ->getOptionLabelFromRecordUsing(fn (Model $record) => "{$record->name} {$record->unit_weight} {$record->unit_of_measure}")
+                                    ->getOptionLabelFromRecordUsing(fn (Model $record): string => self::formatSupplierListingOptionLabel($record))
                                     ->live()
                                     ->afterStateUpdated(function ($state, Set $set) {
                                         $supplier_listing = SupplierListing::find($state);
@@ -226,25 +253,44 @@ class SupplierOrderResource extends Resource
                                     ->preload()
                                     ->required()
                                     ->disableOptionsWhenSelectedInSiblingRepeaterItems()
+                                    ->disabled(fn (Get $get): bool => self::isSupplierOrderItemLocked($get))
                                     ->native(false)
                                     ->columnSpan(5)
+                                    ->helperText(fn (Get $get): ?string => self::getSupplierListingSelectionHint($get))
                                     ->searchable(),
 
                                 TextInput::make('quantity')
+                                    ->label('Nb UOM')
                                     ->numeric()
-                                    ->minValue(0.001)
-                                    ->step(0.001)
+                                    ->minValue(fn (Get $get): float|int => self::isUnitBasedSupplierListingSelection($get) ? 1 : 0.001)
+                                    ->step(fn (Get $get): float|int => self::isUnitBasedSupplierListingSelection($get) ? 1 : 0.001)
+                                    ->inputMode(fn (Get $get): string => self::isUnitBasedSupplierListingSelection($get) ? 'numeric' : 'decimal')
                                     ->live()
                                     ->dehydrated()
                                     ->default(1)
+                                    ->disabled(fn (Get $get): bool => self::isSupplierOrderItemLocked($get))
                                     ->required()
+                                    ->helperText(__('Nombre d\'UOM fournisseur commandees.'))
+                                    ->rule(function (Get $get): \Closure {
+                                        return function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
+                                            if (! self::isUnitBasedSupplierListingSelection($get)) {
+                                                return;
+                                            }
+
+                                            if (abs((float) $value - round((float) $value)) > 0.0001) {
+                                                $fail(__('La quantité doit être un nombre entier pour les ingrédients unitaires.'));
+                                            }
+                                        };
+                                    })
                                     ->columnSpan(2),
 
                                 TextInput::make('unit_weight')
-                                    ->label('Poids')
+                                    ->label(fn (Get $get): string => self::getUnitWeightFieldLabel($get))
                                     ->disabled()
                                     ->dehydrated()
                                     ->default(1)
+                                    ->suffix(fn (Get $get): string => self::getSupplierListingUnitLabel($get))
+                                    ->helperText(fn (Get $get): string => __('Contenu d\'une UOM fournisseur en :unit.', ['unit' => self::getSupplierListingUnitLabel($get)]))
                                     ->columnSpan(2),
 
                                 TextInput::make('unit_price')
@@ -252,11 +298,13 @@ class SupplierOrderResource extends Resource
                                     // ->dehydrated()
                                     ->numeric()
                                     ->minValue(0)
+                                    ->disabled(fn (Get $get): bool => self::isSupplierOrderItemLocked($get))
                                     ->columnSpan(2),
 
                                 TextInput::make('batch_number')
                                     ->label('No. Lot')
                                     // ->live()
+                                    ->disabled(fn (Get $get): bool => self::isSupplierOrderItemLocked($get))
                                     ->columnSpan(2),
 
                                 DatePicker::make('expiry_date')
@@ -264,19 +312,27 @@ class SupplierOrderResource extends Resource
                                     ->displayFormat('M Y')
                                     ->native(false)
                                     ->closeOnDateSelection()
+                                    ->disabled(fn (Get $get): bool => self::isSupplierOrderItemLocked($get))
                                     ->columnSpan(2),
 
                                 TextEntry::make('total_quantity')
-                                    ->label('Total')
-                                    ->state(function ($get) {
-                                        return $get('quantity') * $get('unit_weight');
+                                    ->label(fn (Get $get): string => __('Total (:unit)', ['unit' => self::getSupplierListingUnitLabel($get)]))
+                                    ->state(function (Get $get): string {
+                                        $quantity = (float) ($get('quantity') ?? 0);
+                                        $unit = self::getSupplierListingUnitLabel($get);
+                                        $unitWeight = (float) ($get('unit_weight') ?? 0);
+                                        $unitMultiplier = $unitWeight > 0 ? $unitWeight : 1;
+
+                                        return self::formatQuantityForDisplay($quantity * $unitMultiplier, $unit);
                                     })->columnSpan(1),
 
                                 TextInput::make('committed_quantity_kg')
-                                    ->label('Engagé vague (kg)')
+                                    ->label(fn (Get $get): string => __('Engagé vague (:unit)', ['unit' => self::getSupplierListingUnitLabel($get)]))
                                     ->numeric()
                                     ->live()
                                     ->default(0)
+                                    ->inputMode(fn (Get $get): string => self::isUnitBasedSupplierListingSelection($get) ? 'numeric' : 'decimal')
+                                    ->disabled(fn (Get $get): bool => self::isSupplierOrderItemLocked($get))
                                     ->afterStateHydrated(function (Set $set, mixed $state): void {
                                         if ($state === null || $state === '') {
                                             $set('committed_quantity_kg', 0);
@@ -284,17 +340,25 @@ class SupplierOrderResource extends Resource
                                     })
                                     ->dehydrateStateUsing(fn (mixed $state): float => round((float) ($state ?? 0), 3))
                                     ->minValue(0)
-                                    ->maxValue(fn (Get $get): float => round((float) ($get('quantity') ?? 0) * max(1.0, (float) ($get('unit_weight') ?? 1)), 3))
-                                    ->step(0.001)
+                                    ->maxValue(fn (Get $get): float => self::getMaximumCommittedQuantity($get))
+                                    ->step(fn (Get $get): float|int => self::isUnitBasedSupplierListingSelection($get) ? 1 : 0.001)
+                                    ->suffix(fn (Get $get): string => self::getSupplierListingUnitLabel($get))
                                     ->rule(function (Get $get): \Closure {
                                         return function (string $attribute, mixed $value, \Closure $fail) use ($get): void {
-                                            $orderedKg = round((float) ($get('quantity') ?? 0) * max(1.0, (float) ($get('unit_weight') ?? 1)), 3);
+                                            if (self::isUnitBasedSupplierListingSelection($get) && abs((float) $value - round((float) $value)) > 0.0001) {
+                                                $fail(__('La quantité engagée doit être un nombre entier pour les ingrédients unitaires.'));
+
+                                                return;
+                                            }
+
+                                            $orderedKg = self::getMaximumCommittedQuantity($get);
                                             $committedKg = round((float) ($value ?? 0), 3);
 
                                             if ($committedKg > $orderedKg) {
-                                                $fail(__('La quantité engagée (:committed kg) ne peut pas dépasser la quantité commandée (:ordered kg).', [
+                                                $fail(__('La quantité engagée (:committed :unit) ne peut pas dépasser la quantité commandée (:ordered :unit).', [
                                                     'committed' => number_format($committedKg, 3, ',', ' '),
                                                     'ordered' => number_format($orderedKg, 3, ',', ' '),
+                                                    'unit' => self::getSupplierListingUnitLabel($get),
                                                 ]));
                                             }
                                         };
@@ -306,24 +370,33 @@ class SupplierOrderResource extends Resource
                                             return __('Définir une référence vague pour engager une quantité planifiée.');
                                         }
 
-                                        $orderedKg = (float) ($get('quantity') ?? 0) * max(1.0, (float) ($get('unit_weight') ?? 1));
+                                        $orderedKg = self::getMaximumCommittedQuantity($get);
                                         $committedKg = (float) ($get('committed_quantity_kg') ?? 0);
+                                        $unitLabel = self::getSupplierListingUnitLabel($get);
 
                                         if ($committedKg > $orderedKg) {
-                                            return __('La quantité engagée ne peut pas dépasser la quantité commandée.');
+                                            return __('La quantité engagée ne peut pas dépasser la quantité commandée en :unit.', ['unit' => $unitLabel]);
                                         }
 
-                                        return __('Quantité planifiée engagée pour la vague liée à cette commande.');
+                                        return __('Quantité planifiée engagée pour la vague liée à cette commande en :unit.', ['unit' => $unitLabel]);
                                     })
                                     ->visible(fn (Get $get): bool => filled($get('../../production_wave_id')))
                                     ->columnSpan(2),
+
+                                Placeholder::make('receipt_status')
+                                    ->label(__('État réception'))
+                                    ->content(fn (Get $get): string => self::getReceiptStatusSummary($get))
+                                    ->columnSpan(5),
 
                                 Hidden::make('is_in_supplies')
                                     ->dehydrated()
                                     ->default('Attente'),
 
+                                Hidden::make('moved_to_stock_at')
+                                    ->dehydrated(false),
+
                             ])->columns(18)
-                            ->defaultItems(0)
+                            ->defaultItems(1)
                             ->deleteAction(
                                 function (Action $action) {
                                     $action->label('Supprimer')
@@ -337,12 +410,12 @@ class SupplierOrderResource extends Resource
                                         ->color('danger');
                                 }
                             )
-                            ->addAction(fn (Action $action) => $action->label('Ajouter')->icon('heroicon-m-plus')->color('success'))
+                            ->addAction(fn (Action $action) => $action->label(__('Ajouter une ligne'))->icon('heroicon-m-plus')->color('success'))
                             ->extraItemActions([
                                 Action::make('createNewInventory')
                                     ->label('Créer Stock')
                                     ->hidden(
-                                        fn (array $arguments, Repeater $component, $record) => ! (auth()->user()?->canReceiveSupplierOrdersIntoStock() ?? false)
+                                        fn (array $arguments, Repeater $component, $record) => ! (Auth::user()?->canReceiveSupplierOrdersIntoStock() ?? false)
                                             || ! isset($component->getRawItemState($arguments['item'])['id'])
                                             || ! isset($record->id)
                                             || ($record->order_status !== OrderStatus::Checked)
@@ -357,7 +430,7 @@ class SupplierOrderResource extends Resource
                                 //      $livewire->dispatch('refreshIsInSupplies');
                                 //  })
                                     ->action(function (array $arguments, Repeater $component, $record): void {
-                                        if (! (auth()->user()?->canReceiveSupplierOrdersIntoStock() ?? false)) {
+                                        if (! (Auth::user()?->canReceiveSupplierOrdersIntoStock() ?? false)) {
                                             Notification::make()
                                                 ->title(__('Accès refusé'))
                                                 ->body(__('Vous n’avez pas l’autorisation de réceptionner ce lot en stock.'))
@@ -417,27 +490,16 @@ class SupplierOrderResource extends Resource
                                         $expiryDate = $itemData['expiry_date'] ?? $supplierOrderItem->expiry_date;
                                         $deliveryDate = $record->delivery_date;
 
-                                        $missingFields = [];
-
-                                        if ($quantity <= 0) {
-                                            $missingFields[] = 'quantité';
-                                        }
-
-                                        if (blank($unitPrice)) {
-                                            $missingFields[] = 'prix';
-                                        }
-
-                                        if (blank($batchNumber)) {
-                                            $missingFields[] = 'lot';
-                                        }
-
-                                        if (blank($expiryDate)) {
-                                            $missingFields[] = 'DLUO';
-                                        }
-
-                                        if (blank($deliveryDate)) {
-                                            $missingFields[] = 'date de livraison';
-                                        }
+                                        $missingFields = self::getMissingReceiptFieldsForState(
+                                            orderStatus: $record->order_status,
+                                            deliveryDate: $record->delivery_date?->toDateString(),
+                                            itemState: [
+                                                'quantity' => $quantity,
+                                                'unit_price' => $unitPrice,
+                                                'batch_number' => $batchNumber,
+                                                'expiry_date' => $expiryDate,
+                                            ],
+                                        );
 
                                         if ($missingFields !== []) {
                                             Notification::make()
@@ -499,6 +561,10 @@ class SupplierOrderResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount([
+                'supplier_order_items',
+                'supplier_order_items as pending_stock_items_count' => fn (Builder $query): Builder => $query->whereNull('moved_to_stock_at'),
+            ]))
             ->columns([
                 TextColumn::make('supplier.name')
                     ->label('Fournisseur')
@@ -513,6 +579,13 @@ class SupplierOrderResource extends Resource
                 TextColumn::make('order_ref')
                     ->label('Référence')
                     ->searchable(),
+
+                TextColumn::make('stock_follow_up')
+                    ->label('Suivi stock')
+                    ->state(fn (SupplierOrder $record): ?string => self::getOrderListStockBadgeLabel($record))
+                    ->badge()
+                    ->color(fn (SupplierOrder $record): string => self::getOrderListStockBadgeColor($record))
+                    ->placeholder('-'),
 
                 TextColumn::make('wave.name')
                     ->label('Vague')
@@ -600,6 +673,298 @@ class SupplierOrderResource extends Resource
             ->toDateString();
     }
 
+    private static function isSupplierOrderItemLocked(Get $get): bool
+    {
+        return filled($get('moved_to_stock_at')) || $get('is_in_supplies') === 'Stock';
+    }
+
+    private static function isUnitBasedSupplierListingSelection(Get $get): bool
+    {
+        $supplierListingId = $get('supplier_listing_id');
+
+        if (! filled($supplierListingId)) {
+            return false;
+        }
+
+        $supplierListing = SupplierListing::query()
+            ->with('ingredient:id,base_unit')
+            ->find($supplierListingId);
+
+        return $supplierListing?->isUnitBased() ?? false;
+    }
+
+    private static function getSupplierListingUnitLabel(Get $get): string
+    {
+        $supplierListingId = $get('supplier_listing_id');
+
+        if (! filled($supplierListingId)) {
+            return 'kg';
+        }
+
+        $supplierListing = SupplierListing::query()->find($supplierListingId);
+
+        return $supplierListing?->getNormalizedUnitOfMeasure() ?? 'kg';
+    }
+
+    private static function getMaximumCommittedQuantity(Get $get): float
+    {
+        $quantity = (float) ($get('quantity') ?? 0);
+        $unitWeight = (float) ($get('unit_weight') ?? 0);
+        $unitMultiplier = $unitWeight > 0 ? $unitWeight : 1;
+
+        return round($quantity * $unitMultiplier, 3);
+    }
+
+    private static function formatQuantityForDisplay(float $quantity, string $unit): string
+    {
+        if ($unit === 'u') {
+            return number_format(round($quantity), 0, ',', ' ').' u';
+        }
+
+        return number_format($quantity, 3, ',', ' ').' '.$unit;
+    }
+
+    private static function formatSupplierListingOptionLabel(Model $record): string
+    {
+        $supplierCode = trim((string) ($record->supplier_code ?? ''));
+        $label = trim((string) ($record->name ?? __('Article')));
+        $normalizedUnit = $record instanceof SupplierListing
+            ? $record->getNormalizedUnitOfMeasure()
+            : SupplierListing::normalizeUnitOfMeasure((string) ($record->unit_of_measure ?? 'kg'));
+        $weightValue = (float) ($record->unit_weight ?? 0);
+        $displayWeight = $weightValue > 0 ? $weightValue : 1;
+        $weightLabel = self::formatUomValue($displayWeight, $normalizedUnit);
+
+        if ($supplierCode !== '') {
+            $label = '['.$supplierCode.'] '.$label;
+        }
+
+        return trim($label.' ('.$weightLabel.')');
+    }
+
+    private static function getUnitWeightFieldLabel(Get $get): string
+    {
+        $unit = self::getSupplierListingUnitLabel($get);
+
+        return $unit === 'u'
+            ? __('UOM (unités)')
+            : __('UOM (:unit)', ['unit' => $unit]);
+    }
+
+    private static function formatUomValue(float $value, string $unit): string
+    {
+        $decimals = $unit === 'u' || abs($value - round($value)) <= 0.0001 ? 0 : 3;
+
+        return trim(number_format($value, $decimals, ',', ' ').' '.$unit);
+    }
+
+    private static function getSupplierListingSelectionHint(Get $get): ?string
+    {
+        $supplierListingId = $get('supplier_listing_id');
+
+        if (! filled($supplierListingId)) {
+            return null;
+        }
+
+        $supplierCode = SupplierListing::query()
+            ->whereKey($supplierListingId)
+            ->value('supplier_code');
+
+        $unitOfMeasure = SupplierListing::query()
+            ->whereKey($supplierListingId)
+            ->value('unit_of_measure');
+
+        if (! filled($supplierCode) && ! filled($unitOfMeasure)) {
+            return null;
+        }
+
+        $parts = [];
+
+        if (filled($supplierCode)) {
+            $parts[] = __('Code fournisseur: :code', ['code' => $supplierCode]);
+        }
+
+        if (filled($unitOfMeasure)) {
+            $parts[] = __('UOM: :unit', ['unit' => SupplierListing::normalizeUnitOfMeasure((string) $unitOfMeasure)]);
+        }
+
+        return implode(' - ', $parts);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function getMissingReceiptFieldsForState(OrderStatus|string|null $orderStatus, ?string $deliveryDate, array $itemState): array
+    {
+        $missingFields = [];
+        $normalizedStatus = $orderStatus instanceof OrderStatus
+            ? $orderStatus
+            : OrderStatus::tryFrom((string) $orderStatus);
+
+        if ($normalizedStatus !== OrderStatus::Checked) {
+            $missingFields[] = __('statut Contrôlée');
+        }
+
+        if (blank($deliveryDate)) {
+            $missingFields[] = __('date de livraison');
+        }
+
+        if ((float) ($itemState['quantity'] ?? 0) <= 0) {
+            $missingFields[] = __('quantité');
+        }
+
+        if (blank($itemState['unit_price'] ?? null)) {
+            $missingFields[] = __('prix');
+        }
+
+        if (blank($itemState['batch_number'] ?? null)) {
+            $missingFields[] = __('lot');
+        }
+
+        if (blank($itemState['expiry_date'] ?? null)) {
+            $missingFields[] = __('DLUO');
+        }
+
+        return $missingFields;
+    }
+
+    public static function isReceiptStateLocked(array $itemState): bool
+    {
+        return filled($itemState['moved_to_stock_at'] ?? null)
+            || (($itemState['is_in_supplies'] ?? null) === 'Stock');
+    }
+
+    private static function getReceiptStatusSummary(Get $get): string
+    {
+        if (self::isSupplierOrderItemLocked($get)) {
+            return __('En stock');
+        }
+
+        $missingFields = self::getMissingReceiptFieldsForState(
+            orderStatus: $get('../../order_status'),
+            deliveryDate: $get('../../delivery_date'),
+            itemState: [
+                'quantity' => $get('quantity'),
+                'unit_price' => $get('unit_price'),
+                'batch_number' => $get('batch_number'),
+                'expiry_date' => $get('expiry_date'),
+            ],
+        );
+
+        if ($missingFields === []) {
+            return __('Prêt à réceptionner');
+        }
+
+        return __('Manque :fields', ['fields' => implode(', ', $missingFields)]);
+    }
+
+    private static function getOrderStatusSummary(?SupplierOrder $record): string
+    {
+        return $record?->order_status?->getLabel() ?? __('Brouillon');
+    }
+
+    private static function getStockProgressSummary(?SupplierOrder $record): string
+    {
+        if (! $record) {
+            return __('Aucune ligne');
+        }
+
+        $totalLines = $record->supplier_order_items()->count();
+
+        if ($totalLines === 0) {
+            return __('Aucune ligne');
+        }
+
+        $stockedLines = $record->supplier_order_items()
+            ->whereNotNull('moved_to_stock_at')
+            ->count();
+
+        return __(':stocked / :total lignes en stock', [
+            'stocked' => $stockedLines,
+            'total' => $totalLines,
+        ]);
+    }
+
+    private static function getReceiptReadySummary(?SupplierOrder $record): string
+    {
+        if (! $record) {
+            return __('0 ligne');
+        }
+
+        $items = $record->supplier_order_items()
+            ->get(['quantity', 'unit_price', 'batch_number', 'expiry_date', 'moved_to_stock_at']);
+
+        $pendingItems = $items->filter(fn (SupplierOrderItem $item): bool => $item->moved_to_stock_at === null);
+
+        if ($pendingItems->isEmpty()) {
+            return __('Toutes les lignes sont en stock');
+        }
+
+        $readyCount = $pendingItems->filter(function (SupplierOrderItem $item) use ($record): bool {
+            return self::getMissingReceiptFieldsForState(
+                orderStatus: $record->order_status,
+                deliveryDate: $record->delivery_date?->toDateString(),
+                itemState: $item->only(['quantity', 'unit_price', 'batch_number', 'expiry_date']),
+            ) === [];
+        })->count();
+
+        return __(':ready / :pending lignes prêtes', [
+            'ready' => $readyCount,
+            'pending' => $pendingItems->count(),
+        ]);
+    }
+
+    private static function getStockAlertSummary(?SupplierOrder $record): string
+    {
+        if (! $record) {
+            return __('Aucune alerte');
+        }
+
+        $pendingCount = $record->supplier_order_items()
+            ->whereNull('moved_to_stock_at')
+            ->count();
+
+        if ($pendingCount === 0) {
+            return __('Aucune ligne sans stock');
+        }
+
+        if ($record->order_status === OrderStatus::Checked) {
+            return $pendingCount === 1
+                ? __('1 ligne contrôlée sans entrée de stock')
+                : __(':count lignes contrôlées sans entrée de stock', ['count' => $pendingCount]);
+        }
+
+        return $pendingCount === 1
+            ? __('1 ligne en attente de stock')
+            : __(':count lignes en attente de stock', ['count' => $pendingCount]);
+    }
+
+    private static function getOrderListStockBadgeLabel(SupplierOrder $record): ?string
+    {
+        $pendingCount = (int) ($record->pending_stock_items_count ?? 0);
+
+        if ($record->order_status !== OrderStatus::Checked) {
+            return null;
+        }
+
+        if ($pendingCount > 0) {
+            return __('Stock manquant');
+        }
+
+        return __('Stock complet');
+    }
+
+    private static function getOrderListStockBadgeColor(SupplierOrder $record): string
+    {
+        $pendingCount = (int) ($record->pending_stock_items_count ?? 0);
+
+        if ($record->order_status !== OrderStatus::Checked) {
+            return 'gray';
+        }
+
+        return $pendingCount > 0 ? 'warning' : 'success';
+    }
+
     /**
      * @return array<string, string>
      */
@@ -611,7 +976,11 @@ class SupplierOrderResource extends Resource
             ];
         }
 
+        /** @var User|null $user */
+        $user = Auth::user();
+
         return collect(SupplierOrder::allowedTransitionsFor($record->order_status))
+            ->filter(fn (OrderStatus $status): bool => $user?->canSetSupplierOrderStatus($record->order_status, $status) ?? false)
             ->mapWithKeys(fn (OrderStatus $status): array => [$status->value => $status->getLabel()])
             ->all();
     }

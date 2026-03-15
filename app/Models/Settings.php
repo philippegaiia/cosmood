@@ -56,6 +56,34 @@ class Settings extends Model
     }
 
     /**
+     * Get issuer company name for supplier-facing documents.
+     */
+    public static function companyName(): string
+    {
+        return (string) static::get('company_name', config('app.name'));
+    }
+
+    /**
+     * Get issuer company address for supplier-facing documents.
+     */
+    public static function companyAddress(): ?string
+    {
+        $address = static::get('company_address');
+
+        return filled($address) ? (string) $address : null;
+    }
+
+    /**
+     * Get issuer company VAT number for supplier-facing documents.
+     */
+    public static function companyVatNumber(): ?string
+    {
+        $vatNumber = static::get('company_vat_number');
+
+        return filled($vatNumber) ? (string) $vatNumber : null;
+    }
+
+    /**
      * Get a single setting value.
      */
     public function getValue(string $key, mixed $default = null): mixed

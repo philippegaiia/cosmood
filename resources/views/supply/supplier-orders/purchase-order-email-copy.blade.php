@@ -95,12 +95,35 @@
             color: #111827;
             resize: vertical;
         }
+
+        .preview {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0 0 12px;
+        }
+
+        .preview th,
+        .preview td {
+            border: 1px solid #d1d5db;
+            padding: 8px 10px;
+            text-align: left;
+            font-size: 13px;
+        }
+
+        .preview th {
+            background: #f9fafb;
+        }
     </style>
 </head>
 <body>
     <div class="wrap">
         <div class="title">Copier-coller email fournisseur</div>
-        <div class="muted">PO {{ $supplierOrder->order_ref ?? ('PO-'.$supplierOrder->id) }}</div>
+        <div class="muted">
+            PO {{ $supplierOrder->order_ref ?? ('PO-'.$supplierOrder->id) }}
+            @if (! empty($supplierCodes ?? []))
+                - Codes fournisseur {{ implode(', ', $supplierCodes) }}
+            @endif
+        </div>
 
         <div class="toolbar">
             <button type="button" class="btn primary" onclick="copyEmailText()">Copier le texte</button>
@@ -115,6 +138,35 @@
                 <button type="button" class="btn" onclick="copyEmailSubject()">Copier sujet</button>
             </div>
         </div>
+
+        <table class="preview">
+            <thead>
+                <tr>
+                    <th>Article</th>
+                    <th>Code fournisseur</th>
+                    <th>Quantite</th>
+                    <th>Total kg</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse ($lines as $line)
+                    @php
+                        $quantity = (float) ($line->quantity ?? 0);
+                        $unitWeight = (float) ($line->unit_weight ?? 0);
+                    @endphp
+                    <tr>
+                        <td>{{ $line->supplierListing?->name ?? '-' }}</td>
+                        <td>{{ $line->supplierListing?->supplier_code ?? '-' }}</td>
+                        <td>{{ number_format($quantity, 3, ',', ' ') }}</td>
+                        <td>{{ number_format($quantity * $unitWeight, 3, ',', ' ') }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="4">Aucune ligne de commande.</td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
 
         <textarea id="email-text" readonly>{{ $emailText }}</textarea>
     </div>

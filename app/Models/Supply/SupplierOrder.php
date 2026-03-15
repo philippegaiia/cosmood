@@ -179,39 +179,23 @@ class SupplierOrder extends Model
         return [
             OrderStatus::Draft->value => [
                 OrderStatus::Passed,
-                OrderStatus::Confirmed,
-                OrderStatus::Delivered,
-                OrderStatus::Checked,
                 OrderStatus::Cancelled,
             ],
             OrderStatus::Passed->value => [
-                OrderStatus::Draft,
                 OrderStatus::Confirmed,
                 OrderStatus::Delivered,
-                OrderStatus::Checked,
                 OrderStatus::Cancelled,
             ],
             OrderStatus::Confirmed->value => [
-                OrderStatus::Draft,
-                OrderStatus::Passed,
                 OrderStatus::Delivered,
-                OrderStatus::Checked,
                 OrderStatus::Cancelled,
             ],
             OrderStatus::Delivered->value => [
-                OrderStatus::Draft,
-                OrderStatus::Passed,
-                OrderStatus::Confirmed,
                 OrderStatus::Checked,
                 OrderStatus::Cancelled,
             ],
             OrderStatus::Checked->value => [],
-            OrderStatus::Cancelled->value => [
-                OrderStatus::Draft,
-                OrderStatus::Passed,
-                OrderStatus::Confirmed,
-                OrderStatus::Delivered,
-            ],
+            OrderStatus::Cancelled->value => [],
         ];
     }
 

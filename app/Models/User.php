@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OrderStatus;
 use App\Enums\ProductionStatus;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Panel;
@@ -167,6 +168,21 @@ class User extends Authenticatable implements FilamentUser
         return match ($to) {
             ProductionStatus::Ongoing => $this->canStartProductionRuns(),
             ProductionStatus::Finished => $this->canFinishProductionRuns(),
+            default => $this->canManageProductionPlanning(),
+        };
+    }
+
+    /**
+     * Whether the user may select the given supplier order status transition in UI.
+     */
+    public function canSetSupplierOrderStatus(OrderStatus $from, OrderStatus $to): bool
+    {
+        if ($from === $to) {
+            return true;
+        }
+
+        return match ($to) {
+            OrderStatus::Delivered, OrderStatus::Checked => $this->canReceiveSupplierOrdersIntoStock(),
             default => $this->canManageProductionPlanning(),
         };
     }
