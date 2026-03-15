@@ -89,12 +89,12 @@ class SupplierListingResource extends Resource
                     ->options(Packaging::class)
                     ->default(Packaging::Bidon->value),
                 TextInput::make('unit_weight')
-                    ->label(fn (Get $get): string => self::getUnitWeightFieldLabel($get))
+                    ->label('Contenu UOM')
                     ->numeric()
                     ->inputMode(fn (Get $get): string => self::isUnitBasedIngredientSelection($get) ? 'numeric' : 'decimal')
                     ->step(fn (Get $get): float|int => self::isUnitBasedIngredientSelection($get) ? 1 : 0.001)
                     ->minValue(fn (Get $get): float|int => self::isUnitBasedIngredientSelection($get) ? 1 : 0.001)
-                    ->helperText(fn (Get $get): string => __('Contenu d\'une UOM fournisseur en :unit.', ['unit' => self::getUnitLabelForSelection($get)])),
+                    ->helperText(__('Contenu d\'une UOM fournisseur.')),
                 Select::make('unit_of_measure')
                     ->options([
                         'kg' => 'kg',
@@ -253,18 +253,6 @@ class SupplierListingResource extends Resource
         }
 
         return Ingredient::query()->whereKey($ingredientId)->value('base_unit') === IngredientBaseUnit::Unit->value;
-    }
-
-    private static function getUnitLabelForSelection(Get $get): string
-    {
-        return self::isUnitBasedIngredientSelection($get) ? 'u' : 'kg';
-    }
-
-    private static function getUnitWeightFieldLabel(Get $get): string
-    {
-        return self::isUnitBasedIngredientSelection($get)
-            ? __('UOM (unités)')
-            : __('UOM (kg)');
     }
 
     private static function formatListingUom(SupplierListing $record): string

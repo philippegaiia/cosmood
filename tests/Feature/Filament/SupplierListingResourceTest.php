@@ -50,6 +50,8 @@ it('defaults unit-based supplier listings to u and formats designation with pare
             'supplier_id' => $supplier->id,
             'ingredient_id' => $ingredient->id,
         ])
+        ->assertSee('Contenu UOM')
+        ->assertSee("Contenu d'une UOM fournisseur.")
         ->assertSet('data.unit_of_measure', 'u');
 
     Livewire::test(ListSupplierListings::class)
