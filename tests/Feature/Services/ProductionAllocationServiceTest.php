@@ -7,6 +7,8 @@ use App\Models\Production\ProductionItemAllocation;
 use App\Models\Production\ProductionWave;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
+use App\Models\Supply\SupplierOrder;
+use App\Models\Supply\SupplierOrderItem;
 use App\Models\Supply\SuppliesMovement;
 use App\Models\Supply\Supply;
 use App\Services\Production\ProductionAllocationService;
@@ -243,6 +245,49 @@ describe('allocate', function () {
             ->and((float) $supply->fresh()->getAllocatedQuantity())->toBe(60.0);
     });
 
+    it('allocates orphan stock against the uncovered remainder after linked purchase orders', function () {
+        $production = Production::factory()->orphan()->create([
+            'production_date' => '2026-03-12',
+        ]);
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 50.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+            'sort' => 1,
+        ]);
+
+        $supply = Supply::factory()->inStock(20.0)->create([
+            'supplier_listing_id' => $listing->id,
+        ]);
+
+        $order = SupplierOrder::factory()->confirmed()->create();
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 30,
+            'unit_weight' => 1,
+            'allocated_to_production_id' => $production->id,
+            'allocated_quantity' => 30,
+            'moved_to_stock_at' => null,
+        ]);
+
+        $summary = $this->service->allocateProductionIngredientStock($production, $ingredient);
+
+        expect((float) ($summary['requested_quantity'] ?? 0))->toBe(20.0)
+            ->and((float) ($summary['allocated_quantity'] ?? 0))->toBe(20.0)
+            ->and((float) ($summary['remaining_quantity'] ?? 0))->toBe(0.0)
+            ->and((float) $item->fresh()->getTotalAllocatedQuantity())->toBe(20.0)
+            ->and((float) $supply->fresh()->getAllocatedQuantity())->toBe(20.0);
+    });
+
     it('allocates a received lot to its wave using only that lot', function () {
         $wave = ProductionWave::factory()->create();
         $ingredient = Ingredient::factory()->create();
@@ -318,6 +363,51 @@ describe('allocate', function () {
             ->and($item->fresh()->supply_batch_number)->toBe('LOT-ORPHAN-001')
             ->and((float) $targetSupply->fresh()->getAllocatedQuantity())->toBe(25.0)
             ->and((float) $otherSupply->fresh()->getAllocatedQuantity())->toBe(0.0);
+    });
+
+    it('allocates a received lot to an orphan production after linked purchase orders', function () {
+        $production = Production::factory()->orphan()->create([
+            'production_date' => '2026-03-12',
+        ]);
+        $production->productionItems()->delete();
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 50.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+        ]);
+
+        $targetSupply = Supply::factory()->inStock(20.0)->create([
+            'supplier_listing_id' => $listing->id,
+            'batch_number' => 'LOT-ORPHAN-LINKED-001',
+        ]);
+
+        $order = SupplierOrder::factory()->confirmed()->create();
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 30,
+            'unit_weight' => 1,
+            'allocated_to_production_id' => $production->id,
+            'allocated_quantity' => 30,
+            'moved_to_stock_at' => null,
+        ]);
+
+        $summary = $this->service->allocateSupplyToProduction($targetSupply, $production);
+
+        expect((float) ($summary['requested_quantity'] ?? 0))->toBe(20.0)
+            ->and((float) ($summary['allocated_quantity'] ?? 0))->toBe(20.0)
+            ->and((float) ($summary['remaining_quantity'] ?? 0))->toBe(0.0)
+            ->and($item->fresh()->allocation_status)->toBe(AllocationStatus::Partial)
+            ->and($item->fresh()->supply_batch_number)->toBe('LOT-ORPHAN-LINKED-001')
+            ->and((float) $targetSupply->fresh()->getAllocatedQuantity())->toBe(20.0);
     });
 });
 

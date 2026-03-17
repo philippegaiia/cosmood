@@ -333,7 +333,7 @@ class SuppliesTable
 
                             $requestedQuantity = filled($data['allocation_quantity'] ?? null)
                                 ? round((float) $data['allocation_quantity'], 3)
-                                : round(min((float) $record->getAvailableQuantity(), (float) ($line->remaining_requirement ?? 0)), 3);
+                                : round(min((float) $record->getAvailableQuantity(), (float) ($line->remaining_after_linked_orders ?? 0)), 3);
 
                             if ($requestedQuantity <= 0) {
                                 Notification::make()
@@ -677,16 +677,16 @@ class SuppliesTable
             ->get()
             ->mapWithKeys(function (Production $production) use ($ingredient, $service): array {
                 $line = $service->getPlanningListForProduction($production)
-                    ->first(fn (object $entry): bool => (int) ($entry->ingredient_id ?? 0) === $ingredient->id && (float) ($entry->remaining_requirement ?? 0) > 0);
+                    ->first(fn (object $entry): bool => (int) ($entry->ingredient_id ?? 0) === $ingredient->id && (float) ($entry->remaining_after_linked_orders ?? 0) > 0);
 
                 if (! $line) {
                     return [];
                 }
 
                 return [
-                    $production->id => __(':production | Reste :remaining | Date besoin :needDate', [
+                    $production->id => __(':production | Après PO :remaining | Date besoin :needDate', [
                         'production' => self::getProductionLabel($production),
-                        'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), (string) ($line->display_unit ?? 'kg')),
+                        'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_after_linked_orders ?? 0), (string) ($line->display_unit ?? 'kg')),
                         'needDate' => $line->need_date
                             ? Carbon::parse((string) $line->need_date)->format('d/m/Y')
                             : __('Non définie'),
@@ -721,9 +721,10 @@ class SuppliesTable
         $service = app(WaveProcurementService::class);
         $displayUnit = (string) ($line->display_unit ?? $record->getUnitOfMeasure());
 
-        return __('Disponible sur le lot: :lotAvailable | Besoin restant production: :productionRemaining | Déjà alloué production: :productionAllocated', [
+        return __('Disponible sur le lot: :lotAvailable | Besoin physique: :physicalRemaining | Après PO liée: :productionRemaining | Déjà alloué production: :productionAllocated', [
             'lotAvailable' => $service->formatPlanningQuantity((float) $record->getAvailableQuantity(), $displayUnit),
-            'productionRemaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $displayUnit),
+            'physicalRemaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $displayUnit),
+            'productionRemaining' => $service->formatPlanningQuantity((float) ($line->remaining_after_linked_orders ?? 0), $displayUnit),
             'productionAllocated' => $service->formatPlanningQuantity((float) ($line->allocated_quantity ?? 0), $displayUnit),
         ]);
     }
@@ -739,9 +740,9 @@ class SuppliesTable
         $service = app(WaveProcurementService::class);
         $displayUnit = (string) ($line->display_unit ?? $record->getUnitOfMeasure());
 
-        return __('Laisser vide pour allouer le minimum entre le disponible du lot (:lotAvailable) et le besoin restant de la production (:productionRemaining). Mode strict: seuls les items entièrement couvrables sont servis.', [
+        return __('Laisser vide pour allouer le minimum entre le disponible du lot (:lotAvailable) et le besoin encore utile après PO liée (:productionRemaining). Mode strict: seuls les items entièrement couvrables sont servis.', [
             'lotAvailable' => $service->formatPlanningQuantity((float) $record->getAvailableQuantity(), $displayUnit),
-            'productionRemaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $displayUnit),
+            'productionRemaining' => $service->formatPlanningQuantity((float) ($line->remaining_after_linked_orders ?? 0), $displayUnit),
         ]);
     }
 

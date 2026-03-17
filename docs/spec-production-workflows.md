@@ -145,6 +145,8 @@ This document describes the current production-side business rules implemented i
   - a row-level `Appro orpheline` action group lets planners mark selected ingredients as ordered manually,
   - a dedicated `Allouer stock` action allocates real lots ingredient by ingredient on that single production,
   - orphan auto-allocation is also strict: an item is touched only when its full remaining quantity can be covered,
+  - when an orphan has an open PO explicitly linked through `allocated_to_production_id`, that linked open quantity is treated as prior coverage before recommending or attempting new stock allocations,
+  - PO quantities explicitly linked to an orphan production (`allocated_to_production_id`) reduce its planning gap in orphan and global procurement views,
   - no stock reserve is persisted for orphanes; any stock not allocated stays implicitly available for emergencies or other batches.
 - Received lots can now be allocated directly from inventory:
   - on a stock lot, planners can allocate the exact received lot to a wave or to an orphan production,

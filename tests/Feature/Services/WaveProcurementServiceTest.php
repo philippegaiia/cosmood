@@ -373,6 +373,158 @@ describe('getPlanningList', function () {
     });
 });
 
+describe('getPlanningListForProduction', function () {
+    it('accounts for directly linked supplier orders on standalone productions', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create([
+            'name' => 'Huile Coco',
+            'price' => 6.5,
+        ]);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+            'unit_weight' => 1,
+        ]);
+
+        $product = Product::factory()->create();
+        $formula = Formula::query()->create([
+            'name' => 'Formula orphan linked po',
+            'slug' => Str::slug('formula-orphan-linked-po-'.Str::uuid()),
+            'code' => 'FRM-'.Str::upper(Str::random(8)),
+            'is_active' => true,
+        ]);
+
+        $production = Production::withoutEvents(function () use ($product, $formula): Production {
+            return Production::query()->create([
+                'production_wave_id' => null,
+                'product_id' => $product->id,
+                'formula_id' => $formula->id,
+                'batch_number' => 'T97210',
+                'slug' => 'batch-orphan-linked-po',
+                'status' => ProductionStatus::Confirmed,
+                'sizing_mode' => SizingMode::OilWeight,
+                'planned_quantity' => 12,
+                'expected_units' => 120,
+                'production_date' => '2026-03-18',
+                'ready_date' => '2026-03-20',
+                'organic' => true,
+            ]);
+        });
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 50.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $listing->supplies()->create([
+            'order_ref' => 'PO-STOCK-ORPHAN-001',
+            'batch_number' => 'LOT-STOCK-ORPHAN-001',
+            'initial_quantity' => 10.0,
+            'quantity_in' => 10.0,
+            'quantity_out' => 0.0,
+            'allocated_quantity' => 0.0,
+            'unit_price' => 6.5,
+            'expiry_date' => now()->addMonths(6),
+            'delivery_date' => now(),
+            'is_in_stock' => true,
+        ]);
+
+        $order = SupplierOrder::factory()->confirmed()->create([
+            'supplier_id' => $supplier->id,
+        ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 30,
+            'unit_weight' => 1,
+            'allocated_to_production_id' => $production->id,
+            'allocated_quantity' => 30,
+            'moved_to_stock_at' => null,
+        ]);
+
+        $line = waveProcurementService()->getPlanningListForProduction($production)->sole();
+        $summary = waveProcurementService()->getPlanningSummaryForProduction($production);
+
+        expect($line->ingredient_name)->toBe('Huile Coco')
+            ->and((float) $line->total_wave_requirement)->toBe(50.0)
+            ->and((float) $line->available_stock)->toBe(10.0)
+            ->and((float) $line->planned_stock_quantity)->toBe(10.0)
+            ->and((float) $line->wave_ordered_quantity)->toBe(30.0)
+            ->and((float) $line->wave_open_order_quantity)->toBe(30.0)
+            ->and((float) $line->wave_received_quantity)->toBe(0.0)
+            ->and((float) $line->wave_committed_open_orders)->toBe(30.0)
+            ->and((float) $line->remaining_after_linked_orders)->toBe(20.0)
+            ->and((float) $line->remaining_to_secure)->toBe(10.0)
+            ->and((float) $line->remaining_to_order)->toBe(10.0)
+            ->and((float) ($summary['remaining_to_order_total'] ?? 0))->toBe(10.0);
+    });
+
+    it('keeps open orders linked to cancelled orphan productions available in the shared pool', function () {
+        $wave = ProductionWave::factory()->create([
+            'status' => WaveStatus::Approved,
+            'planned_start_date' => '2026-03-20',
+        ]);
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile Coco']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+            'unit_weight' => 1,
+        ]);
+
+        $waveProduction = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Planned,
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $waveProduction->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 40.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $cancelledProduction = Production::factory()->orphan()->create([
+            'status' => ProductionStatus::Cancelled,
+            'production_date' => '2026-03-18',
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $cancelledProduction->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 30.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $order = SupplierOrder::factory()->confirmed()->create([
+            'supplier_id' => $supplier->id,
+        ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 30,
+            'unit_weight' => 1,
+            'allocated_to_production_id' => $cancelledProduction->id,
+            'allocated_quantity' => 30,
+            'moved_to_stock_at' => null,
+        ]);
+
+        $line = waveProcurementService()->getPlanningList($wave)->sole();
+
+        expect($line->ingredient_name)->toBe('Huile Coco')
+            ->and((float) $line->open_orders_not_committed)->toBe(30.0)
+            ->and((float) $line->remaining_to_secure)->toBe(40.0)
+            ->and((float) $line->remaining_to_order)->toBe(10.0);
+    });
+});
+
 describe('getProcurementSummary', function () {
     it('returns summary of items by status', function () {
         $wave = ProductionWave::factory()->create();
@@ -856,5 +1008,92 @@ describe('getOperationalPlanningList', function () {
             ->and($summary['remaining_to_order'])->toBe('10,000 kg')
             ->and($summary['ingredients_to_order'])->toBe(1)
             ->and($summary['contexts_count'])->toBe(2);
+    });
+
+    it('reduces standalone operational gaps with production-linked supplier orders', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile Coco']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+            'unit_weight' => 1,
+        ]);
+
+        $product = Product::factory()->create();
+        $formula = Formula::query()->create([
+            'name' => 'Formula orphan operational linked po',
+            'slug' => Str::slug('formula-orphan-operational-linked-po-'.Str::uuid()),
+            'code' => 'FRM-'.Str::upper(Str::random(8)),
+            'is_active' => true,
+        ]);
+
+        $production = Production::withoutEvents(function () use ($product, $formula): Production {
+            return Production::query()->create([
+                'production_wave_id' => null,
+                'product_id' => $product->id,
+                'formula_id' => $formula->id,
+                'batch_number' => 'T97211',
+                'slug' => 'batch-orphan-operational-linked-po',
+                'status' => ProductionStatus::Confirmed,
+                'sizing_mode' => SizingMode::OilWeight,
+                'planned_quantity' => 12,
+                'expected_units' => 120,
+                'production_date' => '2026-03-18',
+                'ready_date' => '2026-03-20',
+                'organic' => true,
+            ]);
+        });
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 50.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $listing->supplies()->create([
+            'order_ref' => 'PO-STOCK-ORPHAN-OPER-001',
+            'batch_number' => 'LOT-STOCK-ORPHAN-OPER-001',
+            'initial_quantity' => 10.0,
+            'quantity_in' => 10.0,
+            'quantity_out' => 0.0,
+            'allocated_quantity' => 0.0,
+            'unit_price' => 6.5,
+            'expiry_date' => now()->addMonths(6),
+            'delivery_date' => now(),
+            'is_in_stock' => true,
+        ]);
+
+        $order = SupplierOrder::factory()->confirmed()->create([
+            'supplier_id' => $supplier->id,
+        ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 30,
+            'unit_weight' => 1,
+            'allocated_to_production_id' => $production->id,
+            'allocated_quantity' => 30,
+            'moved_to_stock_at' => null,
+        ]);
+
+        $line = waveProcurementService()->getOperationalPlanningList()->sole();
+        $summary = waveProcurementService()->getOperationalPlanningSummary();
+        $context = $line->contexts->sole();
+
+        expect($line->ingredient_name)->toBe('Huile Coco')
+            ->and((float) $line->available_stock)->toBe(10.0)
+            ->and((float) $line->wave_ordered_quantity)->toBe(30.0)
+            ->and((float) $line->wave_open_order_quantity)->toBe(30.0)
+            ->and((float) $line->remaining_to_secure)->toBe(10.0)
+            ->and((float) $line->remaining_to_order)->toBe(10.0)
+            ->and($line->contexts_count)->toBe(1)
+            ->and($context->context_type)->toBe('production')
+            ->and((float) $context->wave_open_order_quantity)->toBe(30.0)
+            ->and((float) $context->remaining_to_order)->toBe(10.0)
+            ->and($summary['remaining_to_order'])->toBe('10,000 kg')
+            ->and($summary['contexts_count'])->toBe(1);
     });
 });

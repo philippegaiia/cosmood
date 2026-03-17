@@ -33,6 +33,7 @@ class ProductionAllocationService
     public function __construct(
         private readonly InventoryMovementService $movementService,
         private readonly WaveRequirementStatusService $waveRequirementStatusService,
+        private readonly WaveProcurementService $waveProcurementService,
     ) {}
 
     /**
@@ -626,8 +627,11 @@ class ProductionAllocationService
     public function allocateProductionIngredientStock(Production $production, Ingredient $ingredient, ?float $quantity = null): array
     {
         $items = $this->getProductionIngredientItems($production, $ingredient);
+        $linkedOpenOrderQuantity = (float) ($this->waveProcurementService
+            ->getOpenLinkedOrderQuantitiesForProduction($production)
+            ->get($ingredient->id) ?? 0);
 
-        return $this->allocateIngredientItemsStrict($items, $ingredient, $quantity);
+        return $this->allocateIngredientItemsStrict($items, $ingredient, $quantity, $linkedOpenOrderQuantity);
     }
 
     /**
@@ -656,8 +660,11 @@ class ProductionAllocationService
     {
         $ingredient = $this->resolveIngredientForSupply($supply);
         $items = $this->getProductionIngredientItems($production, $ingredient);
+        $linkedOpenOrderQuantity = (float) ($this->waveProcurementService
+            ->getOpenLinkedOrderQuantitiesForProduction($production)
+            ->get($ingredient->id) ?? 0);
 
-        return $this->allocateItemsStrictFromSingleSupply($items, $supply, $quantity);
+        return $this->allocateItemsStrictFromSingleSupply($items, $supply, $quantity, $linkedOpenOrderQuantity);
     }
 
     private function syncWaveRequirementStatusesForItem(ProductionItem $item): void
@@ -729,11 +736,12 @@ class ProductionAllocationService
      * @param  Collection<int, ProductionItem>  $items
      * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int, supplies_used: int}
      */
-    private function allocateIngredientItemsStrict(Collection $items, Ingredient $ingredient, ?float $quantity = null): array
+    private function allocateIngredientItemsStrict(Collection $items, Ingredient $ingredient, ?float $quantity = null, float $externallyCoveredQuantity = 0): array
     {
         $supplies = $this->getAllocatableSuppliesForIngredient($ingredient);
+        $effectiveDemands = $this->getEffectiveItemDemands($items, $externallyCoveredQuantity);
 
-        $requestedQuantity = round((float) ($quantity ?? $items->sum(fn (ProductionItem $item): float => $item->getUnallocatedQuantity())), 3);
+        $requestedQuantity = round((float) ($quantity ?? array_sum($effectiveDemands)), 3);
 
         if ($requestedQuantity <= 0) {
             throw new \InvalidArgumentException(__('La quantité à allouer doit être supérieure à zéro.'));
@@ -754,7 +762,7 @@ class ProductionAllocationService
                 break;
             }
 
-            $itemRequiredQuantity = round($item->getUnallocatedQuantity(), 3);
+            $itemRequiredQuantity = (float) ($effectiveDemands[$item->id] ?? 0);
             $itemRemaining = $itemRequiredQuantity;
 
             if ($itemRequiredQuantity <= 0) {
@@ -819,11 +827,12 @@ class ProductionAllocationService
      * @param  Collection<int, ProductionItem>  $items
      * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int}
      */
-    private function allocateItemsStrictFromSingleSupply(Collection $items, Supply $supply, ?float $quantity = null): array
+    private function allocateItemsStrictFromSingleSupply(Collection $items, Supply $supply, ?float $quantity = null, float $externallyCoveredQuantity = 0): array
     {
         $ingredient = $this->resolveIngredientForSupply($supply);
         $availableOnSupply = round($supply->getAvailableQuantity(), 3);
-        $maxDemand = round((float) $items->sum(fn (ProductionItem $item): float => $item->getUnallocatedQuantity()), 3);
+        $effectiveDemands = $this->getEffectiveItemDemands($items, $externallyCoveredQuantity);
+        $maxDemand = round((float) array_sum($effectiveDemands), 3);
         $requestedQuantity = round((float) ($quantity ?? min($availableOnSupply, $maxDemand)), 3);
 
         if ($requestedQuantity <= 0) {
@@ -844,7 +853,7 @@ class ProductionAllocationService
                 break;
             }
 
-            $itemRequiredQuantity = round($item->getUnallocatedQuantity(), 3);
+            $itemRequiredQuantity = (float) ($effectiveDemands[$item->id] ?? 0);
 
             if ($itemRequiredQuantity <= 0 || $remainingQuantity < $itemRequiredQuantity) {
                 continue;
@@ -872,6 +881,32 @@ class ProductionAllocationService
             'items_touched' => count($touchedItemIds),
             'allocations_created' => $allocationsCreated,
         ];
+    }
+
+    /**
+     * @param  Collection<int, ProductionItem>  $items
+     * @return array<int, float>
+     */
+    private function getEffectiveItemDemands(Collection $items, float $externallyCoveredQuantity): array
+    {
+        $remainingExternalCoverage = round(max(0, $externallyCoveredQuantity), 3);
+        $effectiveDemands = [];
+
+        foreach ($items as $item) {
+            $unallocatedQuantity = round($item->getUnallocatedQuantity(), 3);
+
+            if ($unallocatedQuantity <= 0) {
+                $effectiveDemands[$item->id] = 0.0;
+
+                continue;
+            }
+
+            $coveredByLinkedOrders = min($unallocatedQuantity, $remainingExternalCoverage);
+            $remainingExternalCoverage = round(max(0, $remainingExternalCoverage - $coveredByLinkedOrders), 3);
+            $effectiveDemands[$item->id] = round(max(0, $unallocatedQuantity - $coveredByLinkedOrders), 3);
+        }
+
+        return $effectiveDemands;
     }
 
     /**

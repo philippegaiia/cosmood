@@ -160,8 +160,8 @@ class ProductionsTable
                         ->schema([
                             Select::make('ingredient_ids')
                                 ->label(__('Ingrédients'))
-                                ->options(fn (Production $record): array => self::getOrphanIngredientOptions($record))
-                                ->default(fn (Production $record): array => self::getDefaultOrphanIngredientIds($record))
+                                ->options(fn (Production $record): array => self::getOrphanOrderingIngredientOptions($record))
+                                ->default(fn (Production $record): array => self::getDefaultOrphanOrderingIngredientIds($record))
                                 ->multiple()
                                 ->searchable()
                                 ->preload()
@@ -205,8 +205,8 @@ class ProductionsTable
                         ->schema([
                             Select::make('ingredient_id')
                                 ->label(__('Ingrédient'))
-                                ->options(fn (Production $record): array => self::getOrphanIngredientOptions($record))
-                                ->default(fn (Production $record): ?int => self::getDefaultOrphanIngredientId($record))
+                                ->options(fn (Production $record): array => self::getOrphanAllocationIngredientOptions($record))
+                                ->default(fn (Production $record): ?int => self::getDefaultOrphanAllocationIngredientId($record))
                                 ->searchable()
                                 ->preload()
                                 ->live()
@@ -225,11 +225,11 @@ class ProductionsTable
                                     (int) ($get('ingredient_id') ?? 0),
                                 )),
                         ])
-                        ->modalDescription(__('Alloue du stock réel déjà disponible à cette production orpheline, ingrédient par ingrédient. Laisser vide pour allouer tout le besoin restant de cet ingrédient.'))
+                        ->modalDescription(__('Alloue du stock réel déjà disponible à cette production orpheline, ingrédient par ingrédient. Laisser vide pour allouer la quantité encore utile après prise en compte des PO déjà liées.'))
                         ->visible(fn (Production $record): bool => self::canManageOrphanProcurement($record))
                         ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                         ->action(function (Production $record, array $data): void {
-                            $ingredientId = (int) ($data['ingredient_id'] ?? self::getDefaultOrphanIngredientId($record) ?? 0);
+                            $ingredientId = (int) ($data['ingredient_id'] ?? self::getDefaultOrphanAllocationIngredientId($record) ?? 0);
                             $ingredient = Ingredient::query()->find($ingredientId);
                             $line = self::getOrphanPlanningLine($record, $ingredientId);
 
@@ -244,7 +244,7 @@ class ProductionsTable
 
                             $requestedQuantity = filled($data['allocation_quantity'] ?? null)
                                 ? round((float) $data['allocation_quantity'], 3)
-                                : round((float) ($line->remaining_requirement ?? 0), 3);
+                                : round((float) ($line->planned_stock_quantity ?? 0), 3);
 
                             if ($requestedQuantity <= 0) {
                                 Notification::make()
@@ -492,18 +492,42 @@ class ProductionsTable
     /**
      * @return array<int, string>
      */
-    private static function getOrphanIngredientOptions(Production $record): array
+    private static function getOrphanOrderingIngredientOptions(Production $record): array
     {
         $service = app(WaveProcurementService::class);
 
         return $service->getPlanningListForProduction($record)
+            ->filter(fn (object $line): bool => (float) ($line->remaining_to_order ?? 0) > 0)
             ->mapWithKeys(function (object $line) use ($service): array {
                 $unit = (string) ($line->display_unit ?? 'kg');
 
                 return [
-                    (int) $line->ingredient_id => __(':ingredient | Reste :remaining | Stock :stock', [
+                    (int) $line->ingredient_id => __(':ingredient | À commander :remaining | Stock :stock', [
                         'ingredient' => (string) ($line->ingredient_name ?? __('Ingrédient')),
-                        'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $unit),
+                        'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_to_order ?? 0), $unit),
+                        'stock' => $service->formatPlanningQuantity((float) ($line->available_stock ?? 0), $unit),
+                    ]),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function getOrphanAllocationIngredientOptions(Production $record): array
+    {
+        $service = app(WaveProcurementService::class);
+
+        return $service->getPlanningListForProduction($record)
+            ->filter(fn (object $line): bool => (float) ($line->remaining_after_linked_orders ?? 0) > 0)
+            ->mapWithKeys(function (object $line) use ($service): array {
+                $unit = (string) ($line->display_unit ?? 'kg');
+
+                return [
+                    (int) $line->ingredient_id => __(':ingredient | Après PO :remaining | Stock :stock', [
+                        'ingredient' => (string) ($line->ingredient_name ?? __('Ingrédient')),
+                        'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_after_linked_orders ?? 0), $unit),
                         'stock' => $service->formatPlanningQuantity((float) ($line->available_stock ?? 0), $unit),
                     ]),
                 ];
@@ -529,7 +553,7 @@ class ProductionsTable
         }
 
         return __('Besoin restant: :remaining | Stock dispo: :stock | Déjà alloué: :allocated', [
-            'remaining' => $service->formatPlanningQuantityByUnit($lines, 'remaining_requirement'),
+            'remaining' => $service->formatPlanningQuantityByUnit($lines, 'remaining_to_order'),
             'stock' => $service->formatPlanningQuantityByUnit($lines, 'available_stock'),
             'allocated' => $service->formatPlanningQuantityByUnit($lines, 'allocated_quantity'),
         ]);
@@ -546,8 +570,9 @@ class ProductionsTable
         $service = app(WaveProcurementService::class);
         $unit = (string) ($line->display_unit ?? 'kg');
 
-        return __('Besoin restant: :remaining | Déjà alloué: :allocated | Stock dispo: :stock | Date besoin: :needDate', [
-            'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $unit),
+        return __('Besoin physique: :physical | Après PO liée: :remaining | Déjà alloué: :allocated | Stock dispo: :stock | Date besoin: :needDate', [
+            'physical' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $unit),
+            'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_after_linked_orders ?? 0), $unit),
             'allocated' => $service->formatPlanningQuantity((float) ($line->allocated_quantity ?? 0), $unit),
             'stock' => $service->formatPlanningQuantity((float) ($line->available_stock ?? 0), $unit),
             'needDate' => $line->need_date
@@ -567,8 +592,8 @@ class ProductionsTable
         $service = app(WaveProcurementService::class);
         $unit = (string) ($line->display_unit ?? 'kg');
 
-        return __('Laisser vide pour tenter d\'allouer tout le besoin restant (:remaining). L\'allocation automatique reste stricte: un item n\'est servi que s\'il peut être couvert en totalité.', [
-            'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $unit),
+        return __('Laisser vide pour tenter d\'allouer la quantité encore utile en stock (:remaining). L\'allocation automatique reste stricte: un item n\'est servi que s\'il peut être couvert en totalité.', [
+            'remaining' => $service->formatPlanningQuantity((float) ($line->planned_stock_quantity ?? 0), $unit),
         ]);
     }
 
@@ -583,9 +608,9 @@ class ProductionsTable
             ->first(fn (object $line): bool => (int) ($line->ingredient_id ?? 0) === $ingredientId);
     }
 
-    private static function getDefaultOrphanIngredientId(Production $record): ?int
+    private static function getDefaultOrphanAllocationIngredientId(Production $record): ?int
     {
-        $firstIngredientId = array_key_first(self::getOrphanIngredientOptions($record));
+        $firstIngredientId = array_key_first(self::getOrphanAllocationIngredientOptions($record));
 
         return $firstIngredientId !== null ? (int) $firstIngredientId : null;
     }
@@ -593,10 +618,10 @@ class ProductionsTable
     /**
      * @return array<int, int>
      */
-    private static function getDefaultOrphanIngredientIds(Production $record): array
+    private static function getDefaultOrphanOrderingIngredientIds(Production $record): array
     {
-        $defaultIngredientId = self::getDefaultOrphanIngredientId($record);
+        $defaultIngredientId = array_key_first(self::getOrphanOrderingIngredientOptions($record));
 
-        return $defaultIngredientId !== null ? [$defaultIngredientId] : [];
+        return $defaultIngredientId !== null ? [(int) $defaultIngredientId] : [];
     }
 }
