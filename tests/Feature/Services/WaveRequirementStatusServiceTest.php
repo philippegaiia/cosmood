@@ -467,3 +467,66 @@ it('marks only not ordered items for selected wave ingredients', function () {
         ->and($itemAlreadyOrdered->fresh()->is_order_marked)->toBeFalse()
         ->and($itemOtherIngredient->fresh()->is_order_marked)->toBeFalse();
 });
+
+it('marks items as ordered only from committed quantities on placed wave orders', function () {
+    $wave = ProductionWave::factory()->create([
+        'planned_start_date' => '2026-03-20',
+    ]);
+    $production = Production::factory()->forWave($wave)->create();
+    $supplier = Supplier::factory()->create();
+    $ingredientFromStock = Ingredient::factory()->create();
+    $ingredientFromOrder = Ingredient::factory()->create();
+
+    $stockListing = SupplierListing::factory()->create([
+        'supplier_id' => $supplier->id,
+        'ingredient_id' => $ingredientFromStock->id,
+    ]);
+
+    $orderListing = SupplierListing::factory()->create([
+        'supplier_id' => $supplier->id,
+        'ingredient_id' => $ingredientFromOrder->id,
+        'unit_weight' => 25,
+    ]);
+
+    Supply::factory()->inStock(10)->create([
+        'supplier_listing_id' => $stockListing->id,
+        'is_in_stock' => true,
+    ]);
+
+    $stockItem = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredientFromStock->id,
+        'supplier_listing_id' => $stockListing->id,
+        'required_quantity' => 8,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+    ]);
+
+    $orderItem = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredientFromOrder->id,
+        'supplier_listing_id' => $orderListing->id,
+        'required_quantity' => 25,
+        'procurement_status' => ProcurementStatus::NotOrdered,
+    ]);
+
+    $waveOrder = SupplierOrder::factory()->passed()->create([
+        'supplier_id' => $supplier->id,
+        'production_wave_id' => $wave->id,
+    ]);
+
+    SupplierOrderItem::factory()->create([
+        'supplier_order_id' => $waveOrder->id,
+        'supplier_listing_id' => $orderListing->id,
+        'quantity' => 1,
+        'unit_weight' => 25,
+        'committed_quantity_kg' => 25,
+    ]);
+
+    $updated = waveRequirementStatusService()->markItemsAsOrderedFromPlacedWaveOrders($wave);
+
+    expect($updated)->toBe(1)
+        ->and($stockItem->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered)
+        ->and($stockItem->fresh()->is_order_marked)->toBeFalse()
+        ->and($orderItem->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered)
+        ->and($orderItem->fresh()->is_order_marked)->toBeTrue();
+});

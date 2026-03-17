@@ -4,20 +4,29 @@ namespace App\Filament\Resources\Production\ProductionResource\Tables;
 
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
+use App\Models\Supply\Ingredient;
 use App\Services\Production\PermanentBatchNumberService;
 use App\Services\Production\PlanningBatchNumberService;
+use App\Services\Production\ProductionAllocationService;
 use App\Services\Production\ProductionStatusTransitionService;
 use App\Services\Production\StatusColorScheme;
+use App\Services\Production\WaveProcurementService;
 use App\Services\Production\WaveProductionPlanningService;
+use App\Services\Production\WaveRequirementStatusService;
+use Carbon\Carbon;
 use Filament\Actions\Action;
+use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
@@ -35,6 +44,12 @@ use Illuminate\Support\Str;
  */
 class ProductionsTable
 {
+    private const PROCUREMENT_ACTIONABLE_STATUSES = [
+        ProductionStatus::Planned,
+        ProductionStatus::Confirmed,
+        ProductionStatus::Ongoing,
+    ];
+
     /**
      * Configure the productions table.
      *
@@ -136,6 +151,146 @@ class ProductionsTable
                     ->color('gray')
                     ->requiresConfirmation()
                     ->action(fn (Production $record) => self::duplicateProduction($record)),
+                ActionGroup::make([
+                    Action::make('markOrphanItemsOrdered')
+                        ->label(__('Marquer commandé'))
+                        ->icon(Heroicon::OutlinedCheckBadge)
+                        ->color('info')
+                        ->slideOver()
+                        ->schema([
+                            Select::make('ingredient_ids')
+                                ->label(__('Ingrédients'))
+                                ->options(fn (Production $record): array => self::getOrphanIngredientOptions($record))
+                                ->default(fn (Production $record): array => self::getDefaultOrphanIngredientIds($record))
+                                ->multiple()
+                                ->searchable()
+                                ->preload()
+                                ->live()
+                                ->required(),
+                            Placeholder::make('ordering_context')
+                                ->label(__('Contexte'))
+                                ->content(fn (Production $record, Get $get): string => self::getOrphanOrderingContextSummary(
+                                    $record,
+                                    collect($get('ingredient_ids') ?? [])->map(fn (mixed $ingredientId): int => (int) $ingredientId)->all(),
+                                )),
+                        ])
+                        ->modalDescription(__('Marque manuellement comme commandés les ingrédients orphelins pris en charge hors commande liée à une vague.'))
+                        ->visible(fn (Production $record): bool => self::canManageOrphanProcurement($record))
+                        ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
+                        ->action(function (Production $record, array $data): void {
+                            $updatedCount = app(WaveRequirementStatusService::class)
+                                ->markNotOrderedItemsAsOrderedForProductionIngredients($record, $data['ingredient_ids'] ?? []);
+
+                            if ($updatedCount === 0) {
+                                Notification::make()
+                                    ->title(__('Aucun item à marquer'))
+                                    ->body(__('Les ingrédients sélectionnés sont déjà pris en charge, alloués ou non concernés.'))
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            Notification::make()
+                                ->title(__('Items marqués'))
+                                ->body(__('Items mis à jour: :count', ['count' => $updatedCount]))
+                                ->success()
+                                ->send();
+                        }),
+                    Action::make('allocateOrphanIngredientStock')
+                        ->label(__('Allouer stock'))
+                        ->icon(Heroicon::OutlinedArchiveBoxArrowDown)
+                        ->color('success')
+                        ->slideOver()
+                        ->schema([
+                            Select::make('ingredient_id')
+                                ->label(__('Ingrédient'))
+                                ->options(fn (Production $record): array => self::getOrphanIngredientOptions($record))
+                                ->default(fn (Production $record): ?int => self::getDefaultOrphanIngredientId($record))
+                                ->searchable()
+                                ->preload()
+                                ->live()
+                                ->required(),
+                            Placeholder::make('allocation_context')
+                                ->label(__('Contexte allocation'))
+                                ->content(fn (Production $record, Get $get): string => self::getOrphanAllocationContextSummary(
+                                    $record,
+                                    (int) ($get('ingredient_id') ?? 0),
+                                )),
+                            TextInput::make('allocation_quantity')
+                                ->label(__('Quantité à allouer maintenant'))
+                                ->numeric()
+                                ->helperText(fn (Production $record, Get $get): string => self::getOrphanAllocationInputHelper(
+                                    $record,
+                                    (int) ($get('ingredient_id') ?? 0),
+                                )),
+                        ])
+                        ->modalDescription(__('Alloue du stock réel déjà disponible à cette production orpheline, ingrédient par ingrédient. Laisser vide pour allouer tout le besoin restant de cet ingrédient.'))
+                        ->visible(fn (Production $record): bool => self::canManageOrphanProcurement($record))
+                        ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
+                        ->action(function (Production $record, array $data): void {
+                            $ingredientId = (int) ($data['ingredient_id'] ?? self::getDefaultOrphanIngredientId($record) ?? 0);
+                            $ingredient = Ingredient::query()->find($ingredientId);
+                            $line = self::getOrphanPlanningLine($record, $ingredientId);
+
+                            if (! $ingredient) {
+                                Notification::make()
+                                    ->title(__('Ingrédient introuvable'))
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            $requestedQuantity = filled($data['allocation_quantity'] ?? null)
+                                ? round((float) $data['allocation_quantity'], 3)
+                                : round((float) ($line->remaining_requirement ?? 0), 3);
+
+                            if ($requestedQuantity <= 0) {
+                                Notification::make()
+                                    ->title(__('Aucune quantité à allouer'))
+                                    ->body(__('Cette production n\'a plus de besoin restant pour cet ingrédient.'))
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            try {
+                                $summary = app(ProductionAllocationService::class)->allocateProductionIngredientStock(
+                                    $record,
+                                    $ingredient,
+                                    $requestedQuantity,
+                                );
+                            } catch (\InvalidArgumentException $exception) {
+                                Notification::make()
+                                    ->title(__('Allocation impossible'))
+                                    ->body($exception->getMessage())
+                                    ->warning()
+                                    ->send();
+
+                                return;
+                            }
+
+                            $updatedLine = self::getOrphanPlanningLine($record->fresh(), $ingredientId);
+                            $service = app(WaveProcurementService::class);
+                            $displayUnit = (string) ($updatedLine->display_unit ?? $line->display_unit ?? ($ingredient->base_unit?->value ?? 'kg'));
+
+                            Notification::make()
+                                ->title(__('Allocation enregistrée'))
+                                ->body(__('Alloué: :allocated | Restant sur la demande: :remaining | Déjà alloué sur la production: :productionAllocated', [
+                                    'allocated' => $service->formatPlanningQuantity((float) ($summary['allocated_quantity'] ?? 0), $displayUnit),
+                                    'remaining' => $service->formatPlanningQuantity((float) ($summary['remaining_quantity'] ?? 0), $displayUnit),
+                                    'productionAllocated' => $service->formatPlanningQuantity((float) ($updatedLine->allocated_quantity ?? 0), $displayUnit),
+                                ]))
+                                ->success()
+                                ->send();
+                        }),
+                ])
+                    ->label(__('Appro orpheline'))
+                    ->icon(Heroicon::OutlinedShoppingCart)
+                    ->button()
+                    ->visible(fn (Production $record): bool => self::canManageOrphanProcurement($record)),
                 ViewAction::make(),
                 EditAction::make(),
             ])
@@ -325,5 +480,123 @@ class ProductionsTable
             ->implode(',');
 
         return route('productions.bulk-documents', ['ids' => $ids]);
+    }
+
+    private static function canManageOrphanProcurement(Production $record): bool
+    {
+        return $record->isOrphan()
+            && in_array($record->status, self::PROCUREMENT_ACTIONABLE_STATUSES, true)
+            && (auth()->user()?->canManageProductionPlanning() ?? false);
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private static function getOrphanIngredientOptions(Production $record): array
+    {
+        $service = app(WaveProcurementService::class);
+
+        return $service->getPlanningListForProduction($record)
+            ->mapWithKeys(function (object $line) use ($service): array {
+                $unit = (string) ($line->display_unit ?? 'kg');
+
+                return [
+                    (int) $line->ingredient_id => __(':ingredient | Reste :remaining | Stock :stock', [
+                        'ingredient' => (string) ($line->ingredient_name ?? __('Ingrédient')),
+                        'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $unit),
+                        'stock' => $service->formatPlanningQuantity((float) ($line->available_stock ?? 0), $unit),
+                    ]),
+                ];
+            })
+            ->all();
+    }
+
+    /**
+     * @param  array<int, int>  $ingredientIds
+     */
+    private static function getOrphanOrderingContextSummary(Production $record, array $ingredientIds): string
+    {
+        if ($ingredientIds === []) {
+            return __('Choisissez un ou plusieurs ingrédients pour voir le besoin restant à couvrir.');
+        }
+
+        $service = app(WaveProcurementService::class);
+        $lines = $service->getPlanningListForProduction($record)
+            ->whereIn('ingredient_id', $ingredientIds);
+
+        if ($lines->isEmpty()) {
+            return __('Aucun besoin actif trouvé pour les ingrédients sélectionnés.');
+        }
+
+        return __('Besoin restant: :remaining | Stock dispo: :stock | Déjà alloué: :allocated', [
+            'remaining' => $service->formatPlanningQuantityByUnit($lines, 'remaining_requirement'),
+            'stock' => $service->formatPlanningQuantityByUnit($lines, 'available_stock'),
+            'allocated' => $service->formatPlanningQuantityByUnit($lines, 'allocated_quantity'),
+        ]);
+    }
+
+    private static function getOrphanAllocationContextSummary(Production $record, int $ingredientId): string
+    {
+        $line = self::getOrphanPlanningLine($record, $ingredientId);
+
+        if (! $line) {
+            return __('Choisissez un ingrédient pour voir le besoin restant et le stock disponible.');
+        }
+
+        $service = app(WaveProcurementService::class);
+        $unit = (string) ($line->display_unit ?? 'kg');
+
+        return __('Besoin restant: :remaining | Déjà alloué: :allocated | Stock dispo: :stock | Date besoin: :needDate', [
+            'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $unit),
+            'allocated' => $service->formatPlanningQuantity((float) ($line->allocated_quantity ?? 0), $unit),
+            'stock' => $service->formatPlanningQuantity((float) ($line->available_stock ?? 0), $unit),
+            'needDate' => $line->need_date
+                ? Carbon::parse((string) $line->need_date)->format('d/m/Y')
+                : __('Non définie'),
+        ]);
+    }
+
+    private static function getOrphanAllocationInputHelper(Production $record, int $ingredientId): string
+    {
+        $line = self::getOrphanPlanningLine($record, $ingredientId);
+
+        if (! $line) {
+            return __('Choisissez un ingrédient pour voir la quantité recommandée.');
+        }
+
+        $service = app(WaveProcurementService::class);
+        $unit = (string) ($line->display_unit ?? 'kg');
+
+        return __('Laisser vide pour tenter d\'allouer tout le besoin restant (:remaining). L\'allocation automatique reste stricte: un item n\'est servi que s\'il peut être couvert en totalité.', [
+            'remaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $unit),
+        ]);
+    }
+
+    private static function getOrphanPlanningLine(Production $record, int $ingredientId): ?object
+    {
+        if ($ingredientId <= 0) {
+            return null;
+        }
+
+        return app(WaveProcurementService::class)
+            ->getPlanningListForProduction($record)
+            ->first(fn (object $line): bool => (int) ($line->ingredient_id ?? 0) === $ingredientId);
+    }
+
+    private static function getDefaultOrphanIngredientId(Production $record): ?int
+    {
+        $firstIngredientId = array_key_first(self::getOrphanIngredientOptions($record));
+
+        return $firstIngredientId !== null ? (int) $firstIngredientId : null;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private static function getDefaultOrphanIngredientIds(Production $record): array
+    {
+        $defaultIngredientId = self::getDefaultOrphanIngredientId($record);
+
+        return $defaultIngredientId !== null ? [$defaultIngredientId] : [];
     }
 }

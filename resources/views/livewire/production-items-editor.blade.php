@@ -44,6 +44,7 @@
                         : $this->calculateQuantity($item);
                     $allocatedQty = $item['total_allocated'] ?? 0;
                     $isPartial = $allocationStatus === App\Enums\AllocationStatus::Partial;
+                    $isTakenCareOf = !empty($item['is_procurement_covered']);
                 @endphp
 
                 @php
@@ -166,8 +167,11 @@
                         @if($item['organic'])
                             <flux:badge color="green" size="sm">Bio</flux:badge>
                         @endif
+                        @if($isTakenCareOf)
+                            <flux:badge color="emerald" size="sm">{{ __('Pris en charge') }}</flux:badge>
+                        @endif
                         @if(!empty($item['is_order_marked']))
-                            <flux:badge color="blue" size="sm">{{ __('Commande marquée') }}</flux:badge>
+                            <flux:badge color="blue" size="sm">{{ __('Marque manuelle') }}</flux:badge>
                         @endif
                     </div>
 

@@ -19,6 +19,7 @@ use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 class ProductionWaveForm
@@ -91,11 +92,11 @@ class ProductionWaveForm
 
     private static function getProcurementTab(): Tab
     {
-        return Tab::make('Approvisionnement')
+        return Tab::make(__('Approvisionnement'))
             ->hiddenOn('create')
             ->schema([
-                Section::make('Vue stricte (non alloué)')
-                    ->description('Le besoin restant est calculé sur les quantités non allouées. Les commandes restent indicatives.')
+                Section::make(__('Lecture vague'))
+                    ->description(__('Vue claire par vague: besoin total, stock disponible, réserve gardée pour urgence, stock mobilisable pour la vague et reste à commander. La date de besoin correspond à J-7 avant le début de vague.'))
                     ->schema([
                         TextEntry::make('procurement_summary')
                             ->hiddenLabel()
@@ -104,22 +105,29 @@ class ProductionWaveForm
                                     return '-';
                                 }
 
-                                $summary = app(WaveProcurementService::class)->getPlanningSummary($record);
+                                $service = app(WaveProcurementService::class);
+                                $lines = $service->getPlanningList($record);
 
-                                return sprintf(
-                                    'Besoin restant: %s kg | Couvert (cmd + reçu): %s kg | Reçu stock: %s kg | Reste à sécuriser: %s kg | Manque indicatif: %s kg | Commandé ferme: %s kg | Brouillon PO: %s kg | Engagé PO: %s kg',
-                                    number_format((float) $summary['required_remaining_total'], 3, ',', ' '),
-                                    number_format((float) ($summary['covered_total'] ?? 0), 3, ',', ' '),
-                                    number_format((float) ($summary['received_total'] ?? 0), 3, ',', ' '),
-                                    number_format((float) ($summary['to_secure_total'] ?? 0), 3, ',', ' '),
-                                    number_format((float) $summary['shortage_total'], 3, ',', ' '),
-                                    number_format((float) ($summary['firm_order_total'] ?? 0), 3, ',', ' '),
-                                    number_format((float) ($summary['draft_order_total'] ?? 0), 3, ',', ' '),
-                                    number_format((float) ($summary['committed_total'] ?? 0), 3, ',', ' '),
-                                );
+                                return implode(' | ', [
+                                    __('Besoin total: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'total_wave_requirement')]),
+                                    __('Déjà alloué: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'allocated_quantity')]),
+                                    __('Besoin restant à couvrir: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'remaining_requirement')]),
+                                    __('Stock disponible: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'available_stock')]),
+                                    __('Réserve stock: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'reserved_stock_quantity')]),
+                                    __('Stock vague: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'planned_stock_quantity')]),
+                                    __('Commandé pour cette vague: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'wave_ordered_quantity')]),
+                                    __('Reçu pour cette vague: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'wave_received_quantity')]),
+                                    __('Commandes ouvertes non engagées: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'open_orders_not_committed')]),
+                                    __('Reste à sécuriser: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'remaining_to_secure')]),
+                                    __('Reste à commander: :value', ['value' => $service->formatPlanningQuantityByUnit($lines, 'remaining_to_order')]),
+                                ]);
                             }),
                         RepeatableEntry::make('procurement_lines')
                             ->hiddenLabel()
+                            ->columnSpanFull()
+                            ->extraAttributes([
+                                'class' => 'max-w-full overflow-x-auto [&>table]:min-w-[96rem] [&>table]:table-fixed',
+                            ])
                             ->state(function (?ProductionWave $record): array {
                                 if (! $record) {
                                     return [];
@@ -128,71 +136,124 @@ class ProductionWaveForm
                                 return app(WaveProcurementService::class)
                                     ->getPlanningList($record)
                                     ->map(function (object $line): array {
-                                        $required = (float) ($line->required_remaining_quantity ?? 0);
-                                        $toSecure = (float) ($line->to_secure_quantity ?? 0);
-                                        $advisoryShortage = (float) ($line->advisory_shortage ?? 0);
-                                        $covered = max(0, $required - $toSecure);
-                                        $coverageWarning = (string) ($line->coverage_warning ?? '');
+                                        $service = app(WaveProcurementService::class);
+                                        $displayUnit = (string) ($line->display_unit ?? 'kg');
+                                        $totalRequirement = (float) ($line->total_wave_requirement ?? 0);
+                                        $allocatedQuantity = (float) ($line->allocated_quantity ?? 0);
+                                        $remainingRequirement = (float) ($line->remaining_requirement ?? 0);
+                                        $availableStock = (float) ($line->available_stock ?? 0);
+                                        $reservedStock = (float) ($line->reserved_stock_quantity ?? 0);
+                                        $plannedStock = (float) ($line->planned_stock_quantity ?? 0);
+                                        $waveOrderedQuantity = (float) ($line->wave_ordered_quantity ?? 0);
+                                        $waveReceivedQuantity = (float) ($line->wave_received_quantity ?? 0);
+                                        $openOrdersNotCommitted = (float) ($line->open_orders_not_committed ?? 0);
+                                        $remainingToSecure = (float) ($line->remaining_to_secure ?? 0);
+                                        $remainingToOrder = (float) ($line->remaining_to_order ?? 0);
 
-                                        if ($advisoryShortage > 0) {
-                                            $signal = __('À sécuriser');
-                                        } elseif ($toSecure > 0) {
-                                            $signal = __('Stock à réserver');
-                                        } elseif ($coverageWarning !== '') {
-                                            $signal = __('Couverture provisoire');
+                                        if ($remainingToOrder > 0) {
+                                            $signal = __('À commander');
+                                        } elseif ($remainingToSecure > 0) {
+                                            $signal = __('À engager');
+                                        } elseif ($remainingRequirement <= 0) {
+                                            $signal = __('OK');
+                                        } elseif ($availableStock > 0) {
+                                            $signal = __('À affecter');
                                         } else {
-                                            $signal = __('Prête');
+                                            $signal = __('Sécurisé');
                                         }
 
                                         return [
                                             'ingredient' => (string) ($line->ingredient_name ?? '-'),
-                                            'need_date' => $line->earliest_need_date
-                                                ? \Illuminate\Support\Carbon::parse($line->earliest_need_date)->format('d/m/Y')
+                                            'need_date' => $line->need_date
+                                                ? Carbon::parse($line->need_date)->format('d/m/Y')
                                                 : '-',
-                                            'required_remaining' => number_format($required, 3, ',', ' ').' kg',
-                                            'covered' => number_format($covered, 3, ',', ' ').' kg',
-                                            'to_secure' => number_format($toSecure, 3, ',', ' ').' kg',
+                                            'total_requirement' => $service->formatPlanningQuantity($totalRequirement, $displayUnit),
+                                            'allocated_quantity' => $service->formatPlanningQuantity($allocatedQuantity, $displayUnit),
+                                            'remaining_requirement' => $service->formatPlanningQuantity($remainingRequirement, $displayUnit),
+                                            'available_stock' => $service->formatPlanningQuantity($availableStock, $displayUnit),
+                                            'reserved_stock_quantity' => $service->formatPlanningQuantity($reservedStock, $displayUnit),
+                                            'planned_stock_quantity' => $service->formatPlanningQuantity($plannedStock, $displayUnit),
+                                            'wave_ordered_quantity' => $service->formatPlanningQuantity($waveOrderedQuantity, $displayUnit),
+                                            'wave_received_quantity' => $service->formatPlanningQuantity($waveReceivedQuantity, $displayUnit),
+                                            'open_orders_not_committed' => $service->formatPlanningQuantity($openOrdersNotCommitted, $displayUnit),
+                                            'remaining_to_secure' => $service->formatPlanningQuantity($remainingToSecure, $displayUnit),
+                                            'remaining_to_order' => $service->formatPlanningQuantity($remainingToOrder, $displayUnit),
                                             'signal' => $signal,
-                                            'source_hint' => $coverageWarning !== ''
-                                                ? $coverageWarning
-                                                : __('Couvert par engagement PO ou stock disponible'),
-                                            'details' => sprintf(
-                                                '%s | %s | %s | %s | %s | %s | %s',
-                                                __('À passer: :value', ['value' => number_format((float) ($line->to_order_quantity ?? 0), 3, ',', ' ').' kg']),
-                                                __('Commandé ferme: :value', ['value' => number_format((float) ($line->firm_open_order_quantity ?? 0), 3, ',', ' ').' kg']),
-                                                __('Brouillon PO: :value', ['value' => number_format((float) ($line->draft_open_order_quantity ?? 0), 3, ',', ' ').' kg']),
-                                                __('Reçu stock: :value', ['value' => number_format((float) ($line->received_quantity ?? 0), 3, ',', ' ').' kg']),
-                                                __('Engagé: :value', ['value' => number_format((float) ($line->committed_open_order_quantity ?? 0), 3, ',', ' ').' kg']),
-                                                __('Provisoire: :value', ['value' => number_format((float) ($line->priority_provisional_quantity ?? 0), 3, ',', ' ').' kg']),
-                                                __('Stock indicatif: :value', ['value' => number_format((float) ($line->stock_advisory ?? 0), 3, ',', ' ').' kg']),
-                                            ),
                                         ];
                                     })
                                     ->values()
                                     ->all();
                             })
-                            ->table([
-                                TableColumn::make('Ingrédient'),
-                                TableColumn::make('Date besoin'),
-                                TableColumn::make('Besoin restant'),
-                                TableColumn::make('Couvert'),
-                                TableColumn::make('Reste à sécuriser'),
-                                TableColumn::make('Signal'),
-                                TableColumn::make('Source'),
-                                TableColumn::make('Détails'),
-                            ])
+                            ->table(self::getProcurementTableColumns())
                             ->schema([
                                 TextEntry::make('ingredient'),
                                 TextEntry::make('need_date'),
-                                TextEntry::make('required_remaining'),
-                                TextEntry::make('covered'),
-                                TextEntry::make('to_secure'),
+                                TextEntry::make('total_requirement'),
+                                TextEntry::make('allocated_quantity'),
+                                TextEntry::make('remaining_requirement'),
+                                TextEntry::make('available_stock'),
+                                TextEntry::make('reserved_stock_quantity'),
+                                TextEntry::make('planned_stock_quantity'),
+                                TextEntry::make('wave_ordered_quantity'),
+                                TextEntry::make('wave_received_quantity'),
+                                TextEntry::make('open_orders_not_committed'),
+                                TextEntry::make('remaining_to_secure'),
+                                TextEntry::make('remaining_to_order'),
                                 TextEntry::make('signal'),
-                                TextEntry::make('source_hint'),
-                                TextEntry::make('details'),
                             ])
                             ->contained(false),
                     ]),
             ]);
+    }
+
+    /**
+     * @return array<int, TableColumn>
+     */
+    private static function getProcurementTableColumns(): array
+    {
+        return [
+            TableColumn::make(__('Ingrédient'))
+                ->width('12rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Date besoin'))
+                ->width('7rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Besoin'))
+                ->width('7rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Alloué'))
+                ->width('7rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Restant'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Stock dispo'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Réserve'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Stock vague'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Cmd vague'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Reçu vague'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('PO non engagées'))
+                ->width('9rem')
+                ->wrapHeader(),
+            TableColumn::make(__('À sécuriser'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('À commander'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Signal'))
+                ->width('7rem')
+                ->wrapHeader(),
+        ];
     }
 }

@@ -76,11 +76,13 @@ class ProductionItemsRelationManager extends RelationManager
                     ->label('Approvisionné')
                     ->boolean()
                     ->state(fn (ProductionItem $record): bool => $record->is_supplied || $record->supply_id !== null || $record->allocations->contains(fn ($allocation): bool => $allocation->isActive())),
-                TextColumn::make('is_order_marked')
-                    ->label(__('Commande passée'))
-                    ->state(fn (ProductionItem $record): string => $record->is_order_marked ? __('Oui') : __('Non'))
+                TextColumn::make('procurement_covered')
+                    ->label(__('Pris en charge'))
+                    ->state(fn (ProductionItem $record): string => $record->isCoveredByProcurementSignal() ? __('Oui') : __('Non'))
                     ->badge()
-                    ->color(fn (ProductionItem $record): string => $record->is_order_marked ? 'info' : 'gray'),
+                    ->color(fn (ProductionItem $record): string => $record->isFullyAllocated()
+                        ? 'success'
+                        : ($record->isCoveredByProcurementSignal() ? 'info' : 'gray')),
                 TextColumn::make('supply_batch_number')
                     ->label('Lot supply')
                     ->state(fn (ProductionItem $record): ?string => $record->allocations

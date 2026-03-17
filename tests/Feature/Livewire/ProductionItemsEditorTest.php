@@ -471,6 +471,57 @@ it('allows removing manual ordered mark on an item', function (): void {
         ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
 });
 
+it('shows allocated items as taken care of in the editor', function (): void {
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formule allocated display',
+        'slug' => 'formule-allocated-display',
+        'code' => 'FRM-DEL-ALLOCATED',
+        'is_active' => true,
+    ]);
+
+    $production = Production::query()->create([
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'slug' => 'batch-allocated-display',
+        'batch_number' => 'T90008A',
+        'status' => ProductionStatus::Planned,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 100,
+        'expected_units' => 100,
+    ]);
+
+    $ingredient = Ingredient::factory()->create();
+    $supply = Supply::factory()->inStock(20)->create([
+        'batch_number' => 'LOT-EDITOR-001',
+    ]);
+
+    $item = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'procurement_status' => ProcurementStatus::Received,
+        'allocation_status' => AllocationStatus::Allocated,
+        'required_quantity' => 10,
+        'is_order_marked' => false,
+    ]);
+
+    ProductionItemAllocation::factory()->create([
+        'production_item_id' => $item->id,
+        'supply_id' => $supply->id,
+        'quantity' => 10,
+        'status' => 'reserved',
+        'reserved_at' => now(),
+    ]);
+
+    Livewire::test(ProductionItemsEditor::class, ['productionId' => $production->id])
+        ->assertSee('Alloué')
+        ->assertSee('Pris en charge')
+        ->assertDontSee('Non alloué');
+});
+
 it('shows wave reference in available supply picker labels', function (): void {
     $product = Product::factory()->create();
     $formula = Formula::query()->create([

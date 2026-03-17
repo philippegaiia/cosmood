@@ -19,24 +19,28 @@ use Livewire\Livewire;
 
 uses(RefreshDatabase::class);
 
-it('renders global procurement lines for active waves', function (): void {
+it('renders planning procurement lines for waves and standalone productions', function (): void {
     $supplier = Supplier::factory()->create();
 
     $ingredientShortage = Ingredient::factory()->create(['name' => 'Huile Ricin']);
-    $ingredientCovered = Ingredient::factory()->create(['name' => 'Huile Olive']);
+    $ingredientStandalone = Ingredient::factory()->create(['name' => 'Boite Margo']);
 
     $listingShortage = SupplierListing::factory()->create([
         'ingredient_id' => $ingredientShortage->id,
         'supplier_id' => $supplier->id,
     ]);
 
-    $listingCovered = SupplierListing::factory()->create([
-        'ingredient_id' => $ingredientCovered->id,
+    $listingStandalone = SupplierListing::factory()->create([
+        'ingredient_id' => $ingredientStandalone->id,
         'supplier_id' => $supplier->id,
+        'unit_of_measure' => 'u',
+        'unit_weight' => 1,
     ]);
 
     $wave = ProductionWave::factory()->create([
-        'status' => WaveStatus::Approved,
+        'name' => 'Vague Mars',
+        'status' => WaveStatus::Draft,
+        'planned_start_date' => '2026-03-20',
     ]);
 
     $product = Product::factory()->create();
@@ -64,6 +68,23 @@ it('renders global procurement lines for active waves', function (): void {
         ]);
     });
 
+    $standaloneProduction = Production::withoutEvents(function () use ($product, $formula): Production {
+        return Production::query()->create([
+            'production_wave_id' => null,
+            'product_id' => $product->id,
+            'formula_id' => $formula->id,
+            'batch_number' => 'T98102',
+            'slug' => 'batch-standalone-overview',
+            'status' => ProductionStatus::Confirmed,
+            'sizing_mode' => SizingMode::OilWeight,
+            'planned_quantity' => 8,
+            'expected_units' => 48,
+            'production_date' => '2026-03-18',
+            'ready_date' => '2026-03-20',
+            'organic' => true,
+        ]);
+    });
+
     ProductionItem::factory()->create([
         'production_id' => $production->id,
         'ingredient_id' => $ingredientShortage->id,
@@ -73,14 +94,14 @@ it('renders global procurement lines for active waves', function (): void {
     ]);
 
     ProductionItem::factory()->create([
-        'production_id' => $production->id,
-        'ingredient_id' => $ingredientCovered->id,
-        'supplier_listing_id' => $listingCovered->id,
-        'required_quantity' => 10,
+        'production_id' => $standaloneProduction->id,
+        'ingredient_id' => $ingredientStandalone->id,
+        'supplier_listing_id' => $listingStandalone->id,
+        'required_quantity' => 48,
         'procurement_status' => ProcurementStatus::NotOrdered,
     ]);
 
-    $listingCovered->supplies()->create([
+    $listingShortage->supplies()->create([
         'order_ref' => 'PO-COVER-001',
         'batch_number' => 'LOT-COVER-001',
         'initial_quantity' => 10,
@@ -94,8 +115,10 @@ it('renders global procurement lines for active waves', function (): void {
     ]);
 
     Livewire::test(WaveProcurementOverviewPage::class)
-        ->assertSee('Pilotage achats - vagues actives')
-        ->assertSee('Aide colonnes approvisionnement')
+        ->assertSee('Pilotage appro production')
+        ->assertSee('Aide lecture planning')
         ->assertSee('Huile Ricin')
-        ->assertSee('Huile Olive');
+        ->assertSee('Boite Margo')
+        ->assertSee('Vague Mars')
+        ->assertSee('T98102');
 });

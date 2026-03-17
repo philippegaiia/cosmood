@@ -9,7 +9,7 @@ use Filament\Support\Icons\Heroicon;
 
 class WaveProcurementOverview extends Page
 {
-    protected static ?string $title = 'Pilotage achats vagues';
+    protected static ?string $title = 'Pilotage appro production';
 
     protected static ?string $navigationLabel = 'Pilotage achats';
 

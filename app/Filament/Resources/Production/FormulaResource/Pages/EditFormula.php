@@ -13,6 +13,8 @@ class EditFormula extends EditRecord
 {
     protected static string $resource = FormulaResource::class;
 
+    public static bool $formActionsAreSticky = true;
+
     private const SAPONIFIED_EXPECTED_TOTAL = 100.0;
 
     public function getMaxContentWidth(): Width|string|null

@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Plan achats - {{ $wave->name }}</title>
+    <title>{{ __('Plan achats - :name', ['name' => $wave->name]) }}</title>
     <style>
         body {
             font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
@@ -70,32 +70,42 @@
     </style>
 </head>
 <body>
-    <h1>Plan achats - {{ $wave->name }}</h1>
+    <h1>{{ __('Plan achats - :name', ['name' => $wave->name]) }}</h1>
     <div class="meta">
-        Date: {{ now()->format('d/m/Y H:i') }}<br>
-        Vague: {{ $wave->slug }}
+        {{ __('Date :date', ['date' => now()->format('d/m/Y H:i')]) }}<br>
+        {{ __('Vague: :wave', ['wave' => $wave->slug]) }}<br>
+        {{ __('Date besoin: :date', ['date' => $wave->planned_start_date?->copy()->subDays(7)->format('d/m/Y') ?? '-']) }}
     </div>
 
     <table>
         <thead>
             <tr>
-                <th>Ingredient</th>
-                <th>A commander (kg)</th>
-                <th>Deja commande (kg)</th>
-                <th>Stock indicatif (kg)</th>
-                <th>Manque indicatif (kg)</th>
-                <th>Dernier prix (EUR/kg)</th>
-                <th>Cout estime (EUR)</th>
+                <th>{{ __('Ingrédient') }}</th>
+                <th>{{ __('Date besoin') }}</th>
+                <th>{{ __('Besoin total (kg)') }}</th>
+                <th>{{ __('Besoin restant (kg)') }}</th>
+                <th>{{ __('Stock disponible (kg)') }}</th>
+                <th>{{ __('Commandé vague') }}</th>
+                <th>{{ __('Reçu vague') }}</th>
+                <th>{{ __('Cmd ouvertes non engagées') }}</th>
+                <th>{{ __('Reste à commander (kg)') }}</th>
+                <th>{{ __('Dernier prix (EUR/kg)') }}</th>
+                <th>{{ __('Coût estimé (EUR)') }}</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($lines as $line)
+                @php($displayUnit = (string) ($line->display_unit ?? 'kg'))
                 <tr>
                     <td>{{ $line->ingredient_name ?? '-' }}</td>
-                    <td>{{ number_format((float) $line->to_order_quantity, 3, ',', ' ') }}</td>
-                    <td>{{ number_format((float) $line->ordered_quantity, 3, ',', ' ') }}</td>
-                    <td>{{ number_format((float) $line->stock_advisory, 3, ',', ' ') }}</td>
-                    <td>{{ number_format((float) $line->advisory_shortage, 3, ',', ' ') }}</td>
+                    <td>{{ $line->need_date ? \Illuminate\Support\Carbon::parse($line->need_date)->format('d/m/Y') : '-' }}</td>
+                    <td>{{ app(\App\Services\Production\WaveProcurementService::class)->formatPlanningQuantity((float) ($line->total_wave_requirement ?? 0), $displayUnit) }}</td>
+                    <td>{{ app(\App\Services\Production\WaveProcurementService::class)->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $displayUnit) }}</td>
+                    <td>{{ app(\App\Services\Production\WaveProcurementService::class)->formatPlanningQuantity((float) ($line->available_stock ?? 0), $displayUnit) }}</td>
+                    <td>{{ app(\App\Services\Production\WaveProcurementService::class)->formatPlanningQuantity((float) ($line->wave_ordered_quantity ?? 0), $displayUnit) }}</td>
+                    <td>{{ app(\App\Services\Production\WaveProcurementService::class)->formatPlanningQuantity((float) ($line->wave_received_quantity ?? 0), $displayUnit) }}</td>
+                    <td>{{ app(\App\Services\Production\WaveProcurementService::class)->formatPlanningQuantity((float) ($line->open_orders_not_committed ?? 0), $displayUnit) }}</td>
+                    <td>{{ app(\App\Services\Production\WaveProcurementService::class)->formatPlanningQuantity((float) ($line->remaining_to_order ?? 0), $displayUnit) }}</td>
                     <td>
                         @if ((float) $line->ingredient_price > 0)
                             {{ number_format((float) $line->ingredient_price, 2, ',', ' ') }}
@@ -113,18 +123,18 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="7">Aucun besoin a afficher.</td>
+                    <td colspan="11">{{ __('Aucun besoin à afficher.') }}</td>
                 </tr>
             @endforelse
         </tbody>
     </table>
 
     <div class="summary">
-        Cout total estime: {{ number_format($estimatedTotal, 2, ',', ' ') }} EUR
+        {{ __('Coût total estimé: :value EUR', ['value' => number_format($estimatedTotal, 2, ',', ' ')]) }}
     </div>
 
     <div class="print-controls">
-        <button class="print-button" onclick="window.print()">Imprimer</button>
+        <button class="print-button" onclick="window.print()">{{ __('Imprimer') }}</button>
     </div>
 </body>
 </html>

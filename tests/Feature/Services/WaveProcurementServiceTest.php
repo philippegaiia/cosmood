@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\OrderStatus;
 use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
@@ -10,11 +11,14 @@ use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionWave;
+use App\Models\Production\ProductionWaveStockDecision;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
+use App\Models\User;
+use App\Services\InventoryMovementService;
 use App\Services\Production\WaveProcurementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -144,7 +148,9 @@ describe('aggregateRequirements', function () {
 
 describe('getPlanningList', function () {
     it('returns advisory planning quantities for a wave', function () {
-        $wave = ProductionWave::factory()->create();
+        $wave = ProductionWave::factory()->create([
+            'planned_start_date' => '2026-03-15',
+        ]);
         $supplier = Supplier::factory()->create(['name' => 'Aroma Supply']);
         $ingredient = Ingredient::factory()->create([
             'name' => 'Lavender Oil',
@@ -191,13 +197,77 @@ describe('getPlanningList', function () {
         $line = waveProcurementService()->getPlanningList($wave)->first();
 
         expect($line->ingredient_name)->toBe('Lavender Oil')
+            ->and((float) $line->total_wave_requirement)->toBe(40.0)
+            ->and((float) $line->allocated_quantity)->toBe(0.0)
+            ->and((float) $line->remaining_requirement)->toBe(40.0)
+            ->and((float) $line->available_stock)->toBe(15.0)
+            ->and((float) $line->reserved_stock_quantity)->toBe(0.0)
+            ->and((float) $line->planned_stock_quantity)->toBe(15.0)
+            ->and((float) $line->wave_committed_open_orders)->toBe(0.0)
+            ->and((float) $line->open_orders_not_committed)->toBe(0.0)
+            ->and((float) $line->remaining_to_secure)->toBe(25.0)
+            ->and((float) $line->remaining_to_order)->toBe(25.0)
             ->and((float) $line->not_ordered_quantity)->toBe(30.0)
             ->and((float) $line->ordered_quantity)->toBe(10.0)
             ->and((float) $line->to_order_quantity)->toBe(30.0)
             ->and((float) $line->stock_advisory)->toBe(15.0)
             ->and((float) $line->advisory_shortage)->toBe(15.0)
+            ->and($line->need_date)->toBe('2026-03-08')
             ->and((float) $line->ingredient_price)->toBe(8.5)
-            ->and((float) $line->estimated_cost)->toBe(255.0);
+            ->and((float) $line->estimated_cost)->toBe(212.5);
+    });
+
+    it('reduces mobilizable stock and increases remaining to order when a reserve is kept for the wave', function () {
+        $wave = ProductionWave::factory()->create([
+            'planned_start_date' => '2026-03-15',
+        ]);
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile tournesol']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $production = Production::factory()->create(['production_wave_id' => $wave->id]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 80.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $listing->supplies()->create([
+            'order_ref' => 'PO-RESERVE-001',
+            'batch_number' => 'SUN-001',
+            'initial_quantity' => 100.0,
+            'quantity_in' => 100.0,
+            'quantity_out' => 0,
+            'allocated_quantity' => 0,
+            'unit_price' => 3.40,
+            'expiry_date' => now()->addYear(),
+            'delivery_date' => now(),
+            'is_in_stock' => true,
+        ]);
+
+        ProductionWaveStockDecision::factory()->create([
+            'production_wave_id' => $wave->id,
+            'ingredient_id' => $ingredient->id,
+            'reserved_quantity' => 30.0,
+        ]);
+
+        $line = waveProcurementService()->getPlanningList($wave)->first();
+        $summary = waveProcurementService()->getPlanningSummary($wave);
+
+        expect((float) $line->available_stock)->toBe(100.0)
+            ->and((float) $line->reserved_stock_quantity)->toBe(30.0)
+            ->and((float) $line->planned_stock_quantity)->toBe(70.0)
+            ->and((float) $line->remaining_to_secure)->toBe(10.0)
+            ->and((float) $line->remaining_to_order)->toBe(10.0)
+            ->and((float) ($summary['reserved_stock_total'] ?? 0))->toBe(30.0)
+            ->and((float) ($summary['planned_stock_total'] ?? 0))->toBe(70.0)
+            ->and((float) ($summary['remaining_to_order_total'] ?? 0))->toBe(10.0);
     });
 
     it('keeps received quantities visible in planning and summary', function () {
@@ -226,12 +296,80 @@ describe('getPlanningList', function () {
         $summary = waveProcurementService()->getPlanningSummary($wave);
 
         expect($line->ingredient_name)->toBe('Huile tournesol')
+            ->and((float) $line->total_wave_requirement)->toBe(18.4)
+            ->and((float) $line->allocated_quantity)->toBe(0.0)
+            ->and((float) $line->remaining_requirement)->toBe(18.4)
             ->and((float) $line->required_remaining_quantity)->toBe(18.4)
             ->and((float) $line->received_quantity)->toBe(18.4)
             ->and((float) $line->covered_quantity)->toBe(18.4)
             ->and((float) $line->to_order_quantity)->toBe(0.0)
+            ->and((float) ($summary['total_requirement_total'] ?? 0))->toBe(18.4)
+            ->and((float) ($summary['remaining_requirement_total'] ?? 0))->toBe(18.4)
             ->and((float) ($summary['received_total'] ?? 0))->toBe(18.4)
             ->and((float) ($summary['covered_total'] ?? 0))->toBe(18.4);
+    });
+
+    it('keeps unit-based wave orders visible after reception and formats them in units', function () {
+        $wave = ProductionWave::factory()->create([
+            'planned_start_date' => '2026-03-20',
+        ]);
+        $supplier = Supplier::factory()->create();
+        $user = User::factory()->create();
+        $ingredient = Ingredient::factory()->unitBased()->create([
+            'name' => 'Boite Margo',
+        ]);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+            'unit_of_measure' => 'u',
+            'unit_weight' => 24,
+        ]);
+
+        $production = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Planned,
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 72,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $order = SupplierOrder::factory()->create([
+            'supplier_id' => $supplier->id,
+            'production_wave_id' => $wave->id,
+            'order_status' => OrderStatus::Checked,
+            'delivery_date' => now()->toDateString(),
+            'order_ref' => 'PO-U-001',
+        ]);
+
+        $orderItem = SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 3,
+            'unit_weight' => 24,
+            'committed_quantity_kg' => 0,
+            'unit_price' => 1.5,
+        ]);
+
+        app(InventoryMovementService::class)->receiveOrderItemIntoStock(
+            $orderItem,
+            (string) $order->order_ref,
+            (string) $order->delivery_date,
+            $user,
+        );
+
+        $line = waveProcurementService()->getPlanningList($wave)->first();
+
+        expect($line->ingredient_name)->toBe('Boite Margo')
+            ->and($line->display_unit)->toBe('u')
+            ->and((float) $line->wave_ordered_quantity)->toBe(72.0)
+            ->and((float) $line->wave_received_quantity)->toBe(72.0)
+            ->and((float) $line->available_stock)->toBe(72.0)
+            ->and((float) $line->remaining_to_order)->toBe(0.0);
     });
 });
 
@@ -388,9 +526,16 @@ describe('getActiveWavesPlanningList', function () {
         $line = waveProcurementService()->getActiveWavesPlanningList()->first();
 
         expect($line->ingredient_name)->toBe('Huile Tournesol')
+            ->and((float) $line->total_wave_requirement)->toBe(160.0)
+            ->and((float) $line->allocated_quantity)->toBe(0.0)
+            ->and((float) $line->remaining_requirement)->toBe(160.0)
             ->and((float) $line->required_remaining_quantity)->toBe(160.0)
             ->and((float) $line->ordered_quantity)->toBe(60.0)
             ->and((float) $line->to_order_quantity)->toBe(100.0)
+            ->and((float) $line->available_stock)->toBe(40.0)
+            ->and((float) $line->wave_committed_open_orders)->toBe(0.0)
+            ->and((float) $line->remaining_to_secure)->toBe(80.0)
+            ->and((float) $line->remaining_to_order)->toBe(0.0)
             ->and((float) $line->committed_open_order_quantity)->toBe(0.0)
             ->and((float) $line->priority_provisional_quantity)->toBe(100.0)
             ->and((float) $line->to_secure_quantity)->toBe(0.0)
@@ -485,11 +630,19 @@ describe('getActiveWavesPlanningList', function () {
         $waveBLine = waveProcurementService()->getPlanningList($waveB)->first();
 
         expect((float) $waveALine->committed_open_order_quantity)->toBe(100.0)
+            ->and((float) $waveALine->wave_committed_open_orders)->toBe(100.0)
+            ->and((float) $waveALine->remaining_to_secure)->toBe(0.0)
+            ->and((float) $waveALine->remaining_to_order)->toBe(0.0)
             ->and((float) $waveALine->shared_provisional_quantity)->toBe(820.0)
+            ->and((float) $waveALine->open_orders_not_committed)->toBe(0.0)
             ->and((float) $waveALine->priority_provisional_quantity)->toBe(0.0)
             ->and((float) $waveALine->to_secure_quantity)->toBe(0.0)
             ->and((float) $waveBLine->committed_open_order_quantity)->toBe(0.0)
+            ->and((float) $waveBLine->wave_committed_open_orders)->toBe(0.0)
+            ->and((float) $waveBLine->remaining_to_secure)->toBe(300.0)
+            ->and((float) $waveBLine->remaining_to_order)->toBe(0.0)
             ->and((float) $waveBLine->shared_provisional_quantity)->toBe(820.0)
+            ->and((float) $waveBLine->open_orders_not_committed)->toBe(820.0)
             ->and((float) $waveBLine->priority_provisional_quantity)->toBe(300.0)
             ->and((float) $waveBLine->to_secure_quantity)->toBe(0.0);
     });
@@ -551,8 +704,157 @@ describe('getActiveWavesPlanningList', function () {
         $summary = waveProcurementService()->getPlanningSummary($wave);
 
         expect((float) $line->firm_open_order_quantity)->toBe(40.0)
+            ->and((float) $line->wave_committed_open_orders)->toBe(0.0)
+            ->and((float) $line->open_orders_not_committed)->toBe(0.0)
+            ->and((float) $line->remaining_to_secure)->toBe(40.0)
+            ->and((float) $line->remaining_to_order)->toBe(40.0)
             ->and((float) $line->draft_open_order_quantity)->toBe(20.0)
+            ->and((float) ($summary['remaining_to_order_total'] ?? 0))->toBe(40.0)
             ->and((float) ($summary['firm_order_total'] ?? 0))->toBe(40.0)
             ->and((float) ($summary['draft_order_total'] ?? 0))->toBe(20.0);
+    });
+});
+
+describe('getOperationalPlanningList', function () {
+    it('prioritizes stock and open inbound quantities across waves and standalone productions', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile Tournesol']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+            'unit_weight' => 1,
+        ]);
+
+        $wave = ProductionWave::factory()->create([
+            'name' => 'Vague Mars',
+            'status' => WaveStatus::Draft,
+            'planned_start_date' => '2026-03-20',
+        ]);
+
+        $product = Product::factory()->create();
+        $formula = Formula::query()->create([
+            'name' => 'Formula operational planning',
+            'slug' => Str::slug('formula-operational-planning-'.Str::uuid()),
+            'code' => 'FRM-'.Str::upper(Str::random(8)),
+            'is_active' => true,
+        ]);
+
+        $waveProduction = Production::withoutEvents(function () use ($wave, $product, $formula): Production {
+            return Production::query()->create([
+                'production_wave_id' => $wave->id,
+                'product_id' => $product->id,
+                'formula_id' => $formula->id,
+                'batch_number' => 'T97201',
+                'slug' => 'batch-wave-operational',
+                'status' => ProductionStatus::Planned,
+                'sizing_mode' => SizingMode::OilWeight,
+                'planned_quantity' => 10,
+                'expected_units' => 100,
+                'production_date' => '2026-03-20',
+                'ready_date' => '2026-03-22',
+                'organic' => true,
+            ]);
+        });
+
+        $standaloneProduction = Production::withoutEvents(function () use ($product, $formula): Production {
+            return Production::query()->create([
+                'production_wave_id' => null,
+                'product_id' => $product->id,
+                'formula_id' => $formula->id,
+                'batch_number' => 'T97202',
+                'slug' => 'batch-standalone-operational',
+                'status' => ProductionStatus::Confirmed,
+                'sizing_mode' => SizingMode::OilWeight,
+                'planned_quantity' => 8,
+                'expected_units' => 80,
+                'production_date' => '2026-03-16',
+                'ready_date' => '2026-03-18',
+                'organic' => true,
+            ]);
+        });
+
+        ProductionItem::factory()->create([
+            'production_id' => $waveProduction->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 100.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $standaloneProduction->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 60.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $listing->supplies()->create([
+            'order_ref' => 'PO-STOCK-OPER-001',
+            'batch_number' => 'LOT-STOCK-OPER-001',
+            'initial_quantity' => 40.0,
+            'quantity_in' => 40.0,
+            'quantity_out' => 0.0,
+            'allocated_quantity' => 0.0,
+            'unit_price' => 4.2,
+            'expiry_date' => now()->addMonths(6),
+            'delivery_date' => now(),
+            'is_in_stock' => true,
+        ]);
+
+        $linkedOrder = SupplierOrder::factory()->confirmed()->create([
+            'supplier_id' => $supplier->id,
+            'production_wave_id' => $wave->id,
+        ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $linkedOrder->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 30,
+            'unit_weight' => 1,
+            'moved_to_stock_at' => null,
+        ]);
+
+        $sharedOrder = SupplierOrder::factory()->confirmed()->create([
+            'supplier_id' => $supplier->id,
+            'production_wave_id' => null,
+        ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $sharedOrder->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 50,
+            'unit_weight' => 1,
+            'moved_to_stock_at' => null,
+        ]);
+
+        $line = waveProcurementService()->getOperationalPlanningList()->first();
+        $summary = waveProcurementService()->getOperationalPlanningSummary();
+
+        $productionContext = $line->contexts->firstWhere('context_type', 'production');
+        $waveContext = $line->contexts->firstWhere('context_type', 'wave');
+
+        expect($line->ingredient_name)->toBe('Huile Tournesol')
+            ->and((float) $line->total_wave_requirement)->toBe(160.0)
+            ->and((float) $line->remaining_requirement)->toBe(160.0)
+            ->and((float) $line->available_stock)->toBe(40.0)
+            ->and((float) $line->wave_ordered_quantity)->toBe(30.0)
+            ->and((float) $line->wave_open_order_quantity)->toBe(30.0)
+            ->and((float) $line->open_orders_not_committed)->toBe(80.0)
+            ->and((float) $line->remaining_to_secure)->toBe(90.0)
+            ->and((float) $line->remaining_to_order)->toBe(10.0)
+            ->and($line->contexts_count)->toBe(2)
+            ->and($line->contexts)->toHaveCount(2)
+            ->and($productionContext)->not->toBeNull()
+            ->and($waveContext)->not->toBeNull()
+            ->and((float) $productionContext->stock_priority_quantity)->toBe(40.0)
+            ->and((float) $productionContext->open_orders_priority_quantity)->toBe(20.0)
+            ->and((float) $productionContext->remaining_to_order)->toBe(0.0)
+            ->and((float) $waveContext->wave_open_order_quantity)->toBe(30.0)
+            ->and((float) $waveContext->open_orders_priority_quantity)->toBe(60.0)
+            ->and((float) $waveContext->remaining_to_order)->toBe(10.0)
+            ->and($summary['remaining_to_order'])->toBe('10,000 kg')
+            ->and($summary['ingredients_to_order'])->toBe(1)
+            ->and($summary['contexts_count'])->toBe(2);
     });
 });

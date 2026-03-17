@@ -15,13 +15,13 @@ class WaveProcurementOverviewPage extends Component
     public array $lines = [];
 
     /**
-     * @var array<string, float>
+     * @var array<string, int|string>
      */
     public array $summary = [];
 
     public string $search = '';
 
-    public bool $shortageOnly = false;
+    public bool $actionOnly = false;
 
     public function mount(): void
     {
@@ -32,42 +32,54 @@ class WaveProcurementOverviewPage extends Component
     {
         $service = app(WaveProcurementService::class);
 
-        $this->summary = $service->getActiveWavesPlanningSummary();
-        $this->lines = $service->getActiveWavesPlanningList()
+        $this->summary = $service->getOperationalPlanningSummary();
+        $this->lines = $service->getOperationalPlanningList()
             ->map(fn (object $line): array => [
                 'ingredient_name' => (string) ($line->ingredient_name ?? '-'),
-                'required_remaining_quantity' => (float) ($line->required_remaining_quantity ?? 0),
-                'ordered_quantity' => (float) ($line->ordered_quantity ?? 0),
-                'received_quantity' => (float) ($line->received_quantity ?? 0),
-                'covered_quantity' => (float) ($line->covered_quantity ?? 0),
-                'firm_open_order_quantity' => (float) ($line->firm_open_order_quantity ?? 0),
-                'draft_open_order_quantity' => (float) ($line->draft_open_order_quantity ?? 0),
-                'to_order_quantity' => (float) ($line->to_order_quantity ?? 0),
-                'committed_open_order_quantity' => (float) ($line->committed_open_order_quantity ?? 0),
-                'priority_provisional_quantity' => (float) ($line->priority_provisional_quantity ?? 0),
-                'to_secure_quantity' => (float) ($line->to_secure_quantity ?? 0),
-                'coverage_warning' => (string) ($line->coverage_warning ?? ''),
-                'stock_advisory' => (float) ($line->stock_advisory ?? 0),
-                'open_order_quantity' => (float) ($line->open_order_quantity ?? 0),
-                'shared_provisional_quantity' => (float) ($line->shared_provisional_quantity ?? 0),
-                'advisory_shortage' => (float) ($line->advisory_shortage ?? 0),
+                'display_unit' => (string) ($line->display_unit ?? 'kg'),
+                'total_requirement' => (float) ($line->total_wave_requirement ?? 0),
+                'remaining_requirement' => (float) ($line->remaining_requirement ?? 0),
+                'available_stock' => (float) ($line->available_stock ?? 0),
+                'wave_ordered_quantity' => (float) ($line->wave_ordered_quantity ?? 0),
+                'wave_open_order_quantity' => (float) ($line->wave_open_order_quantity ?? 0),
+                'wave_received_quantity' => (float) ($line->wave_received_quantity ?? 0),
+                'open_orders_not_committed' => (float) ($line->open_orders_not_committed ?? 0),
+                'remaining_to_secure' => (float) ($line->remaining_to_secure ?? 0),
+                'remaining_to_order' => (float) ($line->remaining_to_order ?? 0),
                 'earliest_need_date' => $line->earliest_need_date,
-                'waves_count' => (int) ($line->waves_count ?? 0),
-                'waves' => collect($line->waves)
-                    ->map(fn (object $wave): array => [
-                        'wave_name' => (string) ($wave->wave_name ?? '-'),
-                        'wave_status' => (string) ($wave->wave_status ?? '-'),
-                        'need_date' => $wave->need_date,
-                        'required_remaining_quantity' => (float) ($wave->required_remaining_quantity ?? 0),
-                        'ordered_quantity' => (float) ($wave->ordered_quantity ?? 0),
-                        'received_quantity' => (float) ($wave->received_quantity ?? 0),
-                        'covered_quantity' => (float) ($wave->covered_quantity ?? 0),
-                        'to_order_quantity' => (float) ($wave->to_order_quantity ?? 0),
-                        'committed_open_order_quantity' => (float) ($wave->committed_open_order_quantity ?? 0),
-                        'priority_provisional_quantity' => (float) ($wave->priority_provisional_quantity ?? 0),
-                        'to_secure_quantity' => (float) ($wave->to_secure_quantity ?? 0),
-                        'commitment_excess_quantity' => (float) ($wave->commitment_excess_quantity ?? 0),
-                        'coverage_warning' => (string) ($wave->coverage_warning ?? ''),
+                'contexts_count' => (int) ($line->contexts_count ?? 0),
+                'signal' => $this->resolveSignal(
+                    remainingRequirement: (float) ($line->remaining_requirement ?? 0),
+                    stockCoverage: (float) ($line->available_stock ?? 0),
+                    waveOpenOrderQuantity: (float) ($line->wave_open_order_quantity ?? 0),
+                    remainingToSecure: (float) ($line->remaining_to_secure ?? 0),
+                    remainingToOrder: (float) ($line->remaining_to_order ?? 0),
+                ),
+                'contexts' => collect($line->contexts)
+                    ->map(fn (object $context): array => [
+                        'context_type' => (string) ($context->context_type ?? 'production'),
+                        'context_type_label' => (string) (($context->context_type ?? 'production') === 'wave'
+                            ? __('Vague')
+                            : __('Lot isolé')),
+                        'context_label' => (string) ($context->context_label ?? '-'),
+                        'context_status' => (string) ($context->context_status ?? '-'),
+                        'need_date' => $context->need_date,
+                        'display_unit' => (string) ($context->display_unit ?? 'kg'),
+                        'remaining_requirement' => (float) ($context->remaining_requirement ?? 0),
+                        'wave_ordered_quantity' => (float) ($context->wave_ordered_quantity ?? 0),
+                        'wave_open_order_quantity' => (float) ($context->wave_open_order_quantity ?? 0),
+                        'wave_received_quantity' => (float) ($context->wave_received_quantity ?? 0),
+                        'stock_priority_quantity' => (float) ($context->stock_priority_quantity ?? 0),
+                        'open_orders_priority_quantity' => (float) ($context->open_orders_priority_quantity ?? 0),
+                        'remaining_to_secure' => (float) ($context->remaining_to_secure ?? 0),
+                        'remaining_to_order' => (float) ($context->remaining_to_order ?? 0),
+                        'signal' => $this->resolveSignal(
+                            remainingRequirement: (float) ($context->remaining_requirement ?? 0),
+                            stockCoverage: (float) ($context->stock_priority_quantity ?? 0),
+                            waveOpenOrderQuantity: (float) ($context->wave_open_order_quantity ?? 0),
+                            remainingToSecure: (float) ($context->remaining_to_secure ?? 0),
+                            remainingToOrder: (float) ($context->remaining_to_order ?? 0),
+                        ),
                     ])
                     ->values()
                     ->all(),
@@ -84,11 +96,50 @@ class WaveProcurementOverviewPage extends Component
 
                 return $lines->filter(fn (array $line): bool => str_contains(mb_strtolower($line['ingredient_name']), $needle));
             })
-            ->when($this->shortageOnly, fn (Collection $lines): Collection => $lines->filter(fn (array $line): bool => $line['advisory_shortage'] > 0))
+            ->when($this->actionOnly, fn (Collection $lines): Collection => $lines->filter(fn (array $line): bool => $line['signal']['key'] !== 'ok'))
             ->values();
 
         return view('livewire.wave-procurement-overview-page', [
             'lines' => $filteredLines,
         ]);
+    }
+
+    /**
+     * @return array{key: string, label: string}
+     */
+    private function resolveSignal(float $remainingRequirement, float $stockCoverage, float $waveOpenOrderQuantity, float $remainingToSecure, float $remainingToOrder): array
+    {
+        if ($remainingToOrder > 0) {
+            return [
+                'key' => 'order',
+                'label' => __('À commander'),
+            ];
+        }
+
+        if ($remainingToSecure > 0) {
+            return [
+                'key' => 'commit',
+                'label' => __('À engager'),
+            ];
+        }
+
+        if ($remainingRequirement > 0 && $stockCoverage > 0) {
+            return [
+                'key' => 'allocate',
+                'label' => __('À affecter stock'),
+            ];
+        }
+
+        if ($remainingRequirement > 0 && $waveOpenOrderQuantity > 0) {
+            return [
+                'key' => 'waiting',
+                'label' => __('En attente réception'),
+            ];
+        }
+
+        return [
+            'key' => 'ok',
+            'label' => __('OK'),
+        ];
     }
 }

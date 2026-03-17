@@ -129,6 +129,92 @@ class WaveRequirementStatusService
         return $updatedCount;
     }
 
+    public function markItemsAsOrderedFromPlacedWaveOrders(ProductionWave $wave): int
+    {
+        $orderedByIngredient = $this->getOrderedQuantitiesByIngredient($wave);
+
+        if ($orderedByIngredient->isEmpty()) {
+            return 0;
+        }
+
+        $updatedCount = 0;
+
+        $this->getWaveProductionItems($wave)
+            ->groupBy('ingredient_id')
+            ->each(function (Collection $ingredientItems, int|string $ingredientId) use ($orderedByIngredient, &$updatedCount): void {
+                $remainingCommittedQuantity = round((float) ($orderedByIngredient->get((int) $ingredientId) ?? 0), 3);
+
+                if ($remainingCommittedQuantity <= 0) {
+                    return;
+                }
+
+                foreach ($ingredientItems as $item) {
+                    if ($item->is_order_marked || $item->isFullyAllocated()) {
+                        continue;
+                    }
+
+                    $remainingRequiredQuantity = round($item->getUnallocatedQuantity(), 3);
+
+                    if ($remainingRequiredQuantity <= 0 || $remainingCommittedQuantity < $remainingRequiredQuantity) {
+                        continue;
+                    }
+
+                    $item->update([
+                        'is_order_marked' => true,
+                        'procurement_status' => $item->procurement_status === ProcurementStatus::Received
+                            ? ProcurementStatus::Received
+                            : ProcurementStatus::Ordered,
+                    ]);
+
+                    $remainingCommittedQuantity = max(0, $remainingCommittedQuantity - $remainingRequiredQuantity);
+                    $updatedCount++;
+                }
+            });
+
+        if ($updatedCount > 0) {
+            $this->syncForWave($wave);
+        }
+
+        return $updatedCount;
+    }
+
+    /**
+     * @param  array<int, int|string>  $ingredientIds
+     */
+    public function markNotOrderedItemsAsOrderedForProductionIngredients(Production $production, array $ingredientIds): int
+    {
+        $normalizedIngredientIds = collect($ingredientIds)
+            ->map(fn (mixed $ingredientId): int => (int) $ingredientId)
+            ->filter(fn (int $ingredientId): bool => $ingredientId > 0)
+            ->unique()
+            ->values();
+
+        if ($normalizedIngredientIds->isEmpty()) {
+            return 0;
+        }
+
+        $itemsToMark = $this->getProductionItems($production)
+            ->whereIn('ingredient_id', $normalizedIngredientIds->all())
+            ->filter(fn (ProductionItem $item): bool => $item->procurement_status === ProcurementStatus::NotOrdered && ! $item->isFullyAllocated());
+
+        $updatedCount = 0;
+
+        foreach ($itemsToMark as $item) {
+            $item->update([
+                'is_order_marked' => true,
+                'procurement_status' => ProcurementStatus::Ordered,
+            ]);
+
+            $updatedCount++;
+        }
+
+        if ($updatedCount > 0 && $production->wave) {
+            $this->syncForWave($production->wave);
+        }
+
+        return $updatedCount;
+    }
+
     private function getWaveProductionItems(ProductionWave $wave): Collection
     {
         $wave->loadMissing([
@@ -155,6 +241,30 @@ class WaveRequirementStatusService
         }
 
         return $items->sortBy(fn (ProductionItem $item): string => ($item->production?->production_date?->format('Y-m-d') ?? '9999-12-31').'-'.str_pad((string) $item->id, 10, '0', STR_PAD_LEFT))->values();
+    }
+
+    private function getProductionItems(Production $production): Collection
+    {
+        $production = $production->fresh([
+            'productionItems.ingredient',
+            'productionItems.allocations',
+            'masterbatchLot',
+            'wave',
+        ]) ?? $production;
+
+        if ($production->status === ProductionStatus::Cancelled) {
+            return collect();
+        }
+
+        $replacedPhase = $production->masterbatch_lot_id
+            ? $this->normalizePhase($production->masterbatchLot?->replaces_phase)
+            : null;
+
+        return $production->productionItems
+            ->each(fn (ProductionItem $item): ProductionItem => $item->setRelation('production', $production))
+            ->when($replacedPhase !== null, fn ($items) => $items->where('phase', '!=', $replacedPhase))
+            ->sortBy(fn (ProductionItem $item): string => str_pad((string) ($item->sort ?? $item->id), 10, '0', STR_PAD_LEFT).'-'.str_pad((string) $item->id, 10, '0', STR_PAD_LEFT))
+            ->values();
     }
 
     private function normalizePhase(?string $phase): ?string

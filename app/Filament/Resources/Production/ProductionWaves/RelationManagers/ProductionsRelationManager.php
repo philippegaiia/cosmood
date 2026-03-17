@@ -43,13 +43,15 @@ class ProductionsRelationManager extends RelationManager
                     ->state(fn (Production $record): string => $record->getSupplyCoverageLabel())
                     ->badge()
                     ->color(fn (Production $record): string => $record->getSupplyCoverageColor()),
-                TextColumn::make('manual_order_mark')
-                    ->label(__('Commande passée'))
-                    ->state(fn (Production $record): string => $record->hasManualOrderMarkedItems()
-                        ? __('Oui (:count)', ['count' => $record->getManualOrderMarkedItemsCount()])
+                TextColumn::make('covered_items')
+                    ->label(__('Pris en charge'))
+                    ->state(fn (Production $record): string => $record->hasCoveredItems()
+                        ? __('Oui (:count)', ['count' => $record->getCoveredItemsCount()])
                         : __('Non'))
                     ->badge()
-                    ->color(fn (Production $record): string => $record->hasManualOrderMarkedItems() ? 'info' : 'gray'),
+                    ->color(fn (Production $record): string => $record->getSupplyCoverageState() === 'received'
+                        ? 'success'
+                        : ($record->hasCoveredItems() ? 'info' : 'gray')),
                 TextColumn::make('planned_quantity')
                     ->label('Qté planifiée (kg)')
                     ->numeric(decimalPlaces: 3)

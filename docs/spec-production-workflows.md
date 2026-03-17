@@ -115,16 +115,54 @@ This document describes the current production-side business rules implemented i
 ## Procurement Planning Views
 
 - Wave creation is always initialized as `draft` (no planned end date required at creation time).
-- Wave edit now includes an `Approvisionnement` tab with strict and advisory planning values per ingredient.
-- Wave list includes a procurement coverage signal (`Prête`, `Partielle`, `À sécuriser`) based on advisory shortage first.
-- Strict default semantics:
-  - `besoin restant` is computed from non-allocated quantity only,
-  - `à passer` is based on not-ordered quantities,
-  - stock and shortages are advisory (not automatic commitments).
+- Wave edit now includes an `Approvisionnement` tab centered on wave-level coverage per ingredient.
+- Wave list includes a procurement coverage signal (`Prête`, `Partielle`, `À sécuriser`) based on actual remaining-to-order first, then partial coverage through stock or non-firm coverage.
+- Wave procurement tab semantics:
+  - `date besoin` = `planned_start_date - 7 jours`,
+  - quantities are displayed in the ingredient operational unit (`kg` or `u`),
+  - `besoin total` = total required quantity on the wave,
+  - `déjà alloué` = quantity already reserved on the wave,
+  - `besoin restant à couvrir` = `besoin total - déjà alloué`,
+  - `stock disponible` = physical stock minus already allocated stock,
+  - `réserve stock` = stock deliberately kept aside for urgent or unexpected productions,
+  - `stock vague` = `stock disponible - réserve stock`, capped to the current remaining requirement,
+  - `commandé pour cette vague` = total placed PO quantity linked to the wave, including quantities already received into stock,
+  - `reçu pour cette vague` = already received quantity from wave-linked POs,
+  - `commandes ouvertes non engagées` = open firm PO quantity not already counted on the current wave and not committed to another wave coverage,
+  - `reste à sécuriser` = `besoin restant à couvrir - stock vague - commandes ouvertes encore en attente pour cette vague`,
+  - `reste à commander` = `reste à sécuriser - commandes ouvertes non engagées`.
+- The wave edit page now includes a dedicated action to decide the stock reserve per ingredient:
+  - this is a planning decision only,
+  - it does not create any real stock allocation,
+  - setting the reserve to `0` means the current available stock stays fully mobilizable for the wave.
+- The wave edit page also includes a separate stock allocation action per ingredient:
+  - it allocates real lots already in stock,
+  - it follows production date order within the wave,
+  - leaving the quantity empty allocates the current `stock vague` recommendation,
+  - entering a smaller quantity supports partial receptions and staggered supplier deliveries,
+  - allocation is strict: an item is auto-allocated only if its full remaining quantity can be covered now.
+- Orphan productions are handled from the production list, not from the execution sheet:
+  - a row-level `Appro orpheline` action group lets planners mark selected ingredients as ordered manually,
+  - a dedicated `Allouer stock` action allocates real lots ingredient by ingredient on that single production,
+  - orphan auto-allocation is also strict: an item is touched only when its full remaining quantity can be covered,
+  - no stock reserve is persisted for orphanes; any stock not allocated stays implicitly available for emergencies or other batches.
+- Received lots can now be allocated directly from inventory:
+  - on a stock lot, planners can allocate the exact received lot to a wave or to an orphan production,
+  - the linked wave from the originating PO is suggested first when relevant,
+  - these shortcuts reserve that specific lot, not the generic ingredient stock pool,
+  - allocation remains strict: if the received lot does not fully cover an item, that item stays untouched and manual follow-up is required.
+- The wave edit page includes a dedicated action to mark production items as ordered only from quantities committed on already placed wave-linked POs.
+- Available stock remains a planning signal and is intentionally excluded from this `marquer commandé` action so teams can keep an operational safety buffer.
+- Item and production-level UI now distinguish:
+  - manual order mark (`marque manuelle`) for operator override,
+  - handled coverage (`pris en charge`) as a computed signal driven by actual allocation or procurement status.
+- Legacy strict/advisory values (`besoin restant` non alloué, `à passer`, `commandé ferme`, `brouillon PO`, `pool provisoire`) remain available internally for compatibility with broader procurement views.
 - Received quantities remain visible in planning (`reçu stock`) so ingredients already moved to stock are still shown in wave and global procurement views.
 - Coverage display separates `commandé ferme`, `brouillon PO`, and `reçu stock`.
-- A dedicated page `Pilotage achats` consolidates all active waves (`Approved`, `InProgress`) by ingredient.
-- Global table includes wave breakdown per ingredient to identify which wave drives each need.
+- A dedicated page `Pilotage achats` is planning-first and consolidates all productions in `planned`, `confirmed`, or `ongoing` status by ingredient.
+- Wave-linked productions stay grouped by wave, while productions without wave remain visible as standalone planning needs.
+- Global table includes a context breakdown per ingredient (`Vague` or `Production`) to identify what drives each need.
+- Stock available and non-committed open orders are prioritized by earliest need date across contexts in the overview details.
 - Open supplier orders are shown as advisory inbound quantities and are not treated as exclusive to a single wave.
 - Procurement details distinguish `commandé ferme` (passed+) from `brouillon PO` quantities.
 - A wave-level bulk action can mark `Non commandé` items as manually ordered (`is_order_marked`) for selected ingredients.

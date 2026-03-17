@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\AllocationStatus;
 use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionOutputKind;
@@ -460,6 +461,38 @@ describe('Production - Relationships', function () {
 
         expect($item->fresh()->is_order_marked)->toBeFalse()
             ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
+    });
+
+    it('shows an item as pris en charge from the production items tab when covered by stock allocation', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->create();
+        $supply = Supply::factory()->inStock(20)->create([
+            'batch_number' => 'LOT-COVERED-001',
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'is_order_marked' => false,
+            'procurement_status' => ProcurementStatus::Received,
+            'allocation_status' => AllocationStatus::Allocated,
+            'required_quantity' => 10,
+        ]);
+
+        ProductionItemAllocation::factory()->create([
+            'production_item_id' => $item->id,
+            'supply_id' => $supply->id,
+            'quantity' => 10,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
+
+        Livewire::test(ProductionItemsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => EditProduction::class,
+        ])
+            ->assertSee('Pris en charge')
+            ->assertSee('Oui');
     });
 
     it('keeps the original product when editing a production', function () {
@@ -1183,6 +1216,60 @@ describe('Production list table actions', function () {
         preg_match('/^T(\d{5})$/', $secondDuplicate->batch_number, $secondMatches);
 
         expect((int) ($secondMatches[1] ?? 0))->toBe((int) ($firstMatches[1] ?? 0) + 1);
+    });
+
+    it('marks orphan production items as ordered from the production list', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->orphan()->planned()->create();
+        $ingredient = Ingredient::factory()->create();
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'is_order_marked' => false,
+            'required_quantity' => 12.0,
+        ]);
+
+        Livewire::test(ListProductions::class)
+            ->callAction(TestAction::make('markOrphanItemsOrdered')->table($production), [
+                'ingredient_ids' => [$ingredient->id],
+            ])
+            ->assertHasNoErrors();
+
+        expect($item->fresh()->is_order_marked)->toBeTrue()
+            ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
+    });
+
+    it('shows orphan production stock allocation action on the production list', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->orphan()->planned()->create();
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'allocation_status' => AllocationStatus::Unassigned,
+            'required_quantity' => 40.0,
+        ]);
+
+        $supply = Supply::factory()->inStock(50.0)->create([
+            'supplier_listing_id' => $listing->id,
+        ]);
+
+        Livewire::test(ListProductions::class)
+            ->assertTableActionVisible('allocateOrphanIngredientStock', $production);
+
+        expect($item->fresh()->allocation_status)->toBe(AllocationStatus::Unassigned)
+            ->and((float) $item->fresh()->getTotalAllocatedQuantity())->toBe(0.0)
+            ->and((float) $supply->fresh()->getAllocatedQuantity())->toBe(0.0);
     });
 });
 

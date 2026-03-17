@@ -16,6 +16,7 @@ use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductionTaskType;
 use App\Models\Production\ProductionWave;
+use App\Models\Production\ProductionWaveStockDecision;
 use App\Models\Production\ProductType;
 use App\Models\Production\TaskTemplate;
 use App\Models\Supply\Ingredient;
@@ -185,11 +186,19 @@ describe('ProductionWave - Relationships', function () {
     });
 
     it('shows the approvisionnement tab on edit wave page', function () {
-        $wave = ProductionWave::factory()->create();
+        $wave = ProductionWave::factory()->create([
+            'planned_start_date' => '2026-03-20',
+        ]);
 
         Livewire::test(EditProductionWave::class, [
             'record' => $wave->id,
-        ])->assertSee('Approvisionnement');
+        ])
+            ->assertSee('Approvisionnement')
+            ->assertSee('overflow-x-auto')
+            ->assertSee('table-fixed')
+            ->assertSee('Besoin total')
+            ->assertSee('Reste à commander')
+            ->assertSee('Commandes ouvertes non engagées');
     });
 
     it('lists only productions attached to the current wave in relation manager', function () {
@@ -366,6 +375,174 @@ describe('ProductionWaveResource - table actions', function () {
             ->and($itemToMark->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered)
             ->and($itemAlreadyOrdered->fresh()->is_order_marked)->toBeFalse()
             ->and($itemUntouched->fresh()->is_order_marked)->toBeFalse();
+    });
+
+    it('marks ordered items from committed wave orders in the edit wave header action', function () {
+        $wave = ProductionWave::factory()->approved()->create([
+            'planned_start_date' => '2026-03-20',
+        ]);
+        $production = Production::factory()->forWave($wave)->planned()->create();
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile de coco']);
+
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'is_order_marked' => false,
+            'required_quantity' => 8,
+        ]);
+
+        $order = SupplierOrder::factory()
+            ->passed()
+            ->forWave($wave)
+            ->create([
+                'supplier_id' => $supplier->id,
+            ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 1,
+            'unit_weight' => 8,
+            'committed_quantity_kg' => 8,
+        ]);
+
+        Livewire::test(EditProductionWave::class, [
+            'record' => $wave->id,
+        ])
+            ->callAction('markWaveItemsOrdered')
+            ->assertHasNoErrors();
+
+        expect($item->fresh()->is_order_marked)->toBeTrue()
+            ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::Ordered);
+    });
+
+    it('stores a stock reserve decision for a wave ingredient from the edit wave header action', function () {
+        $wave = ProductionWave::factory()->approved()->create([
+            'planned_start_date' => '2026-03-20',
+        ]);
+        $production = Production::factory()->forWave($wave)->planned()->create();
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile tournesol']);
+
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        Supply::factory()->inStock(100)->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_stock' => true,
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'required_quantity' => 80,
+        ]);
+
+        Livewire::test(EditProductionWave::class, [
+            'record' => $wave->id,
+        ])
+            ->callAction('decideWaveStockReserve', [
+                'ingredient_id' => (string) $ingredient->id,
+                'reserved_quantity' => 30,
+            ])
+            ->assertHasNoErrors();
+
+        $decision = ProductionWaveStockDecision::query()
+            ->where('production_wave_id', $wave->id)
+            ->where('ingredient_id', $ingredient->id)
+            ->first();
+
+        expect($decision)->not->toBeNull()
+            ->and((float) $decision->reserved_quantity)->toBe(30.0);
+    });
+
+    it('allocates the planned stock for a wave ingredient from the edit wave header action', function () {
+        $wave = ProductionWave::factory()->approved()->create([
+            'planned_start_date' => '2026-03-20',
+        ]);
+        $production = Production::factory()->forWave($wave)->planned()->create();
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile olive']);
+
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $supply = Supply::factory()->inStock(100)->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_stock' => true,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'required_quantity' => 80,
+        ]);
+
+        Livewire::test(EditProductionWave::class, [
+            'record' => $wave->id,
+        ])
+            ->callAction('allocateWaveIngredientStock', [
+                'ingredient_id' => (string) $ingredient->id,
+            ])
+            ->assertHasNoErrors();
+
+        expect((float) $item->fresh()->getTotalAllocatedQuantity())->toBe(80.0)
+            ->and((float) $supply->fresh()->getAllocatedQuantity())->toBe(80.0);
+    });
+
+    it('does not create partial automatic allocation for a wave ingredient', function () {
+        $wave = ProductionWave::factory()->approved()->create([
+            'planned_start_date' => '2026-03-20',
+        ]);
+        $production = Production::factory()->forWave($wave)->planned()->create();
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile coco']);
+
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $supply = Supply::factory()->inStock(50)->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_stock' => true,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+            'required_quantity' => 80,
+        ]);
+
+        Livewire::test(EditProductionWave::class, [
+            'record' => $wave->id,
+        ])
+            ->callAction('allocateWaveIngredientStock', [
+                'ingredient_id' => (string) $ingredient->id,
+                'allocation_quantity' => 50,
+            ])
+            ->assertHasNoErrors();
+
+        expect((float) $item->fresh()->getTotalAllocatedQuantity())->toBe(0.0)
+            ->and((float) $supply->fresh()->getAllocatedQuantity())->toBe(0.0);
     });
 
     it('opens procurement plan action for a wave', function () {

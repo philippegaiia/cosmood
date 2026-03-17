@@ -212,6 +212,8 @@ class ProductionItem extends Model
      */
     public function updateAllocationStatus(): void
     {
+        $this->unsetRelation('allocations');
+
         $allocatedQuantity = $this->getTotalAllocatedQuantity();
         $requiredQuantity = $this->required_quantity > 0
             ? $this->required_quantity

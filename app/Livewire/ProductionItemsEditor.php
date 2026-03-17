@@ -137,7 +137,7 @@ class ProductionItemsEditor extends Component
 
     private function loadItems(Production $production): void
     {
-        $production->loadMissing('productionItems.ingredient', 'productionItems.allocations.supply', 'productionItems.splitChildren');
+        $production->load('productionItems.ingredient', 'productionItems.allocations.supply', 'productionItems.splitChildren');
 
         $replacedPhase = $this->masterbatchInfo['replaces_phase'] ?? null;
 
@@ -165,6 +165,8 @@ class ProductionItemsEditor extends Component
             'organic' => (bool) $item->organic,
             'required_quantity' => (float) $item->required_quantity,
             'is_order_marked' => (bool) $item->is_order_marked,
+            'procurement_status' => $item->procurement_status?->value,
+            'is_procurement_covered' => $item->isCoveredByProcurementSignal(),
             'allocation_status' => $item->allocation_status?->value,
             'allocations' => $allocations->map(fn ($a) => [
                 'id' => $a->id,

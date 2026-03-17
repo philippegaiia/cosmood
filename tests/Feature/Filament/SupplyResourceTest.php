@@ -1,10 +1,17 @@
 <?php
 
+use App\Enums\ProductionStatus;
+use App\Enums\WaveStatus;
 use App\Filament\Resources\Supply\SupplyResource;
 use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
 use App\Filament\Resources\Supply\SupplyResource\RelationManagers\StockMovementsRelationManager;
+use App\Models\Production\Production;
+use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionWave;
+use App\Models\Supply\Ingredient;
+use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SuppliesMovement;
 use App\Models\Supply\Supply;
 use App\Models\User;
@@ -121,4 +128,41 @@ it('limits stock movement relation visibility to managers', function () {
         $supply,
         ViewSupply::class,
     ))->toBeTrue();
+});
+
+it('shows quick allocation actions on received lots for planners', function () {
+    $planner = User::factory()->create();
+    $planner->assignRole(Role::findOrCreate('planner'));
+    $this->actingAs($planner);
+
+    $ingredient = Ingredient::factory()->create();
+    $listing = SupplierListing::factory()->create([
+        'ingredient_id' => $ingredient->id,
+    ]);
+
+    $wave = ProductionWave::factory()->create([
+        'status' => WaveStatus::Approved,
+        'planned_start_date' => '2026-03-20',
+    ]);
+
+    $production = Production::factory()->create([
+        'production_wave_id' => $wave->id,
+        'status' => ProductionStatus::Planned,
+        'production_date' => '2026-03-20',
+    ]);
+
+    ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $ingredient->id,
+        'supplier_listing_id' => $listing->id,
+        'required_quantity' => 20.0,
+    ]);
+
+    $supply = Supply::factory()->inStock(25.0)->create([
+        'supplier_listing_id' => $listing->id,
+    ]);
+
+    Livewire::test(ListSupplies::class)
+        ->assertTableActionVisible('allocateToWave', $supply)
+        ->assertTableActionVisible('allocateToProduction', $supply);
 });

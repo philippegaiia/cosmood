@@ -3,9 +3,12 @@
 namespace App\Services\Production;
 
 use App\Enums\AllocationStatus;
+use App\Enums\Phases;
+use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
+use App\Models\Production\ProductionWave;
 use App\Models\Settings;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
@@ -593,6 +596,70 @@ class ProductionAllocationService
         return round($this->getTotalAvailable($ingredient), 3) >= round($requiredQuantity, 3);
     }
 
+    /**
+     * Allocate real stock to a wave ingredient across productions by production date order.
+     *
+     * This is an operational stock action. It uses actual lots already in stock and keeps
+     * traceability through normal allocation records instead of relying on planning-only values.
+     * Allocation is intentionally strict at wave level: an item is allocated only if its full
+     * remaining quantity can be covered now. Partial automatic allocations would force operators
+     * to reason about implicit shortages without a split workflow.
+     *
+     * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int, supplies_used: int}
+     */
+    public function allocateWaveIngredientStock(ProductionWave $wave, Ingredient $ingredient, ?float $quantity = null): array
+    {
+        $items = $this->getWaveIngredientItems($wave, $ingredient);
+
+        return $this->allocateIngredientItemsStrict($items, $ingredient, $quantity);
+    }
+
+    /**
+     * Allocate real stock to a single orphan production ingredient.
+     *
+     * This mirrors the wave strict-allocation behavior, but limits the scope to
+     * one production so planners can handle autonomous batches directly from the
+     * production list without using the execution sheet.
+     *
+     * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int, supplies_used: int}
+     */
+    public function allocateProductionIngredientStock(Production $production, Ingredient $ingredient, ?float $quantity = null): array
+    {
+        $items = $this->getProductionIngredientItems($production, $ingredient);
+
+        return $this->allocateIngredientItemsStrict($items, $ingredient, $quantity);
+    }
+
+    /**
+     * Allocate a specific received lot to a wave, keeping lot-level traceability.
+     *
+     * This is used right after reception when operations want to reserve the exact
+     * newly received lot for the linked wave instead of letting the generic stock
+     * allocator pick any other compatible lot first.
+     *
+     * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int}
+     */
+    public function allocateSupplyToWave(Supply $supply, ProductionWave $wave, ?float $quantity = null): array
+    {
+        $ingredient = $this->resolveIngredientForSupply($supply);
+        $items = $this->getWaveIngredientItems($wave, $ingredient);
+
+        return $this->allocateItemsStrictFromSingleSupply($items, $supply, $quantity);
+    }
+
+    /**
+     * Allocate a specific received lot to one orphan production.
+     *
+     * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int}
+     */
+    public function allocateSupplyToProduction(Supply $supply, Production $production, ?float $quantity = null): array
+    {
+        $ingredient = $this->resolveIngredientForSupply($supply);
+        $items = $this->getProductionIngredientItems($production, $ingredient);
+
+        return $this->allocateItemsStrictFromSingleSupply($items, $supply, $quantity);
+    }
+
     private function syncWaveRequirementStatusesForItem(ProductionItem $item): void
     {
         $item->loadMissing('production.wave');
@@ -638,6 +705,260 @@ class ProductionAllocationService
             'supply_batch_number' => $primaryAllocation?->supply?->batch_number,
             'is_supplied' => $primaryAllocation !== null,
         ])->saveQuietly();
+    }
+
+    /**
+     * @return Collection<int, Supply>
+     */
+    private function getAllocatableSuppliesForIngredient(Ingredient $ingredient): Collection
+    {
+        return Supply::query()
+            ->whereHas('supplierListing', fn ($query) => $query->where('ingredient_id', $ingredient->id))
+            ->where('is_in_stock', true)
+            ->with('supplierListing:id,ingredient_id')
+            ->orderByRaw('CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END')
+            ->orderBy('expiry_date')
+            ->orderBy('delivery_date')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (Supply $supply): bool => $supply->getAvailableQuantity() > 0)
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, ProductionItem>  $items
+     * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int, supplies_used: int}
+     */
+    private function allocateIngredientItemsStrict(Collection $items, Ingredient $ingredient, ?float $quantity = null): array
+    {
+        $supplies = $this->getAllocatableSuppliesForIngredient($ingredient);
+
+        $requestedQuantity = round((float) ($quantity ?? $items->sum(fn (ProductionItem $item): float => $item->getUnallocatedQuantity())), 3);
+
+        if ($requestedQuantity <= 0) {
+            throw new \InvalidArgumentException(__('La quantité à allouer doit être supérieure à zéro.'));
+        }
+
+        if ($ingredient->base_unit?->value === 'u' && abs($requestedQuantity - round($requestedQuantity)) > 0.0001) {
+            throw new \InvalidArgumentException(__('La quantité à allouer doit être entière pour les ingrédients unitaires.'));
+        }
+
+        $remainingQuantity = $requestedQuantity;
+        $allocatedQuantity = 0.0;
+        $allocationsCreated = 0;
+        $touchedItemIds = [];
+        $usedSupplyIds = [];
+
+        foreach ($items as $item) {
+            if ($remainingQuantity <= 0) {
+                break;
+            }
+
+            $itemRequiredQuantity = round($item->getUnallocatedQuantity(), 3);
+            $itemRemaining = $itemRequiredQuantity;
+
+            if ($itemRequiredQuantity <= 0) {
+                continue;
+            }
+
+            if ($remainingQuantity < $itemRequiredQuantity) {
+                continue;
+            }
+
+            $totalAvailableAcrossSupplies = round((float) $supplies->sum(fn (Supply $supply): float => $supply->getAvailableQuantity()), 3);
+
+            if ($totalAvailableAcrossSupplies < $itemRequiredQuantity) {
+                continue;
+            }
+
+            foreach ($supplies as $supply) {
+                if ($itemRemaining <= 0 || $remainingQuantity <= 0) {
+                    break;
+                }
+
+                $available = round($supply->getAvailableQuantity(), 3);
+
+                if ($available <= 0) {
+                    continue;
+                }
+
+                $allocationQuantity = round(min($itemRemaining, $available, $remainingQuantity), 3);
+
+                if ($allocationQuantity <= 0) {
+                    continue;
+                }
+
+                $this->allocate($item, $supply, $allocationQuantity);
+
+                $allocatedQuantity += $allocationQuantity;
+                $remainingQuantity = round(max(0, $remainingQuantity - $allocationQuantity), 3);
+                $itemRemaining = round(max(0, $itemRemaining - $allocationQuantity), 3);
+                $allocationsCreated++;
+                $touchedItemIds[$item->id] = true;
+                $usedSupplyIds[$supply->id] = true;
+            }
+
+            if ($itemRemaining > 0) {
+                throw new \RuntimeException('Strict allocation left an item partially allocated.');
+            }
+        }
+
+        return [
+            'requested_quantity' => round($requestedQuantity, 3),
+            'allocated_quantity' => round($allocatedQuantity, 3),
+            'remaining_quantity' => round(max(0, $requestedQuantity - $allocatedQuantity), 3),
+            'items_touched' => count($touchedItemIds),
+            'allocations_created' => $allocationsCreated,
+            'supplies_used' => count($usedSupplyIds),
+        ];
+    }
+
+    /**
+     * Allocate only from the provided lot, never from other compatible supplies.
+     *
+     * @param  Collection<int, ProductionItem>  $items
+     * @return array{requested_quantity: float, allocated_quantity: float, remaining_quantity: float, items_touched: int, allocations_created: int}
+     */
+    private function allocateItemsStrictFromSingleSupply(Collection $items, Supply $supply, ?float $quantity = null): array
+    {
+        $ingredient = $this->resolveIngredientForSupply($supply);
+        $availableOnSupply = round($supply->getAvailableQuantity(), 3);
+        $maxDemand = round((float) $items->sum(fn (ProductionItem $item): float => $item->getUnallocatedQuantity()), 3);
+        $requestedQuantity = round((float) ($quantity ?? min($availableOnSupply, $maxDemand)), 3);
+
+        if ($requestedQuantity <= 0) {
+            throw new \InvalidArgumentException(__('La quantité à allouer doit être supérieure à zéro.'));
+        }
+
+        if ($ingredient->base_unit?->value === 'u' && abs($requestedQuantity - round($requestedQuantity)) > 0.0001) {
+            throw new \InvalidArgumentException(__('La quantité à allouer doit être entière pour les ingrédients unitaires.'));
+        }
+
+        $remainingQuantity = min($requestedQuantity, $availableOnSupply);
+        $allocatedQuantity = 0.0;
+        $allocationsCreated = 0;
+        $touchedItemIds = [];
+
+        foreach ($items as $item) {
+            if ($remainingQuantity <= 0) {
+                break;
+            }
+
+            $itemRequiredQuantity = round($item->getUnallocatedQuantity(), 3);
+
+            if ($itemRequiredQuantity <= 0 || $remainingQuantity < $itemRequiredQuantity) {
+                continue;
+            }
+
+            $currentSupply = $supply->fresh();
+            $currentAvailable = round($currentSupply?->getAvailableQuantity() ?? 0, 3);
+
+            if ($currentAvailable < $itemRequiredQuantity) {
+                continue;
+            }
+
+            $this->allocate($item, $currentSupply, $itemRequiredQuantity);
+
+            $allocatedQuantity += $itemRequiredQuantity;
+            $remainingQuantity = round(max(0, $remainingQuantity - $itemRequiredQuantity), 3);
+            $allocationsCreated++;
+            $touchedItemIds[$item->id] = true;
+        }
+
+        return [
+            'requested_quantity' => round($requestedQuantity, 3),
+            'allocated_quantity' => round($allocatedQuantity, 3),
+            'remaining_quantity' => round(max(0, $requestedQuantity - $allocatedQuantity), 3),
+            'items_touched' => count($touchedItemIds),
+            'allocations_created' => $allocationsCreated,
+        ];
+    }
+
+    /**
+     * @return Collection<int, ProductionItem>
+     */
+    private function getWaveIngredientItems(ProductionWave $wave, Ingredient $ingredient): Collection
+    {
+        $wave->loadMissing([
+            'productions.productionItems.allocations',
+            'productions.productionItems.ingredient',
+            'productions.productionItems.production',
+            'productions.masterbatchLot',
+        ]);
+
+        $items = collect();
+
+        foreach ($wave->productions->filter(fn (Production $production): bool => $production->status !== ProductionStatus::Cancelled) as $production) {
+            $replacedPhase = $production->masterbatch_lot_id
+                ? $this->normalizeReplacedPhase($production->masterbatchLot?->replaces_phase)
+                : null;
+
+            $productionItems = $production->productionItems
+                ->when($replacedPhase !== null, fn ($collection) => $collection->where('phase', '!=', $replacedPhase))
+                ->where('ingredient_id', $ingredient->id)
+                ->filter(fn (ProductionItem $item): bool => $item->getUnallocatedQuantity() > 0);
+
+            $items = $items->merge($productionItems);
+        }
+
+        return $items
+            ->sortBy(fn (ProductionItem $item): string => ($item->production?->production_date?->format('Y-m-d') ?? '9999-12-31').'-'.str_pad((string) $item->id, 10, '0', STR_PAD_LEFT))
+            ->values();
+    }
+
+    /**
+     * @return Collection<int, ProductionItem>
+     */
+    private function getProductionIngredientItems(Production $production, Ingredient $ingredient): Collection
+    {
+        $production = $production->fresh(['masterbatchLot']) ?? $production;
+
+        if ($production->status === ProductionStatus::Cancelled) {
+            return collect();
+        }
+
+        $replacedPhase = $production->masterbatch_lot_id
+            ? $this->normalizeReplacedPhase($production->masterbatchLot?->replaces_phase)
+            : null;
+
+        return ProductionItem::query()
+            ->where('production_id', $production->id)
+            ->where('ingredient_id', $ingredient->id)
+            ->with(['allocations', 'ingredient'])
+            ->when($replacedPhase !== null, fn ($query) => $query->where('phase', '!=', $replacedPhase))
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get()
+            ->each(fn (ProductionItem $item): ProductionItem => $item->setRelation('production', $production))
+            ->filter(fn (ProductionItem $item): bool => $item->getUnallocatedQuantity() > 0)
+            ->values();
+    }
+
+    private function normalizeReplacedPhase(?string $phase): ?string
+    {
+        if ($phase === null) {
+            return null;
+        }
+
+        return match ($phase) {
+            'saponified_oils' => Phases::Saponification->value,
+            'lye' => Phases::Lye->value,
+            'additives' => Phases::Additives->value,
+            default => $phase,
+        };
+    }
+
+    private function resolveIngredientForSupply(Supply $supply): Ingredient
+    {
+        $supply->loadMissing('supplierListing.ingredient');
+
+        $ingredient = $supply->supplierListing?->ingredient;
+
+        if (! $ingredient) {
+            throw new \InvalidArgumentException(__('Impossible de déterminer l’ingrédient de ce lot.'));
+        }
+
+        return $ingredient;
     }
 
     private function resolveSupplySupplierName(Supply $supply): string

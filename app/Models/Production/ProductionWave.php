@@ -49,6 +49,11 @@ class ProductionWave extends Model
         return $this->hasMany(Production::class, 'production_wave_id');
     }
 
+    public function stockDecisions(): HasMany
+    {
+        return $this->hasMany(ProductionWaveStockDecision::class);
+    }
+
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
@@ -186,12 +191,14 @@ class ProductionWave extends Model
             return __('Aucune production liée.');
         }
 
-        $summary = $this->getProcurementSummary();
+        $service = app(WaveProcurementService::class);
+        $lines = $service->getPlanningList($this);
 
-        return __('Besoin: :need kg | Reste à sécuriser: :toSecure kg | Manque indicatif: :shortage kg', [
-            'need' => number_format((float) ($summary['required_remaining_total'] ?? 0), 3, ',', ' '),
-            'toSecure' => number_format((float) ($summary['to_secure_total'] ?? 0), 3, ',', ' '),
-            'shortage' => number_format((float) ($summary['shortage_total'] ?? 0), 3, ',', ' '),
+        return __('Besoin total: :total | Besoin restant: :remaining | Reste à sécuriser: :toSecure | Reste à commander: :toOrder', [
+            'total' => $service->formatPlanningQuantityByUnit($lines, 'total_wave_requirement'),
+            'remaining' => $service->formatPlanningQuantityByUnit($lines, 'remaining_requirement'),
+            'toSecure' => $service->formatPlanningQuantityByUnit($lines, 'remaining_to_secure'),
+            'toOrder' => $service->formatPlanningQuantityByUnit($lines, 'remaining_to_order'),
         ]);
     }
 
@@ -207,27 +214,35 @@ class ProductionWave extends Model
             ];
         }
 
-        $summary = $this->getProcurementSummary();
-        $requiredRemaining = (float) ($summary['required_remaining_total'] ?? 0);
-        $advisoryShortage = (float) ($summary['shortage_total'] ?? 0);
-        $toSecure = (float) ($summary['to_secure_total'] ?? 0);
-        $provisional = (float) ($summary['provisional_total'] ?? 0);
+        $lines = app(WaveProcurementService::class)->getPlanningList($this);
 
-        if ($requiredRemaining <= 0) {
+        if ($lines->isEmpty()) {
+            return [
+                'label' => __('Sans besoin'),
+                'color' => 'gray',
+            ];
+        }
+
+        $hasRemainingRequirement = $lines->contains(fn (object $line): bool => (float) ($line->remaining_requirement ?? 0) > 0);
+        $hasRemainingToOrder = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_order ?? 0) > 0);
+        $hasPartialCoverage = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_secure ?? 0) > 0)
+            || $lines->contains(fn (object $line): bool => (float) ($line->available_stock ?? 0) > 0 && (float) ($line->remaining_requirement ?? 0) > 0);
+
+        if (! $hasRemainingRequirement) {
             return [
                 'label' => __('Prête'),
                 'color' => 'success',
             ];
         }
 
-        if ($advisoryShortage > 0) {
+        if ($hasRemainingToOrder) {
             return [
                 'label' => __('À sécuriser'),
                 'color' => 'danger',
             ];
         }
 
-        if ($toSecure > 0 || $provisional > 0) {
+        if ($hasPartialCoverage) {
             return [
                 'label' => __('Partielle'),
                 'color' => 'warning',

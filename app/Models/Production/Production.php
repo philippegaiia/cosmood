@@ -410,6 +410,25 @@ class Production extends Model implements Eventable
             ->count();
     }
 
+    public function hasCoveredItems(): bool
+    {
+        return $this->getCoveredItemsCount() > 0;
+    }
+
+    public function getCoveredItemsCount(): int
+    {
+        $this->loadMissing('productionItems.allocations');
+
+        $replacedPhase = $this->masterbatch_lot_id
+            ? self::resolveMasterbatchReplacedPhase($this)
+            : null;
+
+        return $this->productionItems
+            ->when($replacedPhase !== null, fn ($items) => $items->where('phase', '!=', $replacedPhase))
+            ->filter(fn (ProductionItem $item): bool => $item->isCoveredByProcurementSignal())
+            ->count();
+    }
+
     /**
      * @return array<string, array<int, ProductionStatus>>
      */

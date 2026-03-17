@@ -232,47 +232,61 @@ class ProductionWavesTable
                             ->send();
                     }),
                 Action::make('procurementPlan')
-                    ->label('Plan achats')
+                    ->label(__('Plan achats'))
                     ->icon(Heroicon::OutlinedClipboardDocumentList)
                     ->color('gray')
-                    ->modalHeading(fn (ProductionWave $record): string => 'Plan achats - '.$record->name)
+                    ->modalHeading(fn (ProductionWave $record): string => __('Plan achats - :name', ['name' => $record->name]))
                     ->modalSubmitAction(false)
-                    ->modalCancelActionLabel('Fermer')
+                    ->modalCancelActionLabel(__('Fermer'))
                     ->schema([
                         RepeatableEntry::make('planning')
-                            ->label('Besoins agrégés')
-                            ->state(fn (ProductionWave $record): array => app(WaveProcurementService::class)
-                                ->getPlanningList($record)
-                                ->map(fn (object $line): array => [
-                                    'ingredient' => (string) ($line->ingredient_name ?? '-'),
-                                    'to_order' => number_format((float) $line->to_order_quantity, 3, ',', ' ').' kg',
-                                    'ordered' => number_format((float) $line->ordered_quantity, 3, ',', ' ').' kg',
-                                    'stock' => number_format((float) $line->stock_advisory, 3, ',', ' ').' kg',
-                                    'shortage' => number_format((float) $line->advisory_shortage, 3, ',', ' ').' kg',
-                                    'last_price' => (float) $line->ingredient_price > 0
-                                        ? number_format((float) $line->ingredient_price, 2, ',', ' ').' EUR/kg'
-                                        : '-',
-                                    'estimated_cost' => $line->estimated_cost !== null
-                                        ? number_format((float) $line->estimated_cost, 2, ',', ' ').' EUR'
-                                        : '-',
-                                ])
-                                ->values()
-                                ->all())
-                            ->table([
-                                TableColumn::make('Ingrédient'),
-                                TableColumn::make('À commander'),
-                                TableColumn::make('Déjà commandé'),
-                                TableColumn::make('Stock (indicatif)'),
-                                TableColumn::make('Manque (indicatif)'),
-                                TableColumn::make('Dernier prix'),
-                                TableColumn::make('Coût estimé'),
+                            ->label(__('Besoins agrégés'))
+                            ->columnSpanFull()
+                            ->extraAttributes([
+                                'class' => 'max-w-full overflow-x-auto [&>table]:min-w-[82rem] [&>table]:table-fixed',
                             ])
+                            ->state(function (ProductionWave $record): array {
+                                $service = app(WaveProcurementService::class);
+
+                                return $service
+                                    ->getPlanningList($record)
+                                    ->map(function (object $line) use ($service): array {
+                                        $displayUnit = (string) ($line->display_unit ?? 'kg');
+
+                                        return [
+                                            'ingredient' => (string) ($line->ingredient_name ?? '-'),
+                                            'need_date' => $line->need_date
+                                                ? Carbon::parse($line->need_date)->format('d/m/Y')
+                                                : '-',
+                                            'total_requirement' => $service->formatPlanningQuantity((float) ($line->total_wave_requirement ?? 0), $displayUnit),
+                                            'remaining_requirement' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $displayUnit),
+                                            'available_stock' => $service->formatPlanningQuantity((float) ($line->available_stock ?? 0), $displayUnit),
+                                            'wave_ordered_quantity' => $service->formatPlanningQuantity((float) ($line->wave_ordered_quantity ?? 0), $displayUnit),
+                                            'wave_received_quantity' => $service->formatPlanningQuantity((float) ($line->wave_received_quantity ?? 0), $displayUnit),
+                                            'open_orders_not_committed' => $service->formatPlanningQuantity((float) ($line->open_orders_not_committed ?? 0), $displayUnit),
+                                            'remaining_to_order' => $service->formatPlanningQuantity((float) ($line->remaining_to_order ?? 0), $displayUnit),
+                                            'last_price' => (float) $line->ingredient_price > 0
+                                                ? number_format((float) $line->ingredient_price, 2, ',', ' ').' '.__('EUR/kg')
+                                                : '-',
+                                            'estimated_cost' => $line->estimated_cost !== null
+                                                ? number_format((float) $line->estimated_cost, 2, ',', ' ').' '.__('EUR')
+                                                : '-',
+                                        ];
+                                    })
+                                    ->values()
+                                    ->all();
+                            })
+                            ->table(self::getProcurementPlanTableColumns())
                             ->schema([
                                 TextEntry::make('ingredient'),
-                                TextEntry::make('to_order'),
-                                TextEntry::make('ordered'),
-                                TextEntry::make('stock'),
-                                TextEntry::make('shortage'),
+                                TextEntry::make('need_date'),
+                                TextEntry::make('total_requirement'),
+                                TextEntry::make('remaining_requirement'),
+                                TextEntry::make('available_stock'),
+                                TextEntry::make('wave_ordered_quantity'),
+                                TextEntry::make('wave_received_quantity'),
+                                TextEntry::make('open_orders_not_committed'),
+                                TextEntry::make('remaining_to_order'),
                                 TextEntry::make('last_price'),
                                 TextEntry::make('estimated_cost'),
                             ])
@@ -323,5 +337,47 @@ class ProductionWavesTable
             ])
             ->defaultSort('created_at', 'desc')
             ->modifyQueryUsing(fn ($query) => $query->withCount('productions'));
+    }
+
+    /**
+     * @return array<int, TableColumn>
+     */
+    private static function getProcurementPlanTableColumns(): array
+    {
+        return [
+            TableColumn::make(__('Ingrédient'))
+                ->width('12rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Date besoin'))
+                ->width('7rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Besoin'))
+                ->width('7rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Restant'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Stock dispo'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Cmd vague'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Reçu vague'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('PO non engagées'))
+                ->width('9rem')
+                ->wrapHeader(),
+            TableColumn::make(__('À commander'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Dernier prix'))
+                ->width('8rem')
+                ->wrapHeader(),
+            TableColumn::make(__('Coût estimé'))
+                ->width('8rem')
+                ->wrapHeader(),
+        ];
     }
 }

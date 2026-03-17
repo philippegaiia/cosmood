@@ -4,6 +4,7 @@ use App\Enums\AllocationStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
+use App\Models\Production\ProductionWave;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SuppliesMovement;
@@ -155,6 +156,169 @@ describe('allocate', function () {
 
         $this->service->allocate($item, $supply2);
     })->throws(InvalidArgumentException::class, 'already fully allocated');
+
+    it('allocates a wave ingredient strictly by production date order', function () {
+        $wave = ProductionWave::factory()->create();
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $firstProduction = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'production_date' => '2026-03-10',
+        ]);
+
+        $secondProduction = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'production_date' => '2026-03-11',
+        ]);
+
+        $firstItem = ProductionItem::factory()->create([
+            'production_id' => $firstProduction->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 60.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+        ]);
+
+        $secondItem = ProductionItem::factory()->create([
+            'production_id' => $secondProduction->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 60.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+        ]);
+
+        $supply = Supply::factory()->inStock(100.0)->create([
+            'supplier_listing_id' => $listing->id,
+        ]);
+
+        $summary = $this->service->allocateWaveIngredientStock($wave, $ingredient, 70.0);
+
+        expect((float) ($summary['allocated_quantity'] ?? 0))->toBe(60.0)
+            ->and((float) ($summary['remaining_quantity'] ?? 0))->toBe(10.0)
+            ->and((int) ($summary['items_touched'] ?? 0))->toBe(1)
+            ->and((float) $firstItem->fresh()->getTotalAllocatedQuantity())->toBe(60.0)
+            ->and((float) $secondItem->fresh()->getTotalAllocatedQuantity())->toBe(0.0)
+            ->and((float) $supply->fresh()->getAllocatedQuantity())->toBe(60.0);
+    });
+
+    it('allocates an orphan production ingredient strictly by item order', function () {
+        $production = Production::factory()->orphan()->create();
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $firstItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 60.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+            'sort' => 1,
+        ]);
+
+        $secondItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 60.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+            'sort' => 2,
+        ]);
+
+        $supply = Supply::factory()->inStock(100.0)->create([
+            'supplier_listing_id' => $listing->id,
+        ]);
+
+        $summary = $this->service->allocateProductionIngredientStock($production, $ingredient, 70.0);
+
+        expect((float) ($summary['allocated_quantity'] ?? 0))->toBe(60.0)
+            ->and((float) ($summary['remaining_quantity'] ?? 0))->toBe(10.0)
+            ->and((int) ($summary['items_touched'] ?? 0))->toBe(1)
+            ->and((float) $firstItem->fresh()->getTotalAllocatedQuantity())->toBe(60.0)
+            ->and((float) $secondItem->fresh()->getTotalAllocatedQuantity())->toBe(0.0)
+            ->and((float) $supply->fresh()->getAllocatedQuantity())->toBe(60.0);
+    });
+
+    it('allocates a received lot to its wave using only that lot', function () {
+        $wave = ProductionWave::factory()->create();
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $production = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'production_date' => '2026-03-12',
+        ]);
+        $production->productionItems()->delete();
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 40.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+        ]);
+
+        $targetSupply = Supply::factory()->inStock(50.0)->create([
+            'supplier_listing_id' => $listing->id,
+            'batch_number' => 'LOT-TARGET-001',
+        ]);
+
+        $otherSupply = Supply::factory()->inStock(80.0)->create([
+            'supplier_listing_id' => $listing->id,
+            'batch_number' => 'LOT-OTHER-001',
+        ]);
+
+        $summary = $this->service->allocateSupplyToWave($targetSupply, $wave, 40.0);
+
+        expect((float) ($summary['allocated_quantity'] ?? 0))->toBe(40.0)
+            ->and($item->fresh()->allocation_status)->toBe(AllocationStatus::Allocated)
+            ->and($item->fresh()->supply_batch_number)->toBe('LOT-TARGET-001')
+            ->and((float) $targetSupply->fresh()->getAllocatedQuantity())->toBe(40.0)
+            ->and((float) $otherSupply->fresh()->getAllocatedQuantity())->toBe(0.0);
+    });
+
+    it('allocates a received lot to an orphan production using only that lot', function () {
+        $production = Production::factory()->orphan()->create([
+            'production_date' => '2026-03-12',
+        ]);
+        $production->productionItems()->delete();
+        $ingredient = Ingredient::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+        ]);
+
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 25.0,
+            'allocation_status' => AllocationStatus::Unassigned,
+        ]);
+
+        $targetSupply = Supply::factory()->inStock(30.0)->create([
+            'supplier_listing_id' => $listing->id,
+            'batch_number' => 'LOT-ORPHAN-001',
+        ]);
+
+        $otherSupply = Supply::factory()->inStock(30.0)->create([
+            'supplier_listing_id' => $listing->id,
+            'batch_number' => 'LOT-ORPHAN-002',
+        ]);
+
+        $summary = $this->service->allocateSupplyToProduction($targetSupply, $production, 25.0);
+
+        expect((float) ($summary['allocated_quantity'] ?? 0))->toBe(25.0)
+            ->and($item->fresh()->allocation_status)->toBe(AllocationStatus::Allocated)
+            ->and($item->fresh()->supply_batch_number)->toBe('LOT-ORPHAN-001')
+            ->and((float) $targetSupply->fresh()->getAllocatedQuantity())->toBe(25.0)
+            ->and((float) $otherSupply->fresh()->getAllocatedQuantity())->toBe(0.0);
+    });
 });
 
 describe('release', function () {
