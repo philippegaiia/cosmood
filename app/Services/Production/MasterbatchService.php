@@ -42,7 +42,7 @@ class MasterbatchService
 
     public function isMasterbatchCompatible(Production $production, Production $masterbatch): bool
     {
-        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
+        $replacedPhase = Phases::normalize($masterbatch->replaces_phase);
 
         if (! $replacedPhase) {
             return false;
@@ -78,7 +78,7 @@ class MasterbatchService
                 'ingredient_id' => $formulaItem->ingredient_id,
                 'ingredient_name' => $formulaItem->ingredient->name ?? null,
                 'percentage' => $formulaItem->percentage_of_oils,
-                'phase' => $this->normalizePhase($formulaItem->phase) ?? $formulaItem->phase,
+                'phase' => Phases::normalize($formulaItem->phase) ?? $formulaItem->phase,
                 'masterbatch_id' => $masterbatch->id,
                 'masterbatch_batch_number' => $masterbatch->batch_number,
             ]);
@@ -95,7 +95,7 @@ class MasterbatchService
             return collect();
         }
 
-        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
+        $replacedPhase = Phases::normalize($masterbatch->replaces_phase);
 
         if (! $replacedPhase) {
             return collect();
@@ -118,7 +118,7 @@ class MasterbatchService
     public function getVisibleRequirements(Production $production): Collection
     {
         $masterbatch = $production->masterbatchLot;
-        $replacedPhase = $masterbatch ? $this->normalizePhase($masterbatch->replaces_phase) : null;
+        $replacedPhase = $masterbatch ? Phases::normalize($masterbatch->replaces_phase) : null;
 
         return $production->productionItems()
             ->when($replacedPhase, fn ($q) => $q->where('phase', '!=', $replacedPhase))
@@ -134,7 +134,7 @@ class MasterbatchService
             return null;
         }
 
-        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
+        $replacedPhase = Phases::normalize($masterbatch->replaces_phase);
 
         if (! $replacedPhase) {
             return null;
@@ -168,7 +168,7 @@ class MasterbatchService
             return collect();
         }
 
-        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
+        $replacedPhase = Phases::normalize($masterbatch->replaces_phase);
 
         if (! $replacedPhase) {
             return collect();
@@ -203,7 +203,7 @@ class MasterbatchService
             return 0;
         }
 
-        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
+        $replacedPhase = Phases::normalize($masterbatch->replaces_phase);
 
         if (! $replacedPhase) {
             return 0;
@@ -289,7 +289,7 @@ class MasterbatchService
             return collect();
         }
 
-        $replacedPhase = $this->normalizePhase($masterbatch->replaces_phase);
+        $replacedPhase = Phases::normalize($masterbatch->replaces_phase);
 
         if (! $replacedPhase) {
             return collect();
@@ -327,23 +327,5 @@ class MasterbatchService
             })
             ->filter()
             ->values();
-    }
-
-    private function normalizePhase(Phases|string|null $phase): ?string
-    {
-        if ($phase === null) {
-            return null;
-        }
-
-        if ($phase instanceof Phases) {
-            return $phase->value;
-        }
-
-        return match ($phase) {
-            'saponified_oils' => Phases::Saponification->value,
-            'lye' => Phases::Lye->value,
-            'additives' => Phases::Additives->value,
-            default => $phase,
-        };
     }
 }

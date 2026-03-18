@@ -25,6 +25,22 @@ enum OrderStatus: string implements HasColor, HasLabel
     case Checked = '5';
     case Cancelled = '6';
 
+    /**
+     * @return array<int, self>
+     */
+    public static function placedStatuses(): array
+    {
+        return [self::Passed, self::Confirmed, self::Delivered, self::Checked];
+    }
+
+    /**
+     * @return array<int, self>
+     */
+    public static function draftStatuses(): array
+    {
+        return [self::Draft];
+    }
+
     public function getLabel(): string
     {
         return match ($this) {

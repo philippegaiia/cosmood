@@ -2,7 +2,6 @@
 
 namespace App\Enums;
 
-use Filament\Support\Colors\Color;
 use Filament\Support\Contracts\HasColor;
 use Filament\Support\Contracts\HasLabel;
 
@@ -13,8 +12,31 @@ enum Phases: string implements HasColor, HasLabel
     case Additives = '30';
     case Packaging = '40';
 
+    /**
+     * Normalizes legacy phase aliases and enum instances to canonical string values.
+     *
+     * Handles three forms: enum instances (returns ->value), legacy DB aliases
+     * ('saponified_oils', 'lye', 'additives'), and canonical strings (pass-through).
+     */
+    public static function normalize(self|string|null $phase): ?string
+    {
+        if ($phase === null) {
+            return null;
+        }
+
+        if ($phase instanceof self) {
+            return $phase->value;
+        }
+
+        return match ($phase) {
+            'saponified_oils' => self::Saponification->value,
+            'lye' => self::Lye->value,
+            'additives' => self::Additives->value,
+            default => $phase,
+        };
+    }
+
     public function getLabel(): string
-    // This is the method that will be called to get the label of the enum
     {
         return match ($this) {
 
@@ -25,7 +47,6 @@ enum Phases: string implements HasColor, HasLabel
         };
     }
 
-    // This is ithe method that will be called to get the color of the enum
     public function getColor(): string|array|null
     {
         return match ($this) {

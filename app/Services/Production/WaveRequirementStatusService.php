@@ -14,13 +14,6 @@ use Illuminate\Support\Collection;
 
 class WaveRequirementStatusService
 {
-    private const ORDER_PLACED_STATUSES = [
-        OrderStatus::Passed,
-        OrderStatus::Confirmed,
-        OrderStatus::Delivered,
-        OrderStatus::Checked,
-    ];
-
     public function syncForWave(ProductionWave $wave): void
     {
         $items = $this->getWaveProductionItems($wave);
@@ -231,7 +224,7 @@ class WaveRequirementStatusService
 
         foreach ($activeProductions as $production) {
             $replacedPhase = $production->masterbatch_lot_id
-                ? $this->normalizePhase($production->masterbatchLot?->replaces_phase)
+                ? Phases::normalize($production->masterbatchLot?->replaces_phase)
                 : null;
 
             $productionItems = $production->productionItems
@@ -257,7 +250,7 @@ class WaveRequirementStatusService
         }
 
         $replacedPhase = $production->masterbatch_lot_id
-            ? $this->normalizePhase($production->masterbatchLot?->replaces_phase)
+            ? Phases::normalize($production->masterbatchLot?->replaces_phase)
             : null;
 
         return $production->productionItems
@@ -267,27 +260,13 @@ class WaveRequirementStatusService
             ->values();
     }
 
-    private function normalizePhase(?string $phase): ?string
-    {
-        if ($phase === null) {
-            return null;
-        }
-
-        return match ($phase) {
-            'saponified_oils' => Phases::Saponification->value,
-            'lye' => Phases::Lye->value,
-            'additives' => Phases::Additives->value,
-            default => $phase,
-        };
-    }
-
     private function getOrderedQuantitiesByIngredient(ProductionWave $wave): Collection
     {
         return SupplierOrderItem::query()
             ->whereHas('supplierOrder', function ($query) use ($wave): void {
                 $query
                     ->where('production_wave_id', $wave->id)
-                    ->whereIn('order_status', self::ORDER_PLACED_STATUSES);
+                    ->whereIn('order_status', OrderStatus::placedStatuses());
             })
             ->with('supplierListing:id,ingredient_id')
             ->get()
