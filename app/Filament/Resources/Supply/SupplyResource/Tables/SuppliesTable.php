@@ -333,7 +333,7 @@ class SuppliesTable
 
                             $requestedQuantity = filled($data['allocation_quantity'] ?? null)
                                 ? round((float) $data['allocation_quantity'], 3)
-                                : round(min((float) $record->getAvailableQuantity(), (float) ($line->remaining_after_linked_orders ?? 0)), 3);
+                                : round(min((float) $record->getAvailableQuantity(), (float) ($line->planned_stock_quantity ?? 0)), 3);
 
                             if ($requestedQuantity <= 0) {
                                 Notification::make()
@@ -429,7 +429,7 @@ class SuppliesTable
 
                             $requestedQuantity = filled($data['allocation_quantity'] ?? null)
                                 ? round((float) $data['allocation_quantity'], 3)
-                                : round(min((float) $record->getAvailableQuantity(), (float) ($line->remaining_requirement ?? 0)), 3);
+                                : round(min((float) $record->getAvailableQuantity(), (float) ($line->remaining_after_linked_orders ?? 0)), 3);
 
                             if ($requestedQuantity <= 0) {
                                 Notification::make()
@@ -473,7 +473,7 @@ class SuppliesTable
                                 ->body(__('Alloué: :allocated | Disponible sur le lot: :lotAvailable | Restant sur la production: :productionRemaining', [
                                     'allocated' => $service->formatPlanningQuantity((float) ($summary['allocated_quantity'] ?? 0), $displayUnit),
                                     'lotAvailable' => $service->formatPlanningQuantity((float) ($freshSupply?->getAvailableQuantity() ?? 0), $displayUnit),
-                                    'productionRemaining' => $service->formatPlanningQuantity((float) ($updatedLine->remaining_requirement ?? 0), $displayUnit),
+                                    'productionRemaining' => $service->formatPlanningQuantity((float) ($updatedLine->remaining_after_linked_orders ?? 0), $displayUnit),
                                 ]))
                                 ->success()
                                 ->send();
@@ -631,9 +631,9 @@ class SuppliesTable
         $service = app(WaveProcurementService::class);
         $displayUnit = (string) ($line->display_unit ?? $record->getUnitOfMeasure());
 
-        return __('Disponible sur le lot: :lotAvailable | Besoin restant vague: :waveRemaining | Déjà alloué vague: :waveAllocated', [
+        return __('Disponible sur le lot: :lotAvailable | Stock vague mobilisable: :wavePlannedStock | Déjà alloué vague: :waveAllocated', [
             'lotAvailable' => $service->formatPlanningQuantity((float) $record->getAvailableQuantity(), $displayUnit),
-            'waveRemaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $displayUnit),
+            'wavePlannedStock' => $service->formatPlanningQuantity((float) ($line->planned_stock_quantity ?? 0), $displayUnit),
             'waveAllocated' => $service->formatPlanningQuantity((float) ($line->allocated_quantity ?? 0), $displayUnit),
         ]);
     }
@@ -649,9 +649,9 @@ class SuppliesTable
         $service = app(WaveProcurementService::class);
         $displayUnit = (string) ($line->display_unit ?? $record->getUnitOfMeasure());
 
-        return __('Laisser vide pour allouer le minimum entre le disponible du lot (:lotAvailable) et le besoin restant de la vague (:waveRemaining). Mode strict: seuls les items entièrement couvrables sont servis.', [
+        return __('Laisser vide pour allouer le minimum entre le disponible du lot (:lotAvailable) et le stock vague mobilisable (:wavePlannedStock). Mode strict: seuls les items entièrement couvrables sont servis.', [
             'lotAvailable' => $service->formatPlanningQuantity((float) $record->getAvailableQuantity(), $displayUnit),
-            'waveRemaining' => $service->formatPlanningQuantity((float) ($line->remaining_requirement ?? 0), $displayUnit),
+            'wavePlannedStock' => $service->formatPlanningQuantity((float) ($line->planned_stock_quantity ?? 0), $displayUnit),
         ]);
     }
 
