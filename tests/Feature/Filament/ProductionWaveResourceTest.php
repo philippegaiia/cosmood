@@ -27,6 +27,7 @@ use App\Models\Supply\SupplierOrderItem;
 use App\Models\Supply\Supply;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Role;
@@ -665,6 +666,56 @@ describe('ProductionWaveResource - table actions', function () {
             ->assertSee('Couverture appro');
 
         expect($wave->fresh()->getCoverageSignalLabel())->toBe('Partielle');
+    });
+
+    it('renders the list page without exploding the query count for coverage badges', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Argile blanche']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        Supply::factory()
+            ->count(50)
+            ->inStock(2.0)
+            ->create([
+                'supplier_listing_id' => $listing->id,
+                'is_in_stock' => true,
+            ]);
+
+        foreach (range(1, 10) as $index) {
+            $wave = ProductionWave::factory()->approved()->create([
+                'planned_start_date' => now()->addDays($index)->toDateString(),
+            ]);
+
+            $production = Production::factory()->create([
+                'production_wave_id' => $wave->id,
+                'status' => ProductionStatus::Planned,
+                'production_date' => now()->addDays($index)->toDateString(),
+            ]);
+
+            ProductionItem::factory()->create([
+                'production_id' => $production->id,
+                'ingredient_id' => $ingredient->id,
+                'supplier_listing_id' => $listing->id,
+                'required_quantity' => 5.0,
+                'procurement_status' => ProcurementStatus::NotOrdered,
+            ]);
+        }
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+
+        Livewire::test(ListProductionWaves::class)
+            ->assertSee('Couverture appro')
+            ->assertSee('Partielle');
+
+        $queryCount = count(DB::getQueryLog());
+
+        DB::disableQueryLog();
+
+        expect($queryCount)->toBeLessThan(120);
     });
 
     it('replans wave productions from selected start date', function () {

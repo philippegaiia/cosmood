@@ -270,6 +270,14 @@ class ProductionItem extends Model
     }
 
     /**
+     * Determines whether this item must be allocated before fabrication can start.
+     */
+    public function blocksOngoingStart(): bool
+    {
+        return ! $this->isPackagingPhase();
+    }
+
+    /**
      * Resolves the calculation mode for this item.
      *
      * Priority: ingredient base_unit (unit) > explicit calculation_mode > default (percent_of_oils).

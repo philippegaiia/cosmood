@@ -695,6 +695,56 @@ describe('Production - Relationships', function () {
         expect($production->fresh()->status)->toBe(ProductionStatus::Confirmed);
     });
 
+    it('allows transition to ongoing when only packaging items are not fully allocated', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->confirmed()->create([
+            'permanent_batch_number' => null,
+        ]);
+
+        $production->productionItems()->delete();
+
+        $fabricationIngredient = Ingredient::factory()->create();
+        $packagingIngredient = Ingredient::factory()->create();
+        $supply = Supply::factory()->inStock(100)->create();
+
+        $allocatedItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $fabricationIngredient->id,
+            'required_quantity' => 12,
+            'phase' => Phases::Additives->value,
+            'procurement_status' => ProcurementStatus::Ordered,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $allocatedItem->id,
+            'supply_id' => $supply->id,
+            'quantity' => 12,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $packagingIngredient->id,
+            'required_quantity' => 144,
+            'phase' => Phases::Packaging->value,
+            'procurement_status' => ProcurementStatus::Ordered,
+            'supply_id' => null,
+        ]);
+
+        Livewire::test(EditProduction::class, [
+            'record' => $production->id,
+        ])
+            ->set('data.status', ProductionStatus::Ongoing->value)
+            ->call('save')
+            ->call('save')
+            ->assertNotified(__('Packaging à suivre'));
+
+        expect($production->fresh()->status)->toBe(ProductionStatus::Ongoing);
+    });
+
     it('blocks transition to finished when required items have no selected lot', function () {
         $this->actingAs($this->user);
 

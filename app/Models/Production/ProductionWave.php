@@ -144,6 +144,10 @@ class ProductionWave extends Model
 
     public function hasStartedProductions(): bool
     {
+        if (($preloaded = $this->getPreloadedProductionExistsFlag('has_started_productions')) !== null) {
+            return $preloaded;
+        }
+
         return $this->productions()
             ->whereIn('status', [
                 ProductionStatus::Ongoing->value,
@@ -154,6 +158,10 @@ class ProductionWave extends Model
 
     public function hasNonTerminalProductions(): bool
     {
+        if (($preloaded = $this->getPreloadedProductionExistsFlag('has_non_terminal_productions')) !== null) {
+            return $preloaded;
+        }
+
         return $this->productions()
             ->whereNotIn('status', [
                 ProductionStatus::Finished->value,
@@ -168,7 +176,7 @@ class ProductionWave extends Model
             return __('Des productions liées ont démarré. Passez la vague en cours pour garder le suivi cohérent.');
         }
 
-        if ($this->isInProgress() && ! $this->hasNonTerminalProductions() && $this->productions()->exists()) {
+        if ($this->isInProgress() && ! $this->hasNonTerminalProductions() && $this->hasLinkedProductions()) {
             return __('Toutes les productions liées sont terminées ou annulées. Vous pouvez clôturer la vague.');
         }
 
@@ -177,82 +185,33 @@ class ProductionWave extends Model
 
     public function getCoverageSignalLabel(): string
     {
-        return $this->getCoverageSignal()['label'];
+        return $this->getCoverageSnapshot()['label'];
     }
 
     public function getCoverageSignalColor(): string
     {
-        return $this->getCoverageSignal()['color'];
+        return $this->getCoverageSnapshot()['color'];
     }
 
     public function getCoverageSignalTooltip(): string
     {
-        if ((int) ($this->productions_count ?? 0) === 0 && ! $this->productions()->exists()) {
-            return __('Aucune production liée.');
-        }
-
-        $service = app(WaveProcurementService::class);
-        $lines = $service->getPlanningList($this);
-
-        return __('Besoin total: :total | Besoin restant: :remaining | Reste à sécuriser: :toSecure | Reste à commander: :toOrder', [
-            'total' => $service->formatPlanningQuantityByUnit($lines, 'total_wave_requirement'),
-            'remaining' => $service->formatPlanningQuantityByUnit($lines, 'remaining_requirement'),
-            'toSecure' => $service->formatPlanningQuantityByUnit($lines, 'remaining_to_secure'),
-            'toOrder' => $service->formatPlanningQuantityByUnit($lines, 'remaining_to_order'),
-        ]);
+        return $this->getCoverageSnapshot()['tooltip'];
     }
 
     /**
-     * @return array{label: string, color: string}
+     * @return array{label: string, color: string, tooltip: string}
      */
-    private function getCoverageSignal(): array
+    private function getCoverageSnapshot(): array
     {
-        if ((int) ($this->productions_count ?? 0) === 0 && ! $this->productions()->exists()) {
-            return [
-                'label' => __('Sans besoin'),
-                'color' => 'gray',
-            ];
-        }
+        return once(function (): array {
+            if (! $this->exists) {
+                return $this->getDefaultCoverageSnapshot();
+            }
 
-        $lines = app(WaveProcurementService::class)->getPlanningList($this);
-
-        if ($lines->isEmpty()) {
-            return [
-                'label' => __('Sans besoin'),
-                'color' => 'gray',
-            ];
-        }
-
-        $hasRemainingRequirement = $lines->contains(fn (object $line): bool => (float) ($line->remaining_requirement ?? 0) > 0);
-        $hasRemainingToOrder = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_order ?? 0) > 0);
-        $hasPartialCoverage = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_secure ?? 0) > 0)
-            || $lines->contains(fn (object $line): bool => (float) ($line->available_stock ?? 0) > 0 && (float) ($line->remaining_requirement ?? 0) > 0);
-
-        if (! $hasRemainingRequirement) {
-            return [
-                'label' => __('Prête'),
-                'color' => 'success',
-            ];
-        }
-
-        if ($hasRemainingToOrder) {
-            return [
-                'label' => __('À sécuriser'),
-                'color' => 'danger',
-            ];
-        }
-
-        if ($hasPartialCoverage) {
-            return [
-                'label' => __('Partielle'),
-                'color' => 'warning',
-            ];
-        }
-
-        return [
-            'label' => __('Prête'),
-            'color' => 'success',
-        ];
+            return app(WaveProcurementService::class)
+                ->getCoverageSnapshotForWaves(collect([$this]))
+                ->get($this->id, $this->getDefaultCoverageSnapshot());
+        });
     }
 
     /**
@@ -284,6 +243,36 @@ class ProductionWave extends Model
             ->pluck('batch_number')
             ->map(fn (?string $batchNumber): string => (string) ($batchNumber ?: __('Sans référence')))
             ->all();
+    }
+
+    private function hasLinkedProductions(): bool
+    {
+        if (array_key_exists('productions_count', $this->getAttributes())) {
+            return (int) ($this->getAttribute('productions_count') ?? 0) > 0;
+        }
+
+        return $this->productions()->exists();
+    }
+
+    private function getPreloadedProductionExistsFlag(string $attribute): ?bool
+    {
+        if (! array_key_exists($attribute, $this->getAttributes())) {
+            return null;
+        }
+
+        return (bool) $this->getAttribute($attribute);
+    }
+
+    /**
+     * @return array{label: string, color: string, tooltip: string}
+     */
+    private function getDefaultCoverageSnapshot(): array
+    {
+        return [
+            'label' => __('Sans besoin'),
+            'color' => 'gray',
+            'tooltip' => __('Aucune production liée.'),
+        ];
     }
 
     /**

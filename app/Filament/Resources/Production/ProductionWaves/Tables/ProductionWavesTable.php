@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Production\ProductionWaves\Tables;
 
+use App\Enums\ProductionStatus;
 use App\Models\Production\ProductionWave;
 use App\Services\Production\WaveDeletionService;
 use App\Services\Production\WaveProcurementService;
@@ -21,6 +22,7 @@ use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
@@ -40,10 +42,10 @@ class ProductionWavesTable
                     ->sortable(),
                 TextColumn::make('coverage_signal')
                     ->label(__('Couverture appro'))
-                    ->state(fn (ProductionWave $record): string => $record->getCoverageSignalLabel())
+                    ->state(fn (ProductionWave $record): string => (string) ($record->getAttribute('coverage_signal_label') ?? $record->getCoverageSignalLabel()))
                     ->badge()
-                    ->color(fn (ProductionWave $record): string => $record->getCoverageSignalColor())
-                    ->tooltip(fn (ProductionWave $record): string => $record->getCoverageSignalTooltip()),
+                    ->color(fn (ProductionWave $record): string => (string) ($record->getAttribute('coverage_signal_color') ?? $record->getCoverageSignalColor()))
+                    ->tooltip(fn (ProductionWave $record): string => (string) ($record->getAttribute('coverage_signal_tooltip') ?? $record->getCoverageSignalTooltip())),
                 TextColumn::make('status_sync_advisory')
                     ->label('Alerte flux')
                     ->state(fn (ProductionWave $record): ?string => $record->getStatusAdvisoryMessage())
@@ -51,8 +53,7 @@ class ProductionWavesTable
                     ->color('warning')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('productions_count')
-                    ->label('Productions')
-                    ->counts('productions')
+                    ->label(__('Productions'))
                     ->badge(),
                 TextColumn::make('planned_start_date')
                     ->label('Début prévu')
@@ -336,7 +337,19 @@ class ProductionWavesTable
                 EditAction::make(),
             ])
             ->defaultSort('created_at', 'desc')
-            ->modifyQueryUsing(fn ($query) => $query->withCount('productions'));
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->withCount('productions')
+                ->with(['approvedBy:id,name'])
+                ->withExists([
+                    'productions as has_started_productions' => fn (Builder $productionsQuery): Builder => $productionsQuery->whereIn('status', [
+                        ProductionStatus::Ongoing->value,
+                        ProductionStatus::Finished->value,
+                    ]),
+                    'productions as has_non_terminal_productions' => fn (Builder $productionsQuery): Builder => $productionsQuery->whereNotIn('status', [
+                        ProductionStatus::Finished->value,
+                        ProductionStatus::Cancelled->value,
+                    ]),
+                ]));
     }
 
     /**

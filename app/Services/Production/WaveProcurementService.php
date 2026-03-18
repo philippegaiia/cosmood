@@ -41,6 +41,33 @@ class WaveProcurementService
         ProductionStatus::Ongoing,
     ];
 
+    private ?Collection $stockByIngredientCache = null;
+
+    /**
+     * @var array<string, Collection<int|string, object{open_order_quantity: float, total_committed_quantity: float, shared_provisional_quantity: float, commitments_by_wave: Collection<int, float>}>>
+     */
+    private array $openOrderPoolsByIngredientCache = [];
+
+    /**
+     * @var array<string, Collection<int, float>>
+     */
+    private array $orderQuantitiesByIngredientCache = [];
+
+    /**
+     * @var array<string, array<int, Collection<int, float>>>
+     */
+    private array $reservedStockDecisionsByWaveCache = [];
+
+    /**
+     * @var array<string, Collection<int, Collection<int, object{ordered_quantity: float, open_quantity: float, received_quantity: float}>>>
+     */
+    private array $waveOrderQuantitiesByWaveCache = [];
+
+    /**
+     * @var array<string, Collection<int, Collection<int, ProductionItem>>>
+     */
+    private array $waveProductionItemsByWaveCache = [];
+
     public function aggregateRequirements(ProductionWave $wave): Collection
     {
         $items = $this->getWaveProductionItems($wave);
@@ -62,35 +89,88 @@ class WaveProcurementService
             ->values();
     }
 
-    public function getPlanningList(ProductionWave $wave): Collection
+    /**
+     * @param  Collection<int, ProductionWave>  $visibleWaves
+     * @return Collection<int, array{label: string, color: string, tooltip: string}>
+     */
+    public function getCoverageSnapshotForWaves(Collection $visibleWaves): Collection
     {
+        $requestedWaves = $visibleWaves
+            ->filter(fn (mixed $wave): bool => $wave instanceof ProductionWave && $wave->exists)
+            ->mapWithKeys(fn (ProductionWave $wave): array => [$wave->id => $wave]);
+
+        if ($requestedWaves->isEmpty()) {
+            return collect();
+        }
+
+        $planningWaves = $this->getRelevantPlanningWaves($requestedWaves);
         $stockByIngredient = $this->getStockByIngredient();
         $firmOpenOrderPools = $this->getOpenOrderPoolsByIngredient(self::FIRM_ORDER_STATUSES);
         $draftOrderQuantities = $this->getOrderQuantitiesByIngredient(self::DRAFT_ORDER_STATUSES);
+        $reservedStockDecisionsByWave = $this->getReservedStockDecisionsByWave($planningWaves);
+        $waveProductionItemsByWave = $this->getWaveProductionItemsByWave($planningWaves);
+        $waveOrderQuantitiesByWave = $this->getWaveOrderQuantitiesByIngredientForWaves($planningWaves);
+        $waveLinesByWave = $this->buildWaveLines(
+            waves: $planningWaves,
+            stockByIngredient: $stockByIngredient,
+            reservedStockDecisionsByWave: $reservedStockDecisionsByWave,
+            waveProductionItemsByWave: $waveProductionItemsByWave,
+            waveOrderQuantitiesByWave: $waveOrderQuantitiesByWave,
+        );
+        $priorityAllocations = $this->buildPriorityProvisionalAllocations($waveLinesByWave, $firmOpenOrderPools);
+        $enrichedLinesByWave = $planningWaves->mapWithKeys(function (ProductionWave $wave) use ($waveLinesByWave, $firmOpenOrderPools, $draftOrderQuantities, $priorityAllocations): array {
+            return [
+                $wave->id => $this->sortPlanningLines($this->enrichLinesWithOpenOrderContext(
+                    lines: $waveLinesByWave->get($wave->id, collect()),
+                    openOrderPools: $firmOpenOrderPools,
+                    draftOrderQuantities: $draftOrderQuantities,
+                    priorityAllocations: $priorityAllocations,
+                    waveId: $wave->id,
+                )),
+            ];
+        });
 
-        $activeWaves = ProductionWave::query()
-            ->whereIn('status', [WaveStatus::Approved, WaveStatus::InProgress])
-            ->orderBy('planned_start_date')
-            ->orderBy('id')
-            ->get();
+        return $requestedWaves->mapWithKeys(function (ProductionWave $wave) use ($enrichedLinesByWave): array {
+            return [
+                $wave->id => $this->buildCoverageSnapshot(
+                    wave: $wave,
+                    lines: $enrichedLinesByWave->get($wave->id, collect()),
+                ),
+            ];
+        });
+    }
 
-        if (! $activeWaves->contains(fn (ProductionWave $activeWave): bool => $activeWave->id === $wave->id)) {
-            $activeWaves->push($wave);
+    public function getPlanningList(ProductionWave $wave): Collection
+    {
+        if (! $wave->exists) {
+            return collect();
         }
 
-        $reservedStockDecisionsByWave = $this->getReservedStockDecisionsByWave($activeWaves);
-        $waveLinesByWave = $this->buildWaveLines($activeWaves, $stockByIngredient, $reservedStockDecisionsByWave);
+        $planningWaves = $this->getRelevantPlanningWaves(collect([$wave]));
+        $stockByIngredient = $this->getStockByIngredient();
+        $firmOpenOrderPools = $this->getOpenOrderPoolsByIngredient(self::FIRM_ORDER_STATUSES);
+        $draftOrderQuantities = $this->getOrderQuantitiesByIngredient(self::DRAFT_ORDER_STATUSES);
+        $reservedStockDecisionsByWave = $this->getReservedStockDecisionsByWave($planningWaves);
+        $waveProductionItemsByWave = $this->getWaveProductionItemsByWave($planningWaves);
+        $waveOrderQuantitiesByWave = $this->getWaveOrderQuantitiesByIngredientForWaves($planningWaves);
+        $waveLinesByWave = $this->buildWaveLines(
+            waves: $planningWaves,
+            stockByIngredient: $stockByIngredient,
+            reservedStockDecisionsByWave: $reservedStockDecisionsByWave,
+            waveProductionItemsByWave: $waveProductionItemsByWave,
+            waveOrderQuantitiesByWave: $waveOrderQuantitiesByWave,
+        );
         $priorityAllocations = $this->buildPriorityProvisionalAllocations($waveLinesByWave, $firmOpenOrderPools);
 
         $waveLines = $waveLinesByWave->get($wave->id, collect());
 
-        return $this->enrichLinesWithOpenOrderContext($waveLines, $firmOpenOrderPools, $draftOrderQuantities, $priorityAllocations, $wave->id)
-            ->sortBy([
-                fn (object $line): float => -(float) ($line->remaining_to_order ?? 0),
-                fn (object $line): float => -(float) ($line->remaining_to_secure ?? 0),
-                fn (object $line): string => mb_strtolower((string) ($line->ingredient_name ?? '')),
-            ])
-            ->values();
+        return $this->sortPlanningLines($this->enrichLinesWithOpenOrderContext(
+            lines: $waveLines,
+            openOrderPools: $firmOpenOrderPools,
+            draftOrderQuantities: $draftOrderQuantities,
+            priorityAllocations: $priorityAllocations,
+            waveId: $wave->id,
+        ));
     }
 
     public function getPlanningSummary(ProductionWave $wave): array
@@ -360,13 +440,21 @@ class WaveProcurementService
 
         $stockByIngredient = $this->getStockByIngredient();
         $firmOpenOrderPools = $this->getOpenOrderPoolsByIngredient(self::FIRM_ORDER_STATUSES);
+        $reservedStockDecisionsByWave = $this->getReservedStockDecisionsByWave(
+            $contexts
+                ->pluck('wave')
+                ->filter(fn (mixed $wave): bool => $wave instanceof ProductionWave)
+                ->values(),
+        );
 
-        $contextLinesByKey = $contexts->mapWithKeys(function (object $context) use ($stockByIngredient): array {
+        $contextLinesByKey = $contexts->mapWithKeys(function (object $context) use ($stockByIngredient, $reservedStockDecisionsByWave): array {
             return [
                 $context->context_key => $this->buildPlanningLinesFromItems(
                     items: $this->getPlanningItemsForProductions($context->productions),
                     stockByIngredient: $stockByIngredient,
-                    reservedStockDecisions: collect(),
+                    reservedStockDecisions: $context->wave_id !== null
+                        ? ($reservedStockDecisionsByWave[$context->wave_id] ?? collect())
+                        : collect(),
                     contextOrderQuantities: $context->wave_id !== null
                         ? $this->getWaveOrderQuantitiesByIngredient($context->wave)
                         : $this->getProductionOrderQuantitiesByIngredient($context->productions->first()),
@@ -407,6 +495,8 @@ class WaveProcurementService
                         'wave_received_quantity' => 0.0,
                         'available_stock' => round((float) ($stockByIngredient->get($ingredientId) ?? 0), 3),
                         'open_orders_not_committed' => round((float) ($pool->shared_provisional_quantity ?? 0), 3),
+                        'reserved_stock_quantity' => 0.0,
+                        'planned_stock_quantity' => 0.0,
                         'remaining_to_secure' => 0.0,
                         'remaining_to_order' => 0.0,
                         'contexts_count' => 0,
@@ -423,6 +513,10 @@ class WaveProcurementService
                 $entry->wave_ordered_quantity += (float) ($line->wave_ordered_quantity ?? 0);
                 $entry->wave_open_order_quantity += (float) ($line->wave_open_order_quantity ?? 0);
                 $entry->wave_received_quantity += (float) ($line->wave_received_quantity ?? 0);
+                $entry->reserved_stock_quantity += (float) ($line->reserved_stock_quantity ?? 0);
+                $entry->planned_stock_quantity += (float) ($line->stock_priority_quantity ?? 0);
+                $entry->remaining_to_secure += (float) ($line->remaining_to_secure ?? 0);
+                $entry->remaining_to_order += (float) ($line->remaining_to_order ?? 0);
                 $entry->contexts_count += 1;
 
                 if ($line->need_date !== null && ($entry->earliest_need_date === null || $line->need_date < $entry->earliest_need_date)) {
@@ -456,14 +550,10 @@ class WaveProcurementService
                 $entry->wave_ordered_quantity = round((float) $entry->wave_ordered_quantity, 3);
                 $entry->wave_open_order_quantity = round((float) $entry->wave_open_order_quantity, 3);
                 $entry->wave_received_quantity = round((float) $entry->wave_received_quantity, 3);
-                $entry->remaining_to_secure = round(max(
-                    0,
-                    (float) $entry->remaining_requirement - (float) $entry->available_stock - (float) $entry->wave_open_order_quantity,
-                ), 3);
-                $entry->remaining_to_order = round(max(
-                    0,
-                    (float) $entry->remaining_to_secure - (float) $entry->open_orders_not_committed,
-                ), 3);
+                $entry->reserved_stock_quantity = round((float) $entry->reserved_stock_quantity, 3);
+                $entry->planned_stock_quantity = round((float) $entry->planned_stock_quantity, 3);
+                $entry->remaining_to_secure = round((float) $entry->remaining_to_secure, 3);
+                $entry->remaining_to_order = round((float) $entry->remaining_to_order, 3);
                 $entry->contexts = $entry->contexts
                     ->sortBy(fn (object $context): string => sprintf(
                         '%s|%s',
@@ -699,12 +789,16 @@ class WaveProcurementService
                     0,
                     (float) ($line->remaining_requirement ?? 0) - (float) ($line->wave_open_order_quantity ?? 0),
                 );
+                $mobilizableDemand = min(
+                    $demandAfterLinkedOrders,
+                    (float) ($line->planned_stock_quantity ?? $demandAfterLinkedOrders),
+                );
 
                 $ingredientContexts->push((object) [
                     'context_key' => (string) $context->context_key,
                     'need_date' => (string) ($context->need_date ?? $line->need_date ?? '9999-12-31'),
                     'sort_order' => (int) ($context->sort_order ?? 0),
-                    'demand' => $demandAfterLinkedOrders,
+                    'demand' => $mobilizableDemand,
                 ]);
             }
 
@@ -865,9 +959,12 @@ class WaveProcurementService
      */
     private function getStockByIngredient(): Collection
     {
-        return Supply::query()
+        return $this->stockByIngredientCache ??= Supply::query()
             ->where('is_in_stock', true)
             ->with('supplierListing:id,ingredient_id')
+            ->withSum([
+                'movements as '.Supply::ALLOCATED_QUANTITY_SUM_ATTRIBUTE => fn ($query) => $query->where('movement_type', 'allocation'),
+            ], 'quantity')
             ->get()
             ->groupBy(fn (Supply $supply): ?int => $supply->supplierListing?->ingredient_id)
             ->map(fn (Collection $supplies): float => (float) $supplies->sum(fn (Supply $supply): float => $supply->getAvailableQuantity()));
@@ -878,7 +975,9 @@ class WaveProcurementService
      */
     private function getOpenOrderPoolsByIngredient(array $orderStatuses): Collection
     {
-        $items = SupplierOrderItem::query()
+        $cacheKey = $this->getOrderStatusesCacheKey($orderStatuses);
+
+        return $this->openOrderPoolsByIngredientCache[$cacheKey] ??= SupplierOrderItem::query()
             ->whereNull('moved_to_stock_at')
             ->whereHas('supplierOrder', function ($query) use ($orderStatuses): void {
                 $query->whereIn('order_status', $orderStatuses);
@@ -886,49 +985,52 @@ class WaveProcurementService
             ->with([
                 'supplierListing:id,ingredient_id',
                 'supplierOrder:id,production_wave_id,order_status',
-                'allocatedToProduction:id,status,production_wave_id',
+                'allocatedToProduction:id,status,production_wave_id,masterbatch_lot_id',
+                'allocatedToProduction.productionItems.allocations',
+                'allocatedToProduction.masterbatchLot:id,replaces_phase',
             ])
-            ->get();
+            ->get()
+            ->pipe(function (Collection $items): Collection {
+                $remainingRequirementsByProduction = $this->getRemainingRequirementsByIngredientForProductions(
+                    $items
+                        ->pluck('allocatedToProduction')
+                        ->filter(fn (mixed $production): bool => $production instanceof Production && $this->isActiveStandaloneProduction($production))
+                        ->unique('id')
+                        ->values(),
+                );
 
-        $remainingRequirementsByProduction = $this->getRemainingRequirementsByIngredientForProductions(
-            $items
-                ->pluck('allocatedToProduction')
-                ->filter(fn (mixed $production): bool => $production instanceof Production && $this->isActiveStandaloneProduction($production))
-                ->unique('id')
-                ->values(),
-        );
+                return $items
+                    ->groupBy(fn (SupplierOrderItem $item): ?int => $item->supplierListing?->ingredient_id)
+                    ->map(function (Collection $ingredientItems, int|string $ingredientId) use ($remainingRequirementsByProduction): object {
+                        $openOrderQuantity = (float) $ingredientItems->sum(fn (SupplierOrderItem $item): float => $item->getOrderedQuantityKg());
 
-        return $items
-            ->groupBy(fn (SupplierOrderItem $item): ?int => $item->supplierListing?->ingredient_id)
-            ->map(function (Collection $ingredientItems, int|string $ingredientId) use ($remainingRequirementsByProduction): object {
-                $openOrderQuantity = (float) $ingredientItems->sum(fn (SupplierOrderItem $item): float => $item->getOrderedQuantityKg());
+                        $commitmentsByWave = $ingredientItems
+                            ->filter(fn (SupplierOrderItem $item): bool => $item->supplierOrder?->production_wave_id !== null)
+                            ->groupBy(fn (SupplierOrderItem $item): int => (int) $item->supplierOrder->production_wave_id)
+                            ->map(fn (Collection $waveItems): float => (float) $waveItems->sum(fn (SupplierOrderItem $item): float => (float) ($item->committed_quantity_kg ?? 0)));
 
-                $commitmentsByWave = $ingredientItems
-                    ->filter(fn (SupplierOrderItem $item): bool => $item->supplierOrder?->production_wave_id !== null)
-                    ->groupBy(fn (SupplierOrderItem $item): int => (int) $item->supplierOrder->production_wave_id)
-                    ->map(fn (Collection $waveItems): float => (float) $waveItems->sum(fn (SupplierOrderItem $item): float => (float) ($item->committed_quantity_kg ?? 0)));
+                        $allocatedToProductionQuantity = (float) $ingredientItems
+                            ->filter(fn (SupplierOrderItem $item): bool => $this->isActiveStandaloneProduction($item->allocatedToProduction))
+                            ->groupBy(fn (SupplierOrderItem $item): int => (int) $item->allocated_to_production_id)
+                            ->map(function (Collection $productionItems, int $productionId) use ($remainingRequirementsByProduction, $ingredientId): float {
+                                $remainingRequirement = (float) ($remainingRequirementsByProduction[$productionId][(int) $ingredientId] ?? 0);
+                                $linkedOpenOrderQuantity = (float) $productionItems->sum(
+                                    fn (SupplierOrderItem $item): float => $this->getAllocatedOrderItemQuantity($item),
+                                );
 
-                $allocatedToProductionQuantity = (float) $ingredientItems
-                    ->filter(fn (SupplierOrderItem $item): bool => $this->isActiveStandaloneProduction($item->allocatedToProduction))
-                    ->groupBy(fn (SupplierOrderItem $item): int => (int) $item->allocated_to_production_id)
-                    ->map(function (Collection $productionItems, int $productionId) use ($remainingRequirementsByProduction, $ingredientId): float {
-                        $remainingRequirement = (float) ($remainingRequirementsByProduction[$productionId][(int) $ingredientId] ?? 0);
-                        $linkedOpenOrderQuantity = (float) $productionItems->sum(
-                            fn (SupplierOrderItem $item): float => $this->getAllocatedOrderItemQuantity($item),
-                        );
+                                return round(min($linkedOpenOrderQuantity, $remainingRequirement), 3);
+                            })
+                            ->sum();
 
-                        return round(min($linkedOpenOrderQuantity, $remainingRequirement), 3);
-                    })
-                    ->sum();
+                        $totalCommittedQuantity = (float) $commitmentsByWave->sum() + $allocatedToProductionQuantity;
 
-                $totalCommittedQuantity = (float) $commitmentsByWave->sum() + $allocatedToProductionQuantity;
-
-                return (object) [
-                    'open_order_quantity' => round($openOrderQuantity, 3),
-                    'total_committed_quantity' => round($totalCommittedQuantity, 3),
-                    'shared_provisional_quantity' => round(max(0, $openOrderQuantity - $totalCommittedQuantity), 3),
-                    'commitments_by_wave' => $commitmentsByWave,
-                ];
+                        return (object) [
+                            'open_order_quantity' => round($openOrderQuantity, 3),
+                            'total_committed_quantity' => round($totalCommittedQuantity, 3),
+                            'shared_provisional_quantity' => round(max(0, $openOrderQuantity - $totalCommittedQuantity), 3),
+                            'commitments_by_wave' => $commitmentsByWave,
+                        ];
+                    });
             });
     }
 
@@ -938,7 +1040,9 @@ class WaveProcurementService
      */
     private function getOrderQuantitiesByIngredient(array $orderStatuses): Collection
     {
-        return SupplierOrderItem::query()
+        $cacheKey = $this->getOrderStatusesCacheKey($orderStatuses);
+
+        return $this->orderQuantitiesByIngredientCache[$cacheKey] ??= SupplierOrderItem::query()
             ->whereNull('moved_to_stock_at')
             ->whereHas('supplierOrder', function ($query) use ($orderStatuses): void {
                 $query->whereIn('order_status', $orderStatuses);
@@ -955,20 +1059,33 @@ class WaveProcurementService
      * @param  Collection<int, ProductionWave>  $waves
      * @param  Collection<int|string, float>  $stockByIngredient
      * @param  array<int, Collection<int, float>>  $reservedStockDecisionsByWave
+     * @param  Collection<int, Collection<int, ProductionItem>>|null  $waveProductionItemsByWave
+     * @param  Collection<int, Collection<int, object{ordered_quantity: float, open_quantity: float, received_quantity: float}>>|null  $waveOrderQuantitiesByWave
      * @return Collection<int, Collection<int, object>>
      */
-    private function buildWaveLines(Collection $waves, Collection $stockByIngredient, array $reservedStockDecisionsByWave = []): Collection
+    private function buildWaveLines(Collection $waves, Collection $stockByIngredient, array $reservedStockDecisionsByWave = [], ?Collection $waveProductionItemsByWave = null, ?Collection $waveOrderQuantitiesByWave = null): Collection
     {
-        return $waves
+        $waves = $waves
+            ->filter(fn (mixed $wave): bool => $wave instanceof ProductionWave)
             ->unique('id')
-            ->mapWithKeys(function (ProductionWave $wave) use ($stockByIngredient, $reservedStockDecisionsByWave): array {
+            ->values();
+
+        if ($waves->isEmpty()) {
+            return collect();
+        }
+
+        $waveProductionItemsByWave ??= $this->getWaveProductionItemsByWave($waves);
+        $waveOrderQuantitiesByWave ??= $this->getWaveOrderQuantitiesByIngredientForWaves($waves);
+
+        return $waves
+            ->mapWithKeys(function (ProductionWave $wave) use ($stockByIngredient, $reservedStockDecisionsByWave, $waveProductionItemsByWave, $waveOrderQuantitiesByWave): array {
                 return [
                     $wave->id => $this->buildPlanningLines(
                         $wave,
-                        $this->getWaveProductionItems($wave),
+                        $waveProductionItemsByWave->get($wave->id, collect()),
                         $stockByIngredient,
                         $reservedStockDecisionsByWave[$wave->id] ?? collect(),
-                        $this->getWaveOrderQuantitiesByIngredient($wave),
+                        $waveOrderQuantitiesByWave->get($wave->id, collect()),
                     ),
                 ];
             });
@@ -1077,17 +1194,15 @@ class WaveProcurementService
      */
     private function getReservedStockDecisionsByWave(Collection $waves): array
     {
-        $waveIds = $waves
-            ->pluck('id')
-            ->map(fn (mixed $waveId): int => (int) $waveId)
-            ->filter(fn (int $waveId): bool => $waveId > 0)
-            ->values();
+        $waveIds = $this->extractWaveIds($waves);
 
         if ($waveIds->isEmpty()) {
             return [];
         }
 
-        return ProductionWaveStockDecision::query()
+        $cacheKey = $this->getWaveIdsCacheKey($waveIds);
+
+        return $this->reservedStockDecisionsByWaveCache[$cacheKey] ??= ProductionWaveStockDecision::query()
             ->whereIn('production_wave_id', $waveIds->all())
             ->get()
             ->groupBy('production_wave_id')
@@ -1111,12 +1226,7 @@ class WaveProcurementService
     private function getWaveProductionItems(ProductionWave $wave): Collection
     {
         $wave->loadMissing([
-            'productions.productionItems.ingredient',
-            'productions.productionItems.allocations',
-            'productions.productionItems.supplierListing.supplier',
-            'productions.productionItems.supplierListing.ingredient:id,base_unit',
-            'productions.product:id,name',
-            'productions.masterbatchLot',
+            ...$this->getWavePlanningRelations(),
         ]);
 
         return $this->getPlanningItemsForProductions($wave->productions);
@@ -1151,31 +1261,8 @@ class WaveProcurementService
      */
     private function getWaveOrderQuantitiesByIngredient(ProductionWave $wave): Collection
     {
-        return SupplierOrderItem::query()
-            ->whereHas('supplierOrder', function ($query) use ($wave): void {
-                $query
-                    ->where('production_wave_id', $wave->id)
-                    ->whereIn('order_status', self::PLACED_ORDER_STATUSES);
-            })
-            ->with([
-                'supplierListing:id,ingredient_id,unit_of_measure',
-                'supplierListing.ingredient:id,base_unit',
-                'supply:id,supplier_order_item_id,initial_quantity,quantity_in',
-            ])
-            ->get()
-            ->groupBy(fn (SupplierOrderItem $item): ?int => $item->supplierListing?->ingredient_id)
-            ->map(function (Collection $items): object {
-                $orderedQuantity = (float) $items->sum(fn (SupplierOrderItem $item): float => $this->getOrderItemQuantity($item));
-                $receivedQuantity = (float) $items->sum(fn (SupplierOrderItem $item): float => $this->getReceivedOrderItemQuantity($item));
-
-                return (object) [
-                    'ordered_quantity' => round($orderedQuantity, 3),
-                    'open_quantity' => round(max(0, $orderedQuantity - $receivedQuantity), 3),
-                    'received_quantity' => round($receivedQuantity, 3),
-                ];
-            })
-            ->filter(fn (object $summary, $ingredientId): bool => $ingredientId !== null)
-            ->mapWithKeys(fn (object $summary, $ingredientId): array => [(int) $ingredientId => $summary]);
+        return $this->getWaveOrderQuantitiesByIngredientForWaves(collect([$wave]))
+            ->get($wave->id, collect());
     }
 
     /**
@@ -1265,6 +1352,273 @@ class WaveProcurementService
     private function getAllocatedQuantity(ProductionItem $item): float
     {
         return min($this->getRequiredQuantity($item), $item->getTotalAllocatedQuantity());
+    }
+
+    /**
+     * @param  Collection<int, ProductionWave>  $requestedWaves
+     * @return Collection<int, ProductionWave>
+     */
+    private function getRelevantPlanningWaves(Collection $requestedWaves): Collection
+    {
+        $requestedWaveIds = $this->extractWaveIds($requestedWaves);
+
+        $query = ProductionWave::query()
+            ->whereIn('status', [WaveStatus::Approved, WaveStatus::InProgress]);
+
+        if ($requestedWaveIds->isNotEmpty()) {
+            $query->orWhereIn('id', $requestedWaveIds->all());
+        }
+
+        return $query
+            ->orderBy('planned_start_date')
+            ->orderBy('id')
+            ->get()
+            ->unique('id')
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, ProductionWave>  $waves
+     * @return Collection<int, Collection<int, ProductionItem>>
+     */
+    private function getWaveProductionItemsByWave(Collection $waves): Collection
+    {
+        $waveIds = $this->extractWaveIds($waves);
+
+        if ($waveIds->isEmpty()) {
+            return collect();
+        }
+
+        $cacheKey = $this->getWaveIdsCacheKey($waveIds);
+
+        if (array_key_exists($cacheKey, $this->waveProductionItemsByWaveCache)) {
+            return $this->waveProductionItemsByWaveCache[$cacheKey];
+        }
+
+        $loadedWaves = ProductionWave::query()
+            ->whereIn('id', $waveIds->all())
+            ->with($this->getWavePlanningRelations())
+            ->get()
+            ->keyBy('id');
+
+        return $this->waveProductionItemsByWaveCache[$cacheKey] = $waveIds
+            ->mapWithKeys(function (int $waveId) use ($loadedWaves): array {
+                $wave = $loadedWaves->get($waveId);
+
+                return [
+                    $waveId => $wave instanceof ProductionWave
+                        ? $this->getPlanningItemsForProductions($wave->productions)
+                        : collect(),
+                ];
+            });
+    }
+
+    /**
+     * @param  Collection<int, ProductionWave>  $waves
+     * @return Collection<int, Collection<int, object{ordered_quantity: float, open_quantity: float, received_quantity: float}>>
+     */
+    private function getWaveOrderQuantitiesByIngredientForWaves(Collection $waves): Collection
+    {
+        $waveIds = $this->extractWaveIds($waves);
+
+        if ($waveIds->isEmpty()) {
+            return collect();
+        }
+
+        $cacheKey = $this->getWaveIdsCacheKey($waveIds);
+
+        if (array_key_exists($cacheKey, $this->waveOrderQuantitiesByWaveCache)) {
+            return $this->waveOrderQuantitiesByWaveCache[$cacheKey];
+        }
+
+        $items = SupplierOrderItem::query()
+            ->whereHas('supplierOrder', function ($query) use ($waveIds): void {
+                $query
+                    ->whereIn('production_wave_id', $waveIds->all())
+                    ->whereIn('order_status', self::PLACED_ORDER_STATUSES);
+            })
+            ->with([
+                'supplierListing:id,ingredient_id,unit_of_measure',
+                'supplierListing.ingredient:id,base_unit',
+                'supply:id,supplier_order_item_id,initial_quantity,quantity_in',
+                'supplierOrder:id,production_wave_id',
+            ])
+            ->get();
+
+        $quantitiesByWave = $waveIds->mapWithKeys(function (int $waveId) use ($items): array {
+            $waveItems = $items
+                ->filter(fn (SupplierOrderItem $item): bool => (int) ($item->supplierOrder?->production_wave_id ?? 0) === $waveId);
+
+            return [
+                $waveId => $waveItems
+                    ->groupBy(fn (SupplierOrderItem $item): ?int => $item->supplierListing?->ingredient_id)
+                    ->map(function (Collection $groupedItems): object {
+                        $orderedQuantity = (float) $groupedItems->sum(fn (SupplierOrderItem $item): float => $this->getOrderItemQuantity($item));
+                        $receivedQuantity = (float) $groupedItems->sum(fn (SupplierOrderItem $item): float => $this->getReceivedOrderItemQuantity($item));
+
+                        return (object) [
+                            'ordered_quantity' => round($orderedQuantity, 3),
+                            'open_quantity' => round(max(0, $orderedQuantity - $receivedQuantity), 3),
+                            'received_quantity' => round($receivedQuantity, 3),
+                        ];
+                    })
+                    ->filter(fn (object $summary, $ingredientId): bool => $ingredientId !== null)
+                    ->mapWithKeys(fn (object $summary, $ingredientId): array => [(int) $ingredientId => $summary]),
+            ];
+        });
+
+        return $this->waveOrderQuantitiesByWaveCache[$cacheKey] = $quantitiesByWave;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function getWavePlanningRelations(): array
+    {
+        return [
+            'productions.productionItems.ingredient',
+            'productions.productionItems.allocations',
+            'productions.productionItems.supplierListing.supplier',
+            'productions.productionItems.supplierListing.ingredient:id,base_unit',
+            'productions.product:id,name',
+            'productions.masterbatchLot',
+        ];
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return Collection<int, object>
+     */
+    private function sortPlanningLines(Collection $lines): Collection
+    {
+        return $lines
+            ->sortBy([
+                fn (object $line): float => -(float) ($line->remaining_to_order ?? 0),
+                fn (object $line): float => -(float) ($line->remaining_to_secure ?? 0),
+                fn (object $line): string => mb_strtolower((string) ($line->ingredient_name ?? '')),
+            ])
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return array{label: string, color: string, tooltip: string}
+     */
+    private function buildCoverageSnapshot(ProductionWave $wave, Collection $lines): array
+    {
+        if (! $this->waveHasLinkedProductions($wave)) {
+            return $this->getNoProductionCoverageSnapshot();
+        }
+
+        $signal = $this->buildCoverageSignal($lines);
+
+        return [
+            'label' => $signal['label'],
+            'color' => $signal['color'],
+            'tooltip' => __('Besoin total: :total | Besoin restant: :remaining | Reste à sécuriser: :toSecure | Reste à commander: :toOrder', [
+                'total' => $this->formatPlanningQuantityByUnit($lines, 'total_wave_requirement'),
+                'remaining' => $this->formatPlanningQuantityByUnit($lines, 'remaining_requirement'),
+                'toSecure' => $this->formatPlanningQuantityByUnit($lines, 'remaining_to_secure'),
+                'toOrder' => $this->formatPlanningQuantityByUnit($lines, 'remaining_to_order'),
+            ]),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return array{label: string, color: string}
+     */
+    private function buildCoverageSignal(Collection $lines): array
+    {
+        if ($lines->isEmpty()) {
+            return [
+                'label' => __('Sans besoin'),
+                'color' => 'gray',
+            ];
+        }
+
+        $hasRemainingRequirement = $lines->contains(fn (object $line): bool => (float) ($line->remaining_requirement ?? 0) > 0);
+        $hasRemainingToOrder = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_order ?? 0) > 0);
+        $hasPartialCoverage = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_secure ?? 0) > 0)
+            || $lines->contains(fn (object $line): bool => (float) ($line->available_stock ?? 0) > 0 && (float) ($line->remaining_requirement ?? 0) > 0);
+
+        if (! $hasRemainingRequirement) {
+            return [
+                'label' => __('Prête'),
+                'color' => 'success',
+            ];
+        }
+
+        if ($hasRemainingToOrder) {
+            return [
+                'label' => __('À sécuriser'),
+                'color' => 'danger',
+            ];
+        }
+
+        if ($hasPartialCoverage) {
+            return [
+                'label' => __('Partielle'),
+                'color' => 'warning',
+            ];
+        }
+
+        return [
+            'label' => __('Prête'),
+            'color' => 'success',
+        ];
+    }
+
+    /**
+     * @return array{label: string, color: string, tooltip: string}
+     */
+    private function getNoProductionCoverageSnapshot(): array
+    {
+        return [
+            'label' => __('Sans besoin'),
+            'color' => 'gray',
+            'tooltip' => __('Aucune production liée.'),
+        ];
+    }
+
+    private function waveHasLinkedProductions(ProductionWave $wave): bool
+    {
+        if (array_key_exists('productions_count', $wave->getAttributes())) {
+            return (int) ($wave->getAttribute('productions_count') ?? 0) > 0;
+        }
+
+        return $wave->productions()->exists();
+    }
+
+    /**
+     * @param  Collection<int, ProductionWave>  $waves
+     * @return Collection<int, int>
+     */
+    private function extractWaveIds(Collection $waves): Collection
+    {
+        return $waves
+            ->filter(fn (mixed $wave): bool => $wave instanceof ProductionWave && $wave->exists)
+            ->pluck('id')
+            ->map(fn (mixed $waveId): int => (int) $waveId)
+            ->filter(fn (int $waveId): bool => $waveId > 0)
+            ->unique()
+            ->sort()
+            ->values();
+    }
+
+    private function getWaveIdsCacheKey(Collection $waveIds): string
+    {
+        return $waveIds->implode('|');
+    }
+
+    /**
+     * @param  array<int, OrderStatus>  $orderStatuses
+     */
+    private function getOrderStatusesCacheKey(array $orderStatuses): string
+    {
+        return collect($orderStatuses)
+            ->map(fn (OrderStatus $status): string => $status->value)
+            ->implode('|');
     }
 
     private function resolveNeedDate(ProductionWave $wave): ?string

@@ -19,7 +19,7 @@ use InvalidArgumentException;
  *
  * Shows productions that are ready to start:
  * - Status = Confirmed
- * - All supplies allocated
+ * - Fabrication inputs allocated
  * - Production date today or in the next 7 days
  *
  * Quick action to change status to Ongoing.
@@ -83,6 +83,7 @@ class ReadyToStartProductionsWidget extends BaseWidget
                         $record->refresh();
 
                         $unallocatedIngredientNames = $record->getUnallocatedIngredientNamesForOngoing();
+                        $unallocatedPackagingIngredientNames = $record->getUnallocatedPackagingIngredientNamesForOngoing();
 
                         if ($unallocatedIngredientNames !== []) {
                             Notification::make()
@@ -98,6 +99,16 @@ class ReadyToStartProductionsWidget extends BaseWidget
 
                         try {
                             $record->update(['status' => ProductionStatus::Ongoing]);
+
+                            if ($unallocatedPackagingIngredientNames !== []) {
+                                Notification::make()
+                                    ->warning()
+                                    ->title(__('Packaging à suivre'))
+                                    ->body(__('La fabrication démarre avec du packaging non alloué : :items. Vérifier avant le conditionnement.', [
+                                        'items' => implode(', ', $unallocatedPackagingIngredientNames),
+                                    ]))
+                                    ->send();
+                            }
                         } catch (InvalidArgumentException $exception) {
                             Notification::make()
                                 ->warning()

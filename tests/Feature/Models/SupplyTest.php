@@ -63,6 +63,13 @@ describe('Supply Model', function () {
             ->and($supply->getAvailableQuantity())->toBe(50.0);
     });
 
+    it('uses the preloaded allocation movements sum attribute when present', function () {
+        $supply = Supply::factory()->make();
+        $supply->setAttribute(Supply::ALLOCATED_QUANTITY_SUM_ATTRIBUTE, 12.3456);
+
+        expect($supply->getAllocatedQuantity())->toBe(12.346);
+    });
+
     it('can be out of stock', function () {
         $supply = Supply::factory()->outOfStock()->create();
 

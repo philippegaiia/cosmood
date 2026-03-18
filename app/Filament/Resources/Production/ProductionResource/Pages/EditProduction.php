@@ -24,6 +24,11 @@ class EditProduction extends EditRecord
 
     public static bool $formActionsAreSticky = true;
 
+    /**
+     * @var array<int, string>
+     */
+    protected array $ongoingPackagingWarningItems = [];
+
     public function getMaxContentWidth(): Width|string|null
     {
         return Width::Full;
@@ -61,10 +66,24 @@ class EditProduction extends EditRecord
         $this->refreshFormData([
             'permanent_batch_number',
         ]);
+
+        if ($this->ongoingPackagingWarningItems !== []) {
+            Notification::make()
+                ->warning()
+                ->title(__('Packaging à suivre'))
+                ->body(__('La fabrication démarre avec du packaging non alloué : :items. Vérifier avant le conditionnement.', [
+                    'items' => implode(', ', $this->ongoingPackagingWarningItems),
+                ]))
+                ->send();
+        }
+
+        $this->ongoingPackagingWarningItems = [];
     }
 
     protected function beforeSave(): void
     {
+        $this->ongoingPackagingWarningItems = [];
+
         if ($notificationData = $this->getStatusTransitionAuthorizationNotificationData()) {
             Notification::make()
                 ->warning()
@@ -85,6 +104,8 @@ class EditProduction extends EditRecord
 
                 throw new Halt;
             }
+
+            $this->ongoingPackagingWarningItems = $this->record->getUnallocatedPackagingIngredientNamesForOngoing();
         }
 
         if ($this->isTransitioningToFinished()) {

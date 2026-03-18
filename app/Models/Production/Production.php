@@ -590,7 +590,7 @@ class Production extends Model implements Eventable
     }
 
     /**
-     * Ensures all required production items are fully allocated before starting production.
+     * Ensures all fabrication-phase production items are fully allocated before starting production.
      */
     private static function assertItemsAllocatedBeforeOngoing(Production $production): void
     {
@@ -639,9 +639,40 @@ class Production extends Model implements Eventable
     /**
      * Returns ingredient names still unallocated for ongoing transition.
      *
+     * Packaging-phase items are intentionally ignored here because fabrication
+     * can start before late-arriving boxes or labels are received.
+     *
      * @return array<int, string>
      */
     public function getUnallocatedIngredientNamesForOngoing(int $limit = 5): array
+    {
+        return $this->getUnallocatedIngredientNamesForOngoingUsing(
+            fn (ProductionItem $item): bool => $item->blocksOngoingStart(),
+            $limit,
+        );
+    }
+
+    /**
+     * Returns packaging names still unallocated when fabrication starts.
+     *
+     * This list is warning-only: packaging can arrive later, but operators
+     * should still see what remains to secure before conditionnement.
+     *
+     * @return array<int, string>
+     */
+    public function getUnallocatedPackagingIngredientNamesForOngoing(int $limit = 5): array
+    {
+        return $this->getUnallocatedIngredientNamesForOngoingUsing(
+            fn (ProductionItem $item): bool => $item->isPackagingPhase(),
+            $limit,
+        );
+    }
+
+    /**
+     * @param  callable(ProductionItem): bool  $shouldIncludeItem
+     * @return array<int, string>
+     */
+    private function getUnallocatedIngredientNamesForOngoingUsing(callable $shouldIncludeItem, int $limit = 5): array
     {
         $replacedPhase = self::resolveMasterbatchReplacedPhase($this);
 
@@ -651,7 +682,7 @@ class Production extends Model implements Eventable
                 $query->where('phase', '!=', $replacedPhase);
             })
             ->get()
-            ->filter(fn (ProductionItem $item): bool => ! $item->isFullyAllocated())
+            ->filter(fn (ProductionItem $item): bool => $shouldIncludeItem($item) && ! $item->isFullyAllocated())
             ->map(fn (ProductionItem $item): string => (string) ($item->ingredient?->name ?: 'Item #'.$item->id))
             ->unique()
             ->take($limit)

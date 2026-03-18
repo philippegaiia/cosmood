@@ -1,8 +1,10 @@
 <?php
 
+use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Models\Production\Formula;
+use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
 use App\Models\Production\ProductionItemAllocation;
@@ -15,7 +17,7 @@ uses(RefreshDatabase::class);
 
 function createConfirmedProductionForOngoingGuard(): Production
 {
-    $product = \App\Models\Production\Product::factory()->create();
+    $product = Product::factory()->create();
 
     $formula = Formula::query()->create([
         'name' => 'Formula ongoing guard',
@@ -55,7 +57,7 @@ it('blocks transition to ongoing when any production item is not allocated', fun
     ]);
 
     expect(fn () => $production->update(['status' => ProductionStatus::Ongoing]))
-        ->toThrow(\InvalidArgumentException::class, 'Cannot set production to ongoing: unallocated items');
+        ->toThrow(InvalidArgumentException::class, 'Cannot set production to ongoing: unallocated items');
 });
 
 it('allows transition to ongoing when all production items are fully allocated', function (): void {
@@ -77,6 +79,44 @@ it('allows transition to ongoing when all production items are fully allocated',
         'status' => 'reserved',
         'reserved_at' => now(),
     ]);
+
+    $production->update(['status' => ProductionStatus::Ongoing]);
+
+    expect($production->fresh()->status)->toBe(ProductionStatus::Ongoing);
+});
+
+it('allows transition to ongoing when only packaging items are still unallocated', function (): void {
+    $production = createConfirmedProductionForOngoingGuard();
+    $fabricationIngredient = Ingredient::factory()->create();
+    $packagingIngredient = Ingredient::factory()->create();
+    $supply = Supply::factory()->inStock(50)->create();
+
+    $allocatedItem = ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $fabricationIngredient->id,
+        'required_quantity' => 7,
+        'phase' => Phases::Additives->value,
+        'supply_id' => $supply->id,
+    ]);
+
+    ProductionItemAllocation::query()->create([
+        'production_item_id' => $allocatedItem->id,
+        'supply_id' => $supply->id,
+        'quantity' => 7,
+        'status' => 'reserved',
+        'reserved_at' => now(),
+    ]);
+
+    ProductionItem::factory()->create([
+        'production_id' => $production->id,
+        'ingredient_id' => $packagingIngredient->id,
+        'required_quantity' => 120,
+        'phase' => Phases::Packaging->value,
+        'supply_id' => null,
+    ]);
+
+    expect($production->getUnallocatedIngredientNamesForOngoing())->toBe([])
+        ->and($production->getUnallocatedPackagingIngredientNamesForOngoing())->toBe([$packagingIngredient->name]);
 
     $production->update(['status' => ProductionStatus::Ongoing]);
 

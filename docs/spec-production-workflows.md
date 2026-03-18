@@ -165,6 +165,7 @@ This document describes the current production-side business rules implemented i
 - Wave-linked productions stay grouped by wave, while productions without wave remain visible as standalone planning needs.
 - Global table includes a context breakdown per ingredient (`Vague` or `Production`) to identify what drives each need.
 - Stock available and non-committed open orders are prioritized by earliest need date across contexts in the overview details.
+- Wave contexts in the global procurement overview reuse their saved stock-reserve decisions, so reserved stock stays outside that wave's mobilizable stock signal there as well.
 - Open supplier orders are shown as advisory inbound quantities and are not treated as exclusive to a single wave.
 - Procurement details distinguish `commandé ferme` (passed+) from `brouillon PO` quantities.
 - A wave-level bulk action can mark `Non commandé` items as manually ordered (`is_order_marked`) for selected ingredients.
@@ -341,7 +342,9 @@ Output semantics:
 
 - `production_date` is a planning/anchor date used for scheduling tasks and capacity.
 - `ongoing` is a manual operational action (operator/manager), not an automatic date job.
-- Transition to `ongoing` is blocked until all required production items are fully allocated.
+- Transition to `ongoing` is blocked until all non-packaging production items are fully allocated.
+- Packaging-phase items may remain unallocated at start because they can arrive later during curing or before the packaging task without blocking fabrication.
+- When packaging is still missing at start, the UI raises a warning instead of blocking so the operator/planner can decide whether fabrication may continue safely.
 - `ready_date` remains an availability date (soap default +35 days, others +2 days unless overridden).
 
 ### Deletion contract

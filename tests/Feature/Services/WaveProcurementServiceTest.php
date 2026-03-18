@@ -17,6 +17,7 @@ use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
+use App\Models\Supply\Supply;
 use App\Models\User;
 use App\Services\InventoryMovementService;
 use App\Services\Production\WaveProcurementService;
@@ -370,6 +371,59 @@ describe('getPlanningList', function () {
             ->and((float) $line->wave_received_quantity)->toBe(72.0)
             ->and((float) $line->available_stock)->toBe(72.0)
             ->and((float) $line->remaining_to_order)->toBe(0.0);
+    });
+});
+
+describe('getCoverageSnapshotForWaves', function () {
+    it('returns bulk coverage snapshots for empty and visible non-active waves', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Beurre de karite']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $emptyWave = ProductionWave::factory()->draft()->create([
+            'planned_start_date' => '2026-03-20',
+        ]);
+
+        $draftWave = ProductionWave::factory()->draft()->create([
+            'planned_start_date' => '2026-03-22',
+        ]);
+
+        $production = Production::factory()->create([
+            'production_wave_id' => $draftWave->id,
+            'status' => ProductionStatus::Planned,
+            'production_date' => '2026-03-22',
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 10.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        Supply::factory()->inStock(20.0)->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_stock' => true,
+        ]);
+
+        $snapshots = waveProcurementService()->getCoverageSnapshotForWaves(collect([
+            $emptyWave,
+            $draftWave,
+        ]));
+
+        expect($snapshots)->toHaveCount(2)
+            ->and($snapshots->get($emptyWave->id))->toBe([
+                'label' => 'Sans besoin',
+                'color' => 'gray',
+                'tooltip' => 'Aucune production liée.',
+            ])
+            ->and($snapshots->get($draftWave->id)['label'])->toBe('Partielle')
+            ->and($snapshots->get($draftWave->id)['color'])->toBe('warning')
+            ->and($snapshots->get($draftWave->id)['tooltip'])->toContain('Besoin total: 10,000 kg');
     });
 });
 
@@ -1095,5 +1149,72 @@ describe('getOperationalPlanningList', function () {
             ->and((float) $context->remaining_to_order)->toBe(10.0)
             ->and($summary['remaining_to_order'])->toBe('10,000 kg')
             ->and($summary['contexts_count'])->toBe(1);
+    });
+
+    it('respects wave stock reserves in the operational overview', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile Ricin']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+            'unit_weight' => 1,
+        ]);
+
+        $wave = ProductionWave::factory()->create([
+            'name' => 'Vague Reserve',
+            'status' => WaveStatus::Approved,
+            'planned_start_date' => '2026-03-20',
+        ]);
+
+        $production = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Planned,
+            'production_date' => '2026-03-20',
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 80.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $listing->supplies()->create([
+            'order_ref' => 'PO-STOCK-OPER-RESERVE-001',
+            'batch_number' => 'LOT-STOCK-OPER-RESERVE-001',
+            'initial_quantity' => 100.0,
+            'quantity_in' => 100.0,
+            'quantity_out' => 0.0,
+            'allocated_quantity' => 0.0,
+            'unit_price' => 4.4,
+            'expiry_date' => now()->addMonths(6),
+            'delivery_date' => now(),
+            'is_in_stock' => true,
+        ]);
+
+        ProductionWaveStockDecision::factory()->create([
+            'production_wave_id' => $wave->id,
+            'ingredient_id' => $ingredient->id,
+            'reserved_quantity' => 30.0,
+        ]);
+
+        $line = waveProcurementService()->getOperationalPlanningList()->sole();
+        $summary = waveProcurementService()->getOperationalPlanningSummary();
+        $context = $line->contexts->sole();
+
+        expect($line->ingredient_name)->toBe('Huile Ricin')
+            ->and((float) $line->available_stock)->toBe(100.0)
+            ->and((float) $line->reserved_stock_quantity)->toBe(30.0)
+            ->and((float) $line->planned_stock_quantity)->toBe(70.0)
+            ->and((float) $line->remaining_to_secure)->toBe(10.0)
+            ->and((float) $line->remaining_to_order)->toBe(10.0)
+            ->and($context->context_type)->toBe('wave')
+            ->and((float) $context->stock_priority_quantity)->toBe(70.0)
+            ->and((float) $context->remaining_to_secure)->toBe(10.0)
+            ->and((float) $context->remaining_to_order)->toBe(10.0)
+            ->and($summary['available_stock'])->toBe('100,000 kg')
+            ->and($summary['remaining_to_order'])->toBe('10,000 kg')
+            ->and($summary['ingredients_to_order'])->toBe(1);
     });
 });
