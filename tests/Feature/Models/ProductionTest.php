@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
@@ -558,6 +559,80 @@ describe('Production Model', function () {
         ]);
 
         expect($production->fresh()->getSupplyCoverageState())->toBe('received');
+    });
+
+    it('computes fabrication readiness without blocking on packaging', function () {
+        $production = Production::factory()->confirmed()->create();
+        $production->productionItems()->delete();
+
+        $fabricationIngredient = Ingredient::factory()->create();
+        $packagingIngredient = Ingredient::factory()->create(['is_packaging' => true]);
+        $supply = Supply::factory()->inStock(100)->create();
+
+        $allocatedItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $fabricationIngredient->id,
+            'required_quantity' => 10,
+            'phase' => Phases::Additives->value,
+            'procurement_status' => ProcurementStatus::Received,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $allocatedItem->id,
+            'supply_id' => $supply->id,
+            'quantity' => 10,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $packagingIngredient->id,
+            'required_quantity' => 80,
+            'phase' => Phases::Packaging->value,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        expect($production->fresh()->getFabricationReadinessState())->toBe('ready')
+            ->and($production->fresh()->getFabricationReadinessLabel())->toBe('Prête')
+            ->and($production->fresh()->getFabricationReadinessTooltip())->toContain('Packaging à suivre');
+    });
+
+    it('marks fabrication readiness as partielle when fabrication inputs are covered but not yet allocated', function () {
+        $production = Production::factory()->confirmed()->create();
+        $production->productionItems()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'phase' => Phases::Additives->value,
+            'procurement_status' => ProcurementStatus::Ordered,
+        ]);
+
+        expect($production->fresh()->getFabricationReadinessState())->toBe('partial')
+            ->and($production->fresh()->getFabricationReadinessLabel())->toBe('Partielle');
+    });
+
+    it('marks fabrication readiness as a securiser when fabrication inputs are not covered', function () {
+        $production = Production::factory()->confirmed()->create();
+        $production->productionItems()->delete();
+
+        $ingredient = Ingredient::factory()->create();
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'required_quantity' => 10,
+            'phase' => Phases::Additives->value,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        expect($production->fresh()->getFabricationReadinessState())->toBe('missing')
+            ->and($production->fresh()->getFabricationReadinessLabel())->toBe('À sécuriser');
     });
 });
 

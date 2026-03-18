@@ -23,11 +23,11 @@ class ListProductionWaves extends ListRecords
     {
         return [
             Action::make('coverageLegend')
-                ->label(__('Légende couverture'))
+                ->label(__('Légende signaux'))
                 ->icon(Heroicon::OutlinedInformationCircle)
                 ->color('gray')
-                ->modalHeading(__('Légende couverture appro'))
-                ->modalDescription(__('Vert: prêt (pas de manque). Orange: partiel (stock/PO/provisoire à finaliser). Rouge: à sécuriser (manque indicatif).'))
+                ->modalHeading(__('Légende signaux vague'))
+                ->modalDescription(__('Couverture appro: vert = prêt sans manque, orange = stock/provisoire à finaliser, rouge = achat à sécuriser. Fabrication sécurisée: packaging exclu, vert = planning fabrication sécurisé, orange = support présent mais encore à finaliser, rouge = fabrication non sécurisée.'))
                 ->modalSubmitAction(false)
                 ->modalCancelActionLabel(__('Fermer')),
             CreateAction::make(),
@@ -45,11 +45,19 @@ class ListProductionWaves extends ListRecords
         $waveRecords = $this->getWaveTableRecordsCollection($records);
 
         if ($waveRecords->isNotEmpty()) {
-            $coverageSnapshots = app(WaveProcurementService::class)->getCoverageSnapshotForWaves($waveRecords);
+            $service = app(WaveProcurementService::class);
+            $coverageSnapshots = $service->getCoverageSnapshotForWaves($waveRecords);
+            $fabricationSnapshots = $service->getFabricationSnapshotForWaves($waveRecords);
 
-            $waveRecords->each(function (ProductionWave $wave) use ($coverageSnapshots): void {
+            $waveRecords->each(function (ProductionWave $wave) use ($coverageSnapshots, $fabricationSnapshots): void {
                 /** @var array{label: string, color: string, tooltip: string} $snapshot */
                 $snapshot = $coverageSnapshots->get($wave->id, [
+                    'label' => __('Sans besoin'),
+                    'color' => 'gray',
+                    'tooltip' => __('Aucune production liée.'),
+                ]);
+                /** @var array{label: string, color: string, tooltip: string} $fabricationSnapshot */
+                $fabricationSnapshot = $fabricationSnapshots->get($wave->id, [
                     'label' => __('Sans besoin'),
                     'color' => 'gray',
                     'tooltip' => __('Aucune production liée.'),
@@ -58,6 +66,9 @@ class ListProductionWaves extends ListRecords
                 $wave->setAttribute('coverage_signal_label', $snapshot['label']);
                 $wave->setAttribute('coverage_signal_color', $snapshot['color']);
                 $wave->setAttribute('coverage_signal_tooltip', $snapshot['tooltip']);
+                $wave->setAttribute('fabrication_signal_label', $fabricationSnapshot['label']);
+                $wave->setAttribute('fabrication_signal_color', $fabricationSnapshot['color']);
+                $wave->setAttribute('fabrication_signal_tooltip', $fabricationSnapshot['tooltip']);
             });
         }
 

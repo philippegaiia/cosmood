@@ -198,6 +198,21 @@ class ProductionWave extends Model
         return $this->getCoverageSnapshot()['tooltip'];
     }
 
+    public function getFabricationSignalLabel(): string
+    {
+        return $this->getFabricationSnapshot()['label'];
+    }
+
+    public function getFabricationSignalColor(): string
+    {
+        return $this->getFabricationSnapshot()['color'];
+    }
+
+    public function getFabricationSignalTooltip(): string
+    {
+        return $this->getFabricationSnapshot()['tooltip'];
+    }
+
     /**
      * @return array{label: string, color: string, tooltip: string}
      */
@@ -211,6 +226,22 @@ class ProductionWave extends Model
             return app(WaveProcurementService::class)
                 ->getCoverageSnapshotForWaves(collect([$this]))
                 ->get($this->id, $this->getDefaultCoverageSnapshot());
+        });
+    }
+
+    /**
+     * @return array{label: string, color: string, tooltip: string}
+     */
+    private function getFabricationSnapshot(): array
+    {
+        return once(function (): array {
+            if (! $this->exists) {
+                return $this->getDefaultFabricationSnapshot();
+            }
+
+            return app(WaveProcurementService::class)
+                ->getFabricationSnapshotForWaves(collect([$this]))
+                ->get($this->id, $this->getDefaultFabricationSnapshot());
         });
     }
 
@@ -267,6 +298,18 @@ class ProductionWave extends Model
      * @return array{label: string, color: string, tooltip: string}
      */
     private function getDefaultCoverageSnapshot(): array
+    {
+        return [
+            'label' => __('Sans besoin'),
+            'color' => 'gray',
+            'tooltip' => __('Aucune production liée.'),
+        ];
+    }
+
+    /**
+     * @return array{label: string, color: string, tooltip: string}
+     */
+    private function getDefaultFabricationSnapshot(): array
     {
         return [
             'label' => __('Sans besoin'),

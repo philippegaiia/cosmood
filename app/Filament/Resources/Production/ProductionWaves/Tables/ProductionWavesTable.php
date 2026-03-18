@@ -46,6 +46,12 @@ class ProductionWavesTable
                     ->badge()
                     ->color(fn (ProductionWave $record): string => (string) ($record->getAttribute('coverage_signal_color') ?? $record->getCoverageSignalColor()))
                     ->tooltip(fn (ProductionWave $record): string => (string) ($record->getAttribute('coverage_signal_tooltip') ?? $record->getCoverageSignalTooltip())),
+                TextColumn::make('fabrication_signal')
+                    ->label(__('Fabrication sécurisée'))
+                    ->state(fn (ProductionWave $record): string => (string) ($record->getAttribute('fabrication_signal_label') ?? $record->getFabricationSignalLabel()))
+                    ->badge()
+                    ->color(fn (ProductionWave $record): string => (string) ($record->getAttribute('fabrication_signal_color') ?? $record->getFabricationSignalColor()))
+                    ->tooltip(fn (ProductionWave $record): string => (string) ($record->getAttribute('fabrication_signal_tooltip') ?? $record->getFabricationSignalTooltip())),
                 TextColumn::make('status_sync_advisory')
                     ->label('Alerte flux')
                     ->state(fn (ProductionWave $record): ?string => $record->getStatusAdvisoryMessage())

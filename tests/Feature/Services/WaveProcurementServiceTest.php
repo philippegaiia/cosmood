@@ -10,6 +10,7 @@ use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionItemAllocation;
 use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductionWaveStockDecision;
 use App\Models\Supply\Ingredient;
@@ -424,6 +425,127 @@ describe('getCoverageSnapshotForWaves', function () {
             ->and($snapshots->get($draftWave->id)['label'])->toBe('Partielle')
             ->and($snapshots->get($draftWave->id)['color'])->toBe('warning')
             ->and($snapshots->get($draftWave->id)['tooltip'])->toContain('Besoin total: 10,000 kg');
+    });
+
+    it('keeps the procurement badge ready when firm linked orders cover needs even if stock is also available', function () {
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile ricin']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $wave = ProductionWave::factory()->approved()->create([
+            'planned_start_date' => '2026-03-26',
+        ]);
+
+        $production = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Planned,
+            'production_date' => '2026-03-26',
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 10.0,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        Supply::factory()->inStock(20.0)->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_stock' => true,
+        ]);
+
+        $order = SupplierOrder::factory()
+            ->passed()
+            ->forWave($wave)
+            ->create([
+                'supplier_id' => $supplier->id,
+            ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 1,
+            'unit_weight' => 10,
+            'committed_quantity_kg' => 10,
+        ]);
+
+        $snapshots = waveProcurementService()->getCoverageSnapshotForWaves(collect([$wave]));
+
+        expect($snapshots->get($wave->id)['label'])->toBe('Prête')
+            ->and($snapshots->get($wave->id)['color'])->toBe('success');
+    });
+});
+
+describe('getFabricationSnapshotForWaves', function () {
+    it('ignores packaging-only shortages in fabrication readiness', function () {
+        $supplier = Supplier::factory()->create();
+        $fabricationIngredient = Ingredient::factory()->create(['name' => 'Soude']);
+        $packagingIngredient = Ingredient::factory()->create([
+            'name' => 'Boite kraft',
+            'is_packaging' => true,
+        ]);
+
+        $fabricationListing = SupplierListing::factory()->create([
+            'ingredient_id' => $fabricationIngredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+        $packagingListing = SupplierListing::factory()->create([
+            'ingredient_id' => $packagingIngredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        $wave = ProductionWave::factory()->approved()->create([
+            'planned_start_date' => '2026-03-24',
+        ]);
+
+        $production = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Confirmed,
+            'production_date' => '2026-03-24',
+        ]);
+
+        $supply = Supply::factory()->inStock(10.0)->create([
+            'supplier_listing_id' => $fabricationListing->id,
+            'is_in_stock' => true,
+        ]);
+
+        $allocatedItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $fabricationIngredient->id,
+            'supplier_listing_id' => $fabricationListing->id,
+            'required_quantity' => 10.0,
+            'phase' => Phases::Additives->value,
+            'supply_id' => $supply->id,
+            'procurement_status' => ProcurementStatus::Received,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $allocatedItem->id,
+            'supply_id' => $supply->id,
+            'quantity' => 10.0,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $packagingIngredient->id,
+            'supplier_listing_id' => $packagingListing->id,
+            'required_quantity' => 80.0,
+            'phase' => Phases::Packaging->value,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $coverageSnapshots = waveProcurementService()->getCoverageSnapshotForWaves(collect([$wave]));
+        $fabricationSnapshots = waveProcurementService()->getFabricationSnapshotForWaves(collect([$wave]));
+
+        expect($coverageSnapshots->get($wave->id)['label'])->toBe('À sécuriser')
+            ->and($fabricationSnapshots->get($wave->id)['label'])->toBe('Prête')
+            ->and($fabricationSnapshots->get($wave->id)['tooltip'])->toContain('Packaging exclu');
     });
 });
 

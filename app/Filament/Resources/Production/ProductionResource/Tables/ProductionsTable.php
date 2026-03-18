@@ -100,6 +100,12 @@ class ProductionsTable
                         $record->status->getLabel(),
                         $record->getSupplyCoverageLabel()
                     )),
+                TextColumn::make('fabrication_readiness')
+                    ->label(__('Prêt à démarrer'))
+                    ->state(fn (Production $record): string => $record->getFabricationReadinessLabel())
+                    ->badge()
+                    ->color(fn (Production $record): string => $record->getFabricationReadinessColor())
+                    ->tooltip(fn (Production $record): string => $record->getFabricationReadinessTooltip()),
                 TextColumn::make('planned_quantity')
                     ->label('Quantité planifiée')
                     ->numeric()
@@ -367,7 +373,12 @@ class ProductionsTable
                     ->authorize(fn (): bool => auth()->user()?->canDeleteProductionRuns() ?? false)
                     ->authorizeIndividualRecords(fn (Production $record): bool => $record->canBeDeleted()),
             ])
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['productionItems', 'productionLine']))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with([
+                'productionItems.ingredient:id,name',
+                'productionItems.allocations',
+                'productionLine',
+                'masterbatchLot:id,replaces_phase',
+            ]))
             ->defaultSort('created_at', 'desc');
     }
 

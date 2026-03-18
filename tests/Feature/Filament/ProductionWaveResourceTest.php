@@ -1,9 +1,11 @@
 <?php
 
+use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
 use App\Enums\WaveStatus;
+use App\Filament\Resources\Production\ProductionResource\Pages\ListProductions;
 use App\Filament\Resources\Production\ProductionWaves\Pages\CreateProductionWave;
 use App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave;
 use App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves;
@@ -13,6 +15,7 @@ use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionItem;
+use App\Models\Production\ProductionItemAllocation;
 use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductionTaskType;
 use App\Models\Production\ProductionWave;
@@ -319,7 +322,7 @@ describe('ProductionWaveResource - table actions', function () {
 
     it('shows procurement coverage legend action on list page', function () {
         Livewire::test(ListProductionWaves::class)
-            ->assertSee('Légende couverture');
+            ->assertSee('Légende signaux');
     });
 
     it('marks only not ordered items for selected ingredients at wave level', function () {
@@ -668,6 +671,144 @@ describe('ProductionWaveResource - table actions', function () {
         expect($wave->fresh()->getCoverageSignalLabel())->toBe('Partielle');
     });
 
+    it('keeps procurement ready when firm linked orders cover needs even if stock is available', function () {
+        $wave = ProductionWave::factory()->approved()->create();
+        $production = Production::factory()->create(['production_wave_id' => $wave->id]);
+        $ingredient = Ingredient::factory()->create();
+        $supplier = Supplier::factory()->create();
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 10,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        Supply::factory()->inStock(20)->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_stock' => true,
+        ]);
+
+        $order = SupplierOrder::factory()
+            ->passed()
+            ->forWave($wave)
+            ->create([
+                'supplier_id' => $supplier->id,
+            ]);
+
+        SupplierOrderItem::factory()->create([
+            'supplier_order_id' => $order->id,
+            'supplier_listing_id' => $listing->id,
+            'quantity' => 1,
+            'unit_weight' => 10,
+            'committed_quantity_kg' => 10,
+        ]);
+
+        Livewire::test(ListProductionWaves::class)
+            ->assertSee('Couverture appro');
+
+        expect($wave->fresh()->getCoverageSignalLabel())->toBe('Prête');
+    });
+
+    it('shows fabrication ready while procurement remains to secure when only packaging is missing', function () {
+        $wave = ProductionWave::factory()->approved()->create();
+        $production = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Confirmed,
+        ]);
+        $supplier = Supplier::factory()->create();
+        $fabricationIngredient = Ingredient::factory()->create();
+        $packagingIngredient = Ingredient::factory()->create(['is_packaging' => true]);
+        $fabricationListing = SupplierListing::factory()->create([
+            'ingredient_id' => $fabricationIngredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+        $packagingListing = SupplierListing::factory()->create([
+            'ingredient_id' => $packagingIngredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+        $supply = Supply::factory()->inStock(10)->create([
+            'supplier_listing_id' => $fabricationListing->id,
+            'is_in_stock' => true,
+        ]);
+
+        $allocatedItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $fabricationIngredient->id,
+            'supplier_listing_id' => $fabricationListing->id,
+            'required_quantity' => 10,
+            'phase' => Phases::Additives->value,
+            'procurement_status' => ProcurementStatus::Received,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $allocatedItem->id,
+            'supply_id' => $supply->id,
+            'quantity' => 10,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $packagingIngredient->id,
+            'supplier_listing_id' => $packagingListing->id,
+            'required_quantity' => 96,
+            'phase' => Phases::Packaging->value,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        Livewire::test(ListProductionWaves::class)
+            ->assertSee('Couverture appro')
+            ->assertSee('Fabrication sécurisée');
+
+        expect($wave->fresh()->getCoverageSignalLabel())->toBe('À sécuriser')
+            ->and($wave->fresh()->getFabricationSignalLabel())->toBe('Prête');
+    });
+
+    it('uses different planning and execution labels when stock exists but fabrication lots are not yet allocated', function () {
+        $wave = ProductionWave::factory()->approved()->create();
+        $production = Production::factory()->create([
+            'production_wave_id' => $wave->id,
+            'status' => ProductionStatus::Confirmed,
+        ]);
+        $supplier = Supplier::factory()->create();
+        $ingredient = Ingredient::factory()->create(['name' => 'Huile de tournesol']);
+        $listing = SupplierListing::factory()->create([
+            'ingredient_id' => $ingredient->id,
+            'supplier_id' => $supplier->id,
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $ingredient->id,
+            'supplier_listing_id' => $listing->id,
+            'required_quantity' => 10,
+            'phase' => Phases::Additives->value,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        Supply::factory()->inStock(10)->create([
+            'supplier_listing_id' => $listing->id,
+            'is_in_stock' => true,
+        ]);
+
+        Livewire::test(ListProductionWaves::class)
+            ->assertSee('Fabrication sécurisée');
+
+        Livewire::test(ListProductions::class)
+            ->assertSee('Prêt à démarrer');
+
+        expect($wave->fresh()->getFabricationSignalLabel())->toBe('Partielle')
+            ->and($production->fresh()->getFabricationReadinessLabel())->toBe('À sécuriser');
+    });
+
     it('renders the list page without exploding the query count for coverage badges', function () {
         $supplier = Supplier::factory()->create();
         $ingredient = Ingredient::factory()->create(['name' => 'Argile blanche']);
@@ -709,6 +850,7 @@ describe('ProductionWaveResource - table actions', function () {
 
         Livewire::test(ListProductionWaves::class)
             ->assertSee('Couverture appro')
+            ->assertSee('Fabrication sécurisée')
             ->assertSee('Partielle');
 
         $queryCount = count(DB::getQueryLog());

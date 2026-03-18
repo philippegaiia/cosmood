@@ -68,6 +68,11 @@ class WaveProcurementService
      */
     private array $waveProductionItemsByWaveCache = [];
 
+    /**
+     * @var array<string, Collection<int, array{coverage: array{label: string, color: string, tooltip: string}, fabrication: array{label: string, color: string, tooltip: string}}>>
+     */
+    private array $waveStatusSnapshotsCache = [];
+
     public function aggregateRequirements(ProductionWave $wave): Collection
     {
         $items = $this->getWaveProductionItems($wave);
@@ -95,6 +100,26 @@ class WaveProcurementService
      */
     public function getCoverageSnapshotForWaves(Collection $visibleWaves): Collection
     {
+        return $this->getWaveStatusSnapshotsForWaves($visibleWaves)
+            ->mapWithKeys(fn (array $snapshots, int $waveId): array => [$waveId => $snapshots['coverage']]);
+    }
+
+    /**
+     * @param  Collection<int, ProductionWave>  $visibleWaves
+     * @return Collection<int, array{label: string, color: string, tooltip: string}>
+     */
+    public function getFabricationSnapshotForWaves(Collection $visibleWaves): Collection
+    {
+        return $this->getWaveStatusSnapshotsForWaves($visibleWaves)
+            ->mapWithKeys(fn (array $snapshots, int $waveId): array => [$waveId => $snapshots['fabrication']]);
+    }
+
+    /**
+     * @param  Collection<int, ProductionWave>  $visibleWaves
+     * @return Collection<int, array{coverage: array{label: string, color: string, tooltip: string}, fabrication: array{label: string, color: string, tooltip: string}}>
+     */
+    private function getWaveStatusSnapshotsForWaves(Collection $visibleWaves): Collection
+    {
         $requestedWaves = $visibleWaves
             ->filter(fn (mixed $wave): bool => $wave instanceof ProductionWave && $wave->exists)
             ->mapWithKeys(fn (ProductionWave $wave): array => [$wave->id => $wave]);
@@ -103,6 +128,36 @@ class WaveProcurementService
             return collect();
         }
 
+        $cacheKey = $this->getWaveIdsCacheKey($requestedWaves->keys());
+
+        return $this->waveStatusSnapshotsCache[$cacheKey] ??= (function () use ($requestedWaves): Collection {
+            $enrichedLinesByWave = $this->getEnrichedPlanningLinesByRequestedWaves($requestedWaves);
+
+            return $requestedWaves->mapWithKeys(function (ProductionWave $wave) use ($enrichedLinesByWave): array {
+                $lines = $enrichedLinesByWave->get($wave->id, collect());
+
+                return [
+                    $wave->id => [
+                        'coverage' => $this->buildCoverageSnapshot(
+                            wave: $wave,
+                            lines: $lines,
+                        ),
+                        'fabrication' => $this->buildFabricationSnapshot(
+                            wave: $wave,
+                            lines: $lines,
+                        ),
+                    ],
+                ];
+            });
+        })();
+    }
+
+    /**
+     * @param  Collection<int, ProductionWave>  $requestedWaves
+     * @return Collection<int, Collection<int, object>>
+     */
+    private function getEnrichedPlanningLinesByRequestedWaves(Collection $requestedWaves): Collection
+    {
         $planningWaves = $this->getRelevantPlanningWaves($requestedWaves);
         $stockByIngredient = $this->getStockByIngredient();
         $firmOpenOrderPools = $this->getOpenOrderPoolsByIngredient(self::FIRM_ORDER_STATUSES);
@@ -118,7 +173,8 @@ class WaveProcurementService
             waveOrderQuantitiesByWave: $waveOrderQuantitiesByWave,
         );
         $priorityAllocations = $this->buildPriorityProvisionalAllocations($waveLinesByWave, $firmOpenOrderPools);
-        $enrichedLinesByWave = $planningWaves->mapWithKeys(function (ProductionWave $wave) use ($waveLinesByWave, $firmOpenOrderPools, $draftOrderQuantities, $priorityAllocations): array {
+
+        return $planningWaves->mapWithKeys(function (ProductionWave $wave) use ($waveLinesByWave, $firmOpenOrderPools, $draftOrderQuantities, $priorityAllocations): array {
             return [
                 $wave->id => $this->sortPlanningLines($this->enrichLinesWithOpenOrderContext(
                     lines: $waveLinesByWave->get($wave->id, collect()),
@@ -127,15 +183,6 @@ class WaveProcurementService
                     priorityAllocations: $priorityAllocations,
                     waveId: $wave->id,
                 )),
-            ];
-        });
-
-        return $requestedWaves->mapWithKeys(function (ProductionWave $wave) use ($enrichedLinesByWave): array {
-            return [
-                $wave->id => $this->buildCoverageSnapshot(
-                    wave: $wave,
-                    lines: $enrichedLinesByWave->get($wave->id, collect()),
-                ),
             ];
         });
     }
@@ -1539,8 +1586,7 @@ class WaveProcurementService
 
         $hasRemainingRequirement = $lines->contains(fn (object $line): bool => (float) ($line->remaining_requirement ?? 0) > 0);
         $hasRemainingToOrder = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_order ?? 0) > 0);
-        $hasPartialCoverage = $lines->contains(fn (object $line): bool => (float) ($line->remaining_to_secure ?? 0) > 0)
-            || $lines->contains(fn (object $line): bool => (float) ($line->available_stock ?? 0) > 0 && (float) ($line->remaining_requirement ?? 0) > 0);
+        $hasPartialCoverage = $lines->contains(fn (object $line): bool => $this->lineReliesOnNonFirmCoverage($line));
 
         if (! $hasRemainingRequirement) {
             return [
@@ -1570,6 +1616,80 @@ class WaveProcurementService
     }
 
     /**
+     * Planning-facing fabrication signal for wave lists.
+     *
+     * This intentionally differs from production execution readiness: it answers
+     * whether fabrication looks secured from a planner/purchasing perspective,
+     * even when exact lots have not yet been allocated on each production.
+     *
+     * @param  Collection<int, object>  $lines
+     * @return array{label: string, color: string, tooltip: string}
+     */
+    private function buildFabricationSnapshot(ProductionWave $wave, Collection $lines): array
+    {
+        if (! $this->waveHasLinkedProductions($wave)) {
+            return $this->getNoProductionCoverageSnapshot();
+        }
+
+        $fabricationLines = $this->filterFabricationLines($lines);
+
+        if ($fabricationLines->isEmpty()) {
+            return [
+                'label' => __('Prête'),
+                'color' => 'success',
+                'tooltip' => __('Aucun intrant fabrication bloquant. Packaging exclu de ce signal.'),
+            ];
+        }
+
+        $signal = $this->buildFabricationSignal($fabricationLines);
+
+        return [
+            'label' => $signal['label'],
+            'color' => $signal['color'],
+            'tooltip' => __('Non alloué fabrication: :remaining | Achat supplémentaire: :toOrder | Packaging exclu.', [
+                'remaining' => $this->formatPlanningQuantityByUnit($fabricationLines, 'remaining_requirement'),
+                'toOrder' => $this->formatPlanningQuantityByUnit($fabricationLines, 'remaining_to_order'),
+            ]),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return array{label: string, color: string}
+     */
+    private function buildFabricationSignal(Collection $lines): array
+    {
+        if ($lines->isEmpty()) {
+            return [
+                'label' => __('Prête'),
+                'color' => 'success',
+            ];
+        }
+
+        $hasRemainingRequirement = $lines->contains(fn (object $line): bool => (float) ($line->remaining_requirement ?? 0) > 0);
+        $hasUnsecuredNeed = $lines->contains(fn (object $line): bool => (float) ($line->remaining_requirement ?? 0) > 0 && ! $this->lineHasFabricationCoverageSupport($line));
+
+        if (! $hasRemainingRequirement) {
+            return [
+                'label' => __('Prête'),
+                'color' => 'success',
+            ];
+        }
+
+        if ($hasUnsecuredNeed) {
+            return [
+                'label' => __('À sécuriser'),
+                'color' => 'danger',
+            ];
+        }
+
+        return [
+            'label' => __('Partielle'),
+            'color' => 'warning',
+        ];
+    }
+
+    /**
      * @return array{label: string, color: string, tooltip: string}
      */
     private function getNoProductionCoverageSnapshot(): array
@@ -1579,6 +1699,52 @@ class WaveProcurementService
             'color' => 'gray',
             'tooltip' => __('Aucune production liée.'),
         ];
+    }
+
+    private function lineReliesOnNonFirmCoverage(object $line): bool
+    {
+        $remainingRequirement = round((float) ($line->remaining_requirement ?? 0), 3);
+
+        if ($remainingRequirement <= 0) {
+            return false;
+        }
+
+        $remainingAfterWaveOrders = max(0, $remainingRequirement - (float) ($line->wave_open_order_quantity ?? 0));
+
+        if ($remainingAfterWaveOrders <= 0) {
+            return false;
+        }
+
+        return round((float) ($line->planned_stock_quantity ?? 0), 3) > 0
+            || round((float) ($line->open_orders_not_committed ?? 0), 3) > 0;
+    }
+
+    /**
+     * @param  Collection<int, object>  $lines
+     * @return Collection<int, object>
+     */
+    private function filterFabricationLines(Collection $lines): Collection
+    {
+        return $lines
+            ->filter(function (object $line): bool {
+                $items = $line->items ?? collect();
+
+                if (! $items instanceof Collection) {
+                    $items = collect([$items]);
+                }
+
+                return $items->contains(fn (mixed $item): bool => $item instanceof ProductionItem && $item->blocksOngoingStart());
+            })
+            ->values();
+    }
+
+    private function lineHasFabricationCoverageSupport(object $line): bool
+    {
+        return round((float) ($line->planned_stock_quantity ?? 0), 3) > 0
+            || round((float) ($line->wave_open_order_quantity ?? 0), 3) > 0
+            || round((float) ($line->open_orders_not_committed ?? 0), 3) > 0
+            || round((float) ($line->ordered_quantity ?? 0), 3) > 0
+            || round((float) ($line->received_quantity ?? 0), 3) > 0;
     }
 
     private function waveHasLinkedProductions(ProductionWave $wave): bool

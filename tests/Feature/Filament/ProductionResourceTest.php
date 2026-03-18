@@ -1268,6 +1268,48 @@ describe('Production list table actions', function () {
         expect((int) ($secondMatches[1] ?? 0))->toBe((int) ($firstMatches[1] ?? 0) + 1);
     });
 
+    it('shows fabrication readiness on the production list when only packaging is missing', function () {
+        $this->actingAs($this->user);
+
+        $production = Production::factory()->confirmed()->create();
+        $production->productionItems()->delete();
+
+        $fabricationIngredient = Ingredient::factory()->create();
+        $packagingIngredient = Ingredient::factory()->create(['is_packaging' => true]);
+        $supply = Supply::factory()->inStock(100)->create();
+
+        $allocatedItem = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $fabricationIngredient->id,
+            'required_quantity' => 10,
+            'phase' => Phases::Additives->value,
+            'procurement_status' => ProcurementStatus::Received,
+            'supply_id' => $supply->id,
+        ]);
+
+        ProductionItemAllocation::query()->create([
+            'production_item_id' => $allocatedItem->id,
+            'supply_id' => $supply->id,
+            'quantity' => 10,
+            'status' => 'reserved',
+            'reserved_at' => now(),
+        ]);
+
+        ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'ingredient_id' => $packagingIngredient->id,
+            'required_quantity' => 96,
+            'phase' => Phases::Packaging->value,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        Livewire::test(ListProductions::class)
+            ->assertSee('Prêt à démarrer')
+            ->assertSee('Prête');
+
+        expect($production->fresh()->getFabricationReadinessLabel())->toBe('Prête');
+    });
+
     it('marks orphan production items as ordered from the production list', function () {
         $this->actingAs($this->user);
 

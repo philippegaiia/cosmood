@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -346,6 +347,26 @@ class Production extends Model implements Eventable
         };
     }
 
+    public function getFabricationReadinessState(): string
+    {
+        return $this->getFabricationReadinessSnapshot()['state'];
+    }
+
+    public function getFabricationReadinessLabel(): string
+    {
+        return $this->getFabricationReadinessSnapshot()['label'];
+    }
+
+    public function getFabricationReadinessColor(): string
+    {
+        return $this->getFabricationReadinessSnapshot()['color'];
+    }
+
+    public function getFabricationReadinessTooltip(): string
+    {
+        return $this->getFabricationReadinessSnapshot()['tooltip'];
+    }
+
     /**
      * Whether this production can still be deleted as a planning rollback.
      *
@@ -669,6 +690,82 @@ class Production extends Model implements Eventable
     }
 
     /**
+     * Execution-facing fabrication readiness.
+     *
+     * Unlike wave planning badges, this snapshot stays strict about actual lot
+     * allocation because it answers the operator question: can this batch start now?
+     *
+     * @return array{state: string, label: string, color: string, tooltip: string}
+     */
+    private function getFabricationReadinessSnapshot(): array
+    {
+        return once(function (): array {
+            $items = $this->getPlanningRelevantItems();
+
+            if ($items->isEmpty()) {
+                return [
+                    'state' => 'none',
+                    'label' => __('Sans besoin'),
+                    'color' => 'gray',
+                    'tooltip' => __('Aucun item de production.'),
+                ];
+            }
+
+            $fabricationItems = $items
+                ->filter(fn (ProductionItem $item): bool => $item->blocksOngoingStart())
+                ->values();
+            $packagingWarnings = $items
+                ->filter(fn (ProductionItem $item): bool => $item->isPackagingPhase() && ! $item->isFullyAllocated())
+                ->map(fn (ProductionItem $item): string => (string) ($item->ingredient?->name ?: 'Item #'.$item->id))
+                ->unique()
+                ->take(5)
+                ->values()
+                ->all();
+
+            if ($fabricationItems->isEmpty()) {
+                return [
+                    'state' => 'ready',
+                    'label' => __('Prête'),
+                    'color' => 'success',
+                    'tooltip' => $this->buildFabricationReadyTooltip($packagingWarnings),
+                ];
+            }
+
+            $blockingItems = $fabricationItems
+                ->filter(fn (ProductionItem $item): bool => ! $item->isFullyAllocated())
+                ->map(fn (ProductionItem $item): string => (string) ($item->ingredient?->name ?: 'Item #'.$item->id))
+                ->unique()
+                ->take(5)
+                ->values()
+                ->all();
+
+            if ($blockingItems === []) {
+                return [
+                    'state' => 'ready',
+                    'label' => __('Prête'),
+                    'color' => 'success',
+                    'tooltip' => $this->buildFabricationReadyTooltip($packagingWarnings),
+                ];
+            }
+
+            $hasMissingProcurement = $fabricationItems->contains(
+                fn (ProductionItem $item): bool => ! $item->isFullyAllocated() && ! $item->isCoveredByProcurementSignal()
+            );
+
+            return [
+                'state' => $hasMissingProcurement ? 'missing' : 'partial',
+                'label' => $hasMissingProcurement ? __('À sécuriser') : __('Partielle'),
+                'color' => $hasMissingProcurement ? 'danger' : 'warning',
+                'tooltip' => $this->buildFabricationBlockingTooltip(
+                    blockingItems: $blockingItems,
+                    packagingWarnings: $packagingWarnings,
+                    hasMissingProcurement: $hasMissingProcurement,
+                ),
+            ];
+        });
+    }
+
+    /**
      * @param  callable(ProductionItem): bool  $shouldIncludeItem
      * @return array<int, string>
      */
@@ -688,6 +785,57 @@ class Production extends Model implements Eventable
             ->take($limit)
             ->values()
             ->all();
+    }
+
+    /**
+     * @return Collection<int, ProductionItem>
+     */
+    private function getPlanningRelevantItems(): Collection
+    {
+        $this->loadMissing('productionItems.ingredient', 'productionItems.allocations', 'masterbatchLot');
+
+        $replacedPhase = self::resolveMasterbatchReplacedPhase($this);
+
+        return $this->productionItems
+            ->when($replacedPhase !== null, fn (Collection $items): Collection => $items->where('phase', '!=', $replacedPhase))
+            ->values();
+    }
+
+    /**
+     * @param  array<int, string>  $packagingWarnings
+     */
+    private function buildFabricationReadyTooltip(array $packagingWarnings): string
+    {
+        if ($packagingWarnings === []) {
+            return __('Tous les intrants fabrication sont alloués.');
+        }
+
+        return __('Intrants fabrication alloués. Packaging à suivre : :items.', [
+            'items' => implode(', ', $packagingWarnings),
+        ]);
+    }
+
+    /**
+     * @param  array<int, string>  $blockingItems
+     * @param  array<int, string>  $packagingWarnings
+     */
+    private function buildFabricationBlockingTooltip(array $blockingItems, array $packagingWarnings, bool $hasMissingProcurement): string
+    {
+        $base = $hasMissingProcurement
+            ? __('Intrants fabrication à sécuriser : :items.', [
+                'items' => implode(', ', $blockingItems),
+            ])
+            : __('Intrants fabrication encore non alloués : :items.', [
+                'items' => implode(', ', $blockingItems),
+            ]);
+
+        if ($packagingWarnings === []) {
+            return $base;
+        }
+
+        return $base.' '.__('Packaging à suivre : :items.', [
+            'items' => implode(', ', $packagingWarnings),
+        ]);
     }
 
     /**

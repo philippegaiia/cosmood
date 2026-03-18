@@ -116,7 +116,23 @@ This document describes the current production-side business rules implemented i
 
 - Wave creation is always initialized as `draft` (no planned end date required at creation time).
 - Wave edit now includes an `Approvisionnement` tab centered on wave-level coverage per ingredient.
-- Wave list includes a procurement coverage signal (`Prête`, `Partielle`, `À sécuriser`) based on actual remaining-to-order first, then partial coverage through stock or non-firm coverage.
+- Wave list now shows two distinct badges:
+  - `Couverture appro` = overall procurement coverage, including packaging,
+  - `Fabrication sécurisée` = planning-oriented fabrication signal, excluding packaging-phase items.
+- `Couverture appro` semantics:
+  - `Prête` = no remaining purchase/security gap,
+  - `Partielle` = covered through stock or non-firm support still to finalize,
+  - `À sécuriser` = additional purchasing/security action still needed.
+- `Fabrication sécurisée` semantics on waves:
+  - `Prête` = fabrication is secured from a planning point of view,
+  - `Partielle` = support exists (stock / firm support / provisional support) but still needs follow-up,
+  - `À sécuriser` = fabrication still lacks enough support from a planning/purchasing point of view.
+- Production list shows a separate execution badge: `Prêt à démarrer`.
+- `Prêt à démarrer` semantics on productions:
+  - `Prête` = all non-packaging blocking inputs are already allocated,
+  - `Partielle` = execution is covered/in progress but still not fully allocated,
+  - `À sécuriser` = at least one blocking input is still not secure enough to start now.
+- A same batch can therefore appear as `Fabrication sécurisée = Partielle` on the wave while `Prêt à démarrer = À sécuriser` on the production when stock exists in the warehouse but the exact lots are not yet allocated.
 - Wave procurement tab semantics:
   - `date besoin` = `planned_start_date - 7 jours`,
   - quantities are displayed in the ingredient operational unit (`kg` or `u`),
@@ -345,6 +361,7 @@ Output semantics:
 - Transition to `ongoing` is blocked until all non-packaging production items are fully allocated.
 - Packaging-phase items may remain unallocated at start because they can arrive later during curing or before the packaging task without blocking fabrication.
 - When packaging is still missing at start, the UI raises a warning instead of blocking so the operator/planner can decide whether fabrication may continue safely.
+- This is intentionally different from planning badges: packaging can keep `Couverture appro` orange/red while `Fabrication sécurisée` stays green on the wave, and `Prêt à démarrer` on the production can stay stricter because actual lot allocation still matters.
 - `ready_date` remains an availability date (soap default +35 days, others +2 days unless overridden).
 
 ### Deletion contract
