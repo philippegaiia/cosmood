@@ -2,6 +2,8 @@
 
 return [
 
+    'label' => 'Production',
+
     'confirm_status_change' => 'Confirm status change',
     'confirm_saponified_total' => 'Saponified total different from 100%',
     'confirm_multiple' => 'Confirm changes',

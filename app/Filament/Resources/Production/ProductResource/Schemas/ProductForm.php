@@ -23,13 +23,13 @@ class ProductForm
     {
         return $schema
             ->components([
-                Section::make(__('Classification'))
+                Section::make(__('resources.products.form.sections.classification'))
                     ->columnSpanFull()
                     ->schema([
                         Grid::make(4)
                             ->schema([
                                 Select::make('product_category_id')
-                                    ->label(__('Catégorie'))
+                                    ->label(__('resources.products.form.fields.category'))
                                     ->relationship('productCategory', 'name')
                                     ->native(false)
                                     ->live()
@@ -38,7 +38,7 @@ class ProductForm
                                     })
                                     ->required(),
                                 Select::make('product_type_id')
-                                    ->label(__('Type de produit'))
+                                    ->label(__('resources.products.form.fields.product_type'))
                                     ->options(function (Get $get): array {
                                         return self::getProductTypeOptionsForCategory((int) ($get('product_category_id') ?? 0));
                                     })
@@ -47,15 +47,15 @@ class ProductForm
                                     ->native(false)
                                     ->placeholder(function (Get $get): string {
                                         if (blank($get('product_category_id'))) {
-                                            return __('Choisissez d\'abord une catégorie');
+                                            return __('resources.products.form.placeholders.choose_category_first');
                                         }
 
-                                        return __('Sélectionnez un type');
+                                        return __('resources.products.form.placeholders.select_type');
                                     })
                                     ->disabled(fn (Get $get): bool => blank($get('product_category_id')))
                                     ->required(),
                                 Select::make('produced_ingredient_id')
-                                    ->label(__('Ingrédient fabriqué'))
+                                    ->label(__('resources.products.form.fields.manufactured_ingredient'))
                                     ->relationship(
                                         name: 'producedIngredient',
                                         titleAttribute: 'name',
@@ -64,54 +64,54 @@ class ProductForm
                                     ->searchable()
                                     ->preload()
                                     ->nullable()
-                                    ->helperText(__('Si ce produit crée un ingrédient')),
+                                    ->helperText(__('resources.products.form.helpers.manufactured_ingredient')),
                                 TextInput::make('net_weight')
-                                    ->label(__('Poids net (kg)'))
+                                    ->label(__('resources.products.form.fields.net_weight'))
                                     ->numeric()
                                     ->step(0.001)
                                     ->required(),
                             ]),
                     ]),
 
-                Section::make(__('Identité'))
+                Section::make(__('resources.products.form.sections.identity'))
                     ->columnSpanFull()
                     ->schema([
                         Grid::make(4)
                             ->schema([
                                 TextInput::make('name')
-                                    ->label(__('Nom'))
+                                    ->label(__('resources.products.form.fields.name'))
                                     ->required()
                                     ->maxLength(255)
                                     ->columnSpan(2),
                                 TextInput::make('code')
-                                    ->label(__('Code'))
+                                    ->label(__('resources.products.form.fields.code'))
                                     ->maxLength(255),
                                 TextInput::make('wp_code')
-                                    ->label(__('SKU e-commerce'))
+                                    ->label(__('resources.products.form.fields.ecommerce_sku'))
                                     ->maxLength(255),
                                 TextInput::make('ean_code')
-                                    ->label(__('Code EAN'))
+                                    ->label(__('resources.products.form.fields.ean_code'))
                                     ->maxLength(255)
                                     ->columnSpan(2),
                                 DatePicker::make('launch_date')
-                                    ->label(__('Date de lancement'))
+                                    ->label(__('resources.products.form.fields.launch_date'))
                                     ->native(false)
                                     ->required(),
                                 Toggle::make('is_active')
-                                    ->label(__('Actif'))
+                                    ->label(__('resources.products.form.fields.is_active'))
                                     ->onColor('success')
                                     ->offColor('warning')
                                     ->required(),
                             ]),
                     ]),
 
-                Section::make(__('Formule & Packaging'))
+                Section::make(__('resources.products.form.sections.formula_packaging'))
                     ->columnSpanFull()
                     ->schema([
                         Grid::make(2)
                             ->schema([
                                 Select::make('default_formula_id')
-                                    ->label(__('Formule par défaut'))
+                                    ->label(__('resources.products.form.fields.default_formula'))
                                     ->options(function (?Product $record): array {
                                         if (! $record) {
                                             return [];
@@ -123,7 +123,7 @@ class ProductForm
                                     ->preload()
                                     ->nullable()
                                     ->native(false)
-                                    ->helperText(__('Parmi les formules attachées'))
+                                    ->helperText(__('resources.products.form.helpers.default_formula'))
                                     ->afterStateHydrated(function (Set $set, ?Product $record): void {
                                         if ($record) {
                                             $set('default_formula_id', $record->defaultFormula()?->id);
@@ -131,7 +131,7 @@ class ProductForm
                                     })
                                     ->dehydrated(false),
                                 Select::make('packaging_ids')
-                                    ->label(__('Packaging'))
+                                    ->label(__('resources.products.form.fields.packaging'))
                                     ->multiple()
                                     ->options(Ingredient::query()->where('is_packaging', true)->pluck('name', 'id'))
                                     ->searchable()
@@ -147,7 +147,7 @@ class ProductForm
                             ]),
                     ]),
 
-                Section::make(__('Description'))
+                Section::make(__('resources.products.form.sections.description'))
                     ->columnSpanFull()
                     ->schema([
                         MarkdownEditor::make('description')

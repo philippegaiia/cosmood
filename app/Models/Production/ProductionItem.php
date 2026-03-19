@@ -266,7 +266,7 @@ class ProductionItem extends Model
 
     public function isPackagingPhase(): bool
     {
-        return (string) $this->phase === Phases::Packaging->value;
+        return Phases::isPackaging((string) $this->phase);
     }
 
     /**

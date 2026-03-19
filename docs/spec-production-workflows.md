@@ -34,8 +34,13 @@ This document describes the current production-side business rules implemented i
 - Formula and production lines support two calculation modes:
   - `percent_of_oils` (legacy): quantity = `%` of planned oils kg.
   - `qty_per_unit`: quantity = coefficient per expected unit.
+- Formula and production lines can use a broader phase palette:
+  - soap-oriented phases (`Huiles saponifiées`, `Milieux réactionnel`, `Additifs`),
+  - generic cosmetic phases (`Phase A`, `Phase B`, `Phase C`),
+  - explicit emulsion phases (`Phase aqueuse`, `Phase huileuse`).
 - Packaging phase defaults to `qty_per_unit` and remains operator-visible as packaging semantics.
 - Unit-based ingredients (`base_unit = u`) also default to `qty_per_unit`, even outside packaging phase.
+- Packaging remains the only operationally special phase for start guards and late-packing warnings.
 - Phase is still kept for process/masterbatch replacement behavior and document grouping.
 
 ## Planned Quantity Semantics

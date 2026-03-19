@@ -14,26 +14,33 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class GeneralSettingsPage extends Page implements HasForms
+class GeneralSettingsPage extends Page implements HasForms, HasKnowledgeBase
 {
     use InteractsWithForms;
 
     protected static ?string $title = 'Paramètres généraux';
 
-    protected static ?string $navigationLabel = 'Paramètres';
-
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Administration';
-
-    protected static ?int $navigationSort = 100;
+    protected static ?int $navigationSort = 0;
 
     protected static string $routePath = '/settings/general';
 
     protected string $view = 'filament.pages.settings.general-settings-page';
 
     public array $data = [];
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.configuration');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.settings');
+    }
 
     public function getMaxContentWidth(): Width|string|null
     {
@@ -56,37 +63,37 @@ class GeneralSettingsPage extends Page implements HasForms
         return $schema
             ->statePath('data')
             ->schema([
-                Section::make('Affichage')
-                    ->description('Configuration de l\'affichage des données dans l\'application.')
+                Section::make(__('Affichage'))
+                    ->description(__('Configuration de l\'affichage des données dans l\'application.'))
                     ->schema([
                         TextInput::make('internal_supplier_label')
-                            ->label('Libellé fournisseur interne')
-                            ->helperText('Affiché pour les lots produits en interne (ex: masterbatch).')
+                            ->label(__('Libellé fournisseur interne'))
+                            ->helperText(__('Affiché pour les lots produits en interne (ex: masterbatch).'))
                             ->default('INT')
                             ->maxLength(20)
                             ->required(),
                         TextInput::make('date_format')
-                            ->label('Format de date')
-                            ->helperText('Format PHP pour l\'affichage des dates (ex: Y-m-d, d/m/Y).')
+                            ->label(__('Format de date'))
+                            ->helperText(__('Format PHP pour l\'affichage des dates (ex: Y-m-d, d/m/Y).'))
                             ->default('Y-m-d')
                             ->maxLength(20)
                             ->required(),
                     ]),
-                Section::make('Société émettrice')
-                    ->description('Informations affichées sur les bons de commande fournisseurs.')
+                Section::make(__('Société émettrice'))
+                    ->description(__('Informations affichées sur les bons de commande fournisseurs.'))
                     ->schema([
                         TextInput::make('company_name')
-                            ->label('Nom société')
+                            ->label(__('Nom société'))
                             ->default(config('app.name'))
                             ->maxLength(255)
                             ->required(),
                         Textarea::make('company_address')
-                            ->label('Adresse société')
-                            ->helperText('Une ligne par information: rue, code postal, ville, pays...')
+                            ->label(__('Adresse société'))
+                            ->helperText(__('Une ligne par information: rue, code postal, ville, pays...'))
                             ->rows(4)
                             ->columnSpanFull(),
                         TextInput::make('company_vat_number')
-                            ->label('N° TVA')
+                            ->label(__('N° TVA'))
                             ->maxLength(50),
                     ])
                     ->columns(2),
@@ -104,8 +111,16 @@ class GeneralSettingsPage extends Page implements HasForms
         Settings::set('company_vat_number', $data['company_vat_number']);
 
         Notification::make()
-            ->title('Paramètres enregistrés')
+            ->title(__('Paramètres enregistrés'))
             ->success()
             ->send();
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'settings/general-settings',
+            'procurement/supplier-orders',
+        ];
     }
 }

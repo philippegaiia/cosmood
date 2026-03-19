@@ -37,7 +37,7 @@ class TodaysProductionsWidget extends BaseWidget
             )
             ->columns([
                 TextColumn::make('production.lot_display')
-                    ->label('N° Lot')
+                    ->label(__('N° Lot'))
                     ->state(fn ($record) => $record->production?->getLotDisplayLabel())
                     ->searchable(query: fn ($query, $search) => $query
                         ->whereHas('production', fn ($q) => $q
@@ -49,33 +49,33 @@ class TodaysProductionsWidget extends BaseWidget
                         ->orderBy('productions.batch_number', $direction)),
 
                 TextColumn::make('production.product.name')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('production.expected_units')
-                    ->label('Qté (unités)')
+                    ->label(__('Qté (unités)'))
                     ->numeric()
-                    ->placeholder('-')
+                    ->placeholder(__('-'))
                     ->sortable(),
 
                 TextColumn::make('production.planned_quantity')
-                    ->label('Qté attendue (kg)')
+                    ->label(__('Qté attendue (kg)'))
                     ->numeric(decimalPlaces: 2)
                     ->suffix(' kg')
-                    ->placeholder('-')
+                    ->placeholder(__('-'))
                     ->sortable(),
 
                 TextColumn::make('production.status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->badge()
                     ->sortable(),
             ])
             ->recordUrl(fn ($record) => $record->production_id
                 ? ProductionResource::getUrl('view', ['record' => $record->production_id])
                 : null)
-            ->emptyStateHeading('Aucune production aujourd\'hui')
-            ->emptyStateDescription('Aucune tâche de production n\'est planifiée pour aujourd\'hui.')
+            ->emptyStateHeading(__('Aucune production aujourd\'hui'))
+            ->emptyStateDescription(__('Aucune tâche de production n\'est planifiée pour aujourd\'hui.'))
             ->paginated(false);
     }
 

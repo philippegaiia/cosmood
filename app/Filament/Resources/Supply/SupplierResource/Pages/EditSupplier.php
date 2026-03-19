@@ -21,16 +21,16 @@ class EditSupplier extends EditRecord
                     if ($record->contacts()->count() > 0 || $record->supplier_listings()->count() > 0) {
                         Notification::make()
                             ->danger()
-                            ->title('Opération Impossible')
-                            ->body('Supprimez les fichiers liés à ce fournisseur pour le supprimer.')
+                            ->title(__('Opération Impossible'))
+                            ->body(__('Supprimez les fichiers liés à ce fournisseur pour le supprimer.'))
                             ->send();
 
                         return;
                     }
                     Notification::make()
                         ->success()
-                        ->title('Fournisseur Supprimé')
-                        ->body('Le Fournisseur a été supprimé avec succès.')
+                        ->title(__('Fournisseur Supprimé'))
+                        ->body(__('Le Fournisseur a été supprimé avec succès.'))
                         ->send();
 
                     $record->delete();

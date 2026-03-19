@@ -23,11 +23,24 @@ class ProductCategoryResource extends Resource
 {
     protected static ?string $model = ProductCategory::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Produits';
-
-    protected static ?string $navigationLabel = 'Catégories Produits';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+
+    protected static ?int $navigationSort = 2;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.references');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.product_categories');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.products');
+    }
 
     public static function form(Schema $schema): Schema
     {

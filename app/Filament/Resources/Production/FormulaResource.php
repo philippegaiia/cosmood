@@ -37,25 +37,57 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
-class FormulaResource extends Resource
+class FormulaResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = Formula::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Produits';
-
-    protected static ?string $navigationLabel = 'Formules';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBeaker;
+
+    protected static ?int $navigationSort = 3;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.references');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.formulas');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('resources.formulas.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('resources.formulas.plural');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.products');
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'reference-data/formulas',
+            'reference-data/products',
+        ];
+    }
 
     public static function form(Schema $schema): Schema
     {
 
         return $schema
             ->components([
-                Section::make('Détails Formule')
+                Section::make(__('Détails Formule'))
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -77,10 +109,10 @@ class FormulaResource extends Resource
                             ->maxLength(50),
 
                         Toggle::make('is_soap')
-                            ->label('Savon saponifie (soude/potasse)')
-                            ->helperText('Active uniquement le controle 100% pour les vrais savons saponifies. Laisser decoche pour bases deja saponifiees (noodles).'),
+                            ->label(__('Savon saponifie (soude/potasse)'))
+                            ->helperText(__('Active uniquement le controle 100% pour les vrais savons saponifies. Laisser decoche pour bases deja saponifiees (noodles).')),
 
-                        Fieldset::make('Dates')
+                        Fieldset::make(__('Dates'))
                             ->schema([
                                 DatePicker::make('date_of_creation')
                                     ->required()
@@ -92,14 +124,14 @@ class FormulaResource extends Resource
 
                             ])->columnSpanFull(),
 
-                        Section::make('Informations sur la Formule')
+                        Section::make(__('Informations sur la Formule'))
                             ->schema([
                                 MarkdownEditor::make('description'),
                             ])
                             ->collapsed()
                             ->columnSpanFull(),
 
-                        Section::make('Produits associés')
+                        Section::make(__('Produits associés'))
                             ->columnSpanFull()
                             ->schema([
                                 Repeater::make('formulaProducts')
@@ -107,27 +139,27 @@ class FormulaResource extends Resource
                                     ->relationship()
                                     ->schema([
                                         Select::make('product_id')
-                                            ->label('Produit')
+                                            ->label(__('Produit'))
                                             ->options(Product::all()->pluck('name', 'id'))
                                             ->searchable()
                                             ->preload()
                                             ->required()
                                             ->native(false),
                                         Toggle::make('is_default')
-                                            ->label('Formule par défaut')
-                                            ->helperText('Cette formule sera utilisée par défaut pour ce produit'),
+                                            ->label(__('Formule par défaut'))
+                                            ->helperText(__('Cette formule sera utilisée par défaut pour ce produit')),
                                     ])
                                     ->columns(2)
                                     ->defaultItems(0)
-                                    ->addActionLabel('Ajouter un produit'),
+                                    ->addActionLabel(__('Ajouter un produit')),
                             ]),
 
                     ]),
-                Section::make('Composition')
+                Section::make(__('Composition'))
                     ->hiddenOn('create')
                     ->columnSpanFull()
                     ->schema([
-                        Fieldset::make('Totaux')
+                        Fieldset::make(__('Totaux'))
                             ->columnSpanFull()
                             ->columns([
                                 'default' => 1,
@@ -135,7 +167,7 @@ class FormulaResource extends Resource
                             ])
                             ->schema([
                                 TextEntry::make('total_saponified')
-                                    ->label('Total saponifie')
+                                    ->label(__('Total saponifie'))
                                     ->state(function (Get $get): string {
                                         $shouldApplyControl = self::shouldApplySaponifiedControl(
                                             (bool) ($get('is_soap') ?? false),
@@ -168,7 +200,7 @@ class FormulaResource extends Resource
                                         ? 'Doit etre a 100 % (alerte rouge si ecart).'
                                         : 'Controle desactive: cochez "Savon saponifie" pour activer.'),
                             ]),
-                        Section::make('Items Formule')
+                        Section::make(__('Items Formule'))
                             ->columnSpanFull()
                             ->columns(1)
                             ->schema([
@@ -182,7 +214,7 @@ class FormulaResource extends Resource
                                     titleAttribute: 'name',
                                     modifyQueryUsing: fn (Builder $query, Get $get): Builder => $query->where('supplier_id', $get('../../supplier_id')),
                                     )*/
-                                            ->label('Ingrédient')
+                                            ->label(__('Ingrédient'))
                                             ->options(Ingredient::where('is_active', true)->where('is_packaging', false)->pluck('name', 'id'))
                                             ->searchable()
                                             ->preload()
@@ -213,7 +245,7 @@ class FormulaResource extends Resource
                                             ]),
 
                                         Select::make('calculation_mode')
-                                            ->label('Mode calcul')
+                                            ->label(__('Mode calcul'))
                                             ->options(FormulaItemCalculationMode::class)
                                             ->default(FormulaItemCalculationMode::PercentOfOils)
                                             ->native(false)
@@ -266,7 +298,7 @@ class FormulaResource extends Resource
                                             ]),
 
                                         Select::make('phase')
-                                            ->label('Phase')
+                                            ->label(__('Phase'))
                                             ->options(Phases::class)
                                             ->default(Phases::Saponification)
                                             ->live()
@@ -284,7 +316,7 @@ class FormulaResource extends Resource
                                             ]),
 
                                         Toggle::make('organic')
-                                            ->label('Bio')
+                                            ->label(__('Bio'))
                                             // ->default(true)
                                             ->inline(false)
                                             ->columnSpan([
@@ -293,7 +325,7 @@ class FormulaResource extends Resource
                                             ]),
 
                                         TextEntry::make('percentage_of_total')
-                                            ->label('Total')
+                                            ->label(__('Total'))
                         // ->dehydrated()
                                             ->state(function (Get $get): string {
                                                 return number_format($get('percentage_of_oils'), 2);
@@ -361,7 +393,7 @@ class FormulaResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Nom')
+                    ->label(__('Nom'))
                     ->sortable()
                     ->searchable(),
 
@@ -369,7 +401,7 @@ class FormulaResource extends Resource
                     ->searchable(),
 
                 ToggleColumn::make('is_active')
-                    ->label('Active')
+                    ->label(__('Active'))
                     ->searchable(),
             ])
             ->filters([
@@ -446,7 +478,7 @@ class FormulaResource extends Resource
     public static function makeDuplicateAction(): Action
     {
         return Action::make('duplicate')
-            ->label('Dupliquer')
+            ->label(__('Dupliquer'))
             ->icon(Heroicon::OutlinedDocumentDuplicate)
             ->color('gray')
             ->requiresConfirmation()
@@ -487,8 +519,8 @@ class FormulaResource extends Resource
         });
 
         Notification::make()
-            ->title('Formule dupliquee')
-            ->body('Nouvelle formule: '.$duplicate->name)
+            ->title(__('Formule dupliquee'))
+            ->body(__('Nouvelle formule : :name', ['name' => $duplicate->name]))
             ->success()
             ->send();
 

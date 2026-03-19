@@ -39,46 +39,46 @@ class ProductionWaveForm
 
     private static function getPlanningTab(): Tab
     {
-        return Tab::make('Planification')
+        return Tab::make(__('Planification'))
             ->schema([
-                Section::make('Informations générales')
+                Section::make(__('Informations générales'))
                     ->schema([
                         TextInput::make('name')
-                            ->label('Nom')
+                            ->label(__('Nom'))
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn ($state, Set $set) => $set('slug', Str::slug($state))),
                         TextInput::make('slug')
-                            ->label('Slug')
+                            ->label(__('Slug'))
                             ->required()
                             ->maxLength(255)
                             ->unique(),
                         Select::make('status')
-                            ->label('Statut')
+                            ->label(__('Statut'))
                             ->options(WaveStatus::class)
                             ->default(WaveStatus::Draft)
                             ->required()
                             ->disabled(fn (string $operation) => $operation === 'edit')
                             ->visible(fn (string $operation): bool => $operation === 'edit'),
                         Textarea::make('notes')
-                            ->label('Notes')
+                            ->label(__('Notes'))
                             ->columnSpanFull()
                             ->rows(3),
                     ])
                     ->columns(3),
 
-                Section::make('Dates planifiées')
+                Section::make(__('Dates planifiées'))
                     ->schema([
-                        Fieldset::make('Période')
+                        Fieldset::make(__('Période'))
                             ->schema([
                                 DatePicker::make('planned_start_date')
-                                    ->label('Date de début')
+                                    ->label(__('Date de début'))
                                     ->native(false)
                                     ->weekStartsOnMonday()
                                     ->required(fn (Get $get) => $get('status') !== WaveStatus::Draft->value),
                                 DatePicker::make('planned_end_date')
-                                    ->label('Date de fin')
+                                    ->label(__('Date de fin'))
                                     ->native(false)
                                     ->weekStartsOnMonday()
                                     ->afterOrEqual('planned_start_date')

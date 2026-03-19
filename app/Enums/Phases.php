@@ -10,6 +10,11 @@ enum Phases: string implements HasColor, HasLabel
     case Saponification = '10';
     case Lye = '20';
     case Additives = '30';
+    case Aqueous = '50';
+    case Oil = '60';
+    case PhaseA = '70';
+    case PhaseB = '80';
+    case PhaseC = '90';
     case Packaging = '40';
 
     /**
@@ -36,14 +41,54 @@ enum Phases: string implements HasColor, HasLabel
         };
     }
 
+    public static function isPackaging(self|string|null $phase): bool
+    {
+        return self::normalize($phase) === self::Packaging->value;
+    }
+
+    public static function labelFor(self|string|null $phase, string $fallback = '-'): string
+    {
+        $normalizedPhase = self::normalize($phase);
+
+        if ($normalizedPhase === null) {
+            return $fallback;
+        }
+
+        return self::tryFrom($normalizedPhase)?->getLabel() ?? $normalizedPhase;
+    }
+
+    public static function defaultForFormula(bool $isSoap): self
+    {
+        return $isSoap ? self::Saponification : self::PhaseA;
+    }
+
+    public static function orderSql(string $column): string
+    {
+        $cases = collect(self::cases())
+            ->values()
+            ->map(fn (self $phase, int $index): string => sprintf(
+                "WHEN %s = '%s' THEN %d",
+                $column,
+                $phase->value,
+                $index + 1,
+            ))
+            ->implode(' ');
+
+        return sprintf('CASE %s ELSE 999 END', $cases);
+    }
+
     public function getLabel(): string
     {
         return match ($this) {
-
-            self::Saponification => 'Huiles Saponifiées',
-            self::Lye => 'Milieux Réactionnel',
-            self::Additives => 'Additifs',
-            self::Packaging => 'Packaging',
+            self::Saponification => __('Huiles Saponifiées'),
+            self::Lye => __('Milieux Réactionnel'),
+            self::Additives => __('Additifs'),
+            self::Aqueous => __('Phase aqueuse'),
+            self::Oil => __('Phase huileuse'),
+            self::PhaseA => __('Phase A'),
+            self::PhaseB => __('Phase B'),
+            self::PhaseC => __('Phase C'),
+            self::Packaging => __('Packaging'),
         };
     }
 
@@ -53,6 +98,11 @@ enum Phases: string implements HasColor, HasLabel
             self::Saponification => 'gray',
             self::Lye => 'warning',
             self::Additives => 'info',
+            self::Aqueous => 'primary',
+            self::Oil => 'warning',
+            self::PhaseA => 'info',
+            self::PhaseB => 'primary',
+            self::PhaseC => 'gray',
             self::Packaging => 'success',
         };
     }

@@ -13,18 +13,30 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class QcTemplatesResource extends Resource
+class QcTemplatesResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = QcTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
-    protected static ?string $navigationLabel = 'Modèles QC';
+    protected static ?int $navigationSort = 2;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Production';
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.configuration');
+    }
 
-    protected static ?int $navigationSort = 55;
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.qc_templates');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.production_models');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -47,6 +59,14 @@ class QcTemplatesResource extends Resource
             'index' => ListQcTemplates::route('/'),
             'create' => CreateQcTemplates::route('/create'),
             'edit' => EditQcTemplates::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'reference-data/qc-and-task-templates',
+            'execution/tasks-qc-and-outputs',
         ];
     }
 }

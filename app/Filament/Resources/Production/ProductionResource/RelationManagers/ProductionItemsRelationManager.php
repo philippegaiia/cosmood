@@ -29,51 +29,54 @@ class ProductionItemsRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('sort')
-                    ->label('#')
+                    ->label(__('#'))
                     ->sortable(),
                 TextColumn::make('ingredient.name')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->searchable(),
                 TextColumn::make('phase')
-                    ->label('Phase')
+                    ->label(__('Phase'))
                     ->badge()
                     ->formatStateUsing(fn (ProductionItem $record): string => $record->getPhaseLabel())
                     ->color(fn (ProductionItem $record): string|array|null => Phases::tryFrom((string) $record->phase)?->getColor())
                     ->sortable(query: function (EloquentBuilder $query, string $direction): EloquentBuilder {
-                        return $query->orderByRaw('CAST(phase AS INTEGER) '.$direction);
+                        return $query->orderByRaw(Phases::orderSql('phase').' '.$direction);
                     }),
                 TextColumn::make('percentage_of_oils')
-                    ->label('Coefficient')
+                    ->label(__('Coefficient'))
                     ->numeric(decimalPlaces: 2),
                 TextColumn::make('calculated_quantity')
-                    ->label('Quantité calculée')
+                    ->label(__('Quantité calculée'))
                     ->state(fn (ProductionItem $record): float => $record->getCalculatedQuantityKg())
                     ->numeric(decimalPlaces: 3),
                 TextColumn::make('product_cost')
-                    ->label('Coût produit')
+                    ->label(__('Coût produit'))
                     ->state(fn (ProductionItem $record): ?float => $record->getEstimatedCost())
                     ->money('EUR')
                     ->summarize(
                         Summarizer::make('total_cost')
-                            ->label('Total')
+                            ->label(__('Total'))
                             ->using(function (QueryBuilder $query): float {
                                 $total = $query
                                     ->leftJoin('supplies', 'production_items.supply_id', '=', 'supplies.id')
                                     ->leftJoin('supplier_listings', 'production_items.supplier_listing_id', '=', 'supplier_listings.id')
                                     ->leftJoin('ingredients', 'production_items.ingredient_id', '=', 'ingredients.id')
                                     ->leftJoin('productions', 'production_items.production_id', '=', 'productions.id')
-                                    ->selectRaw("SUM((CASE WHEN production_items.phase = '40' THEN (COALESCE(productions.expected_units, 0) * COALESCE(production_items.percentage_of_oils, 0)) ELSE ((COALESCE(productions.planned_quantity, 0) * COALESCE(production_items.percentage_of_oils, 0)) / 100) END) * COALESCE(supplies.unit_price, supplier_listings.price, ingredients.price, 0)) as total_cost")
+                                    ->selectRaw(
+                                        'SUM((CASE WHEN production_items.phase = ? THEN (COALESCE(productions.expected_units, 0) * COALESCE(production_items.percentage_of_oils, 0)) ELSE ((COALESCE(productions.planned_quantity, 0) * COALESCE(production_items.percentage_of_oils, 0)) / 100) END) * COALESCE(supplies.unit_price, supplier_listings.price, ingredients.price, 0)) as total_cost',
+                                        [Phases::Packaging->value],
+                                    )
                                     ->value('total_cost');
 
                                 return round((float) ($total ?? 0), 2);
                             })
                     )
-                    ->placeholder('-'),
+                    ->placeholder(__('-')),
                 IconColumn::make('organic')
-                    ->label('Bio')
+                    ->label(__('Bio'))
                     ->boolean(),
                 IconColumn::make('is_supplied')
-                    ->label('Approvisionné')
+                    ->label(__('Approvisionné'))
                     ->boolean()
                     ->state(fn (ProductionItem $record): bool => $record->is_supplied || $record->supply_id !== null || $record->allocations->contains(fn ($allocation): bool => $allocation->isActive())),
                 TextColumn::make('procurement_covered')
@@ -84,13 +87,13 @@ class ProductionItemsRelationManager extends RelationManager
                         ? 'success'
                         : ($record->isCoveredByProcurementSignal() ? 'info' : 'gray')),
                 TextColumn::make('supply_batch_number')
-                    ->label('Lot supply')
+                    ->label(__('Lot supply'))
                     ->state(fn (ProductionItem $record): ?string => $record->allocations
                         ->first(fn ($allocation): bool => $allocation->isActive())?->supply?->batch_number
                         ?? $record->supply_batch_number)
-                    ->placeholder('Non sélectionné'),
+                    ->placeholder(__('Non sélectionné')),
                 TextColumn::make('supplierListing.name')
-                    ->label('Listing fournisseur')
+                    ->label(__('Listing fournisseur'))
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->recordActions([

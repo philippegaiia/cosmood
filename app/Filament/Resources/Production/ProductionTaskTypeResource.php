@@ -26,11 +26,24 @@ class ProductionTaskTypeResource extends Resource
 {
     protected static ?string $model = ProductionTaskType::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Production';
-
-    protected static ?string $navigationLabel = 'Types de tâches';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedAdjustmentsVertical;
+
+    protected static ?int $navigationSort = 1;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.configuration');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.task_types');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.production_models');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -40,8 +53,8 @@ class ProductionTaskTypeResource extends Resource
                     ->required()
                     ->maxLength(255),
                 ColorPicker::make('color')
-                    ->label('Couleur')
-                    ->helperText('Couleur dans le calendrier')
+                    ->label(__('Couleur'))
+                    ->helperText(__('Couleur dans le calendrier'))
                     ->default('#3b82f6'),
                 TextInput::make('slug')
                     ->required()

@@ -25,34 +25,47 @@ class ProductionTaskResource extends Resource
 {
     protected static ?string $model = ProductionTask::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Production';
-
-    protected static ?string $navigationLabel = 'Tâches';
-
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-c-check';
+
+    protected static ?int $navigationSort = 2;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.operations');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.tasks');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.productions');
+    }
 
     public static function form(Schema $schema): Schema
     {
         return $schema
             ->components([
-                Section::make('Contexte tâche')
+                Section::make(__('Contexte tâche'))
                     ->schema([
                         TextInput::make('production_id')
-                            ->label('Batch / Produit')
+                            ->label(__('Batch / Produit'))
                             ->formatStateUsing(fn (mixed $state, ?ProductionTask $record): string => trim(($record?->production?->getLotDisplayLabel() ?? '-').' - '.($record?->production?->product?->name ?? '-')))
                             ->disabled()
                             ->dehydrated(false),
                         TextInput::make('production_task_type_id')
-                            ->label('Type tâche')
+                            ->label(__('Type tâche'))
                             ->formatStateUsing(fn (mixed $state, ?ProductionTask $record): string => $record?->productionTaskType?->name ?? 'Type non renseigné')
                             ->disabled()
                             ->dehydrated(false),
                         TextInput::make('name')
-                            ->label('Nom de tâche')
+                            ->label(__('Nom de tâche'))
                             ->disabled()
                             ->dehydrated(false),
                         DatePicker::make('date')
-                            ->label('Date')
+                            ->label(__('Date'))
                             ->required(),
                     ])
                     ->columns(2),
@@ -63,25 +76,25 @@ class ProductionTaskResource extends Resource
     {
         return $schema
             ->components([
-                Section::make('Détails tâche de production')
+                Section::make(__('Détails tâche de production'))
                     ->schema([
                         TextEntry::make('production_lot')
-                            ->label('Batch')
+                            ->label(__('Batch'))
                             ->state(fn (ProductionTask $record): string => $record->production?->getLotDisplayLabel() ?? '-'),
                         TextEntry::make('production.product.name')
-                            ->label('Produit')
-                            ->placeholder('-'),
+                            ->label(__('Produit'))
+                            ->placeholder(__('-')),
                         TextEntry::make('productionTaskType.name')
-                            ->label('Type tâche')
-                            ->placeholder('Type non renseigné'),
+                            ->label(__('Type tâche'))
+                            ->placeholder(__('Type non renseigné')),
                         TextEntry::make('name')
-                            ->label('Nom de tâche')
-                            ->placeholder('-'),
+                            ->label(__('Nom de tâche'))
+                            ->placeholder(__('-')),
                         TextEntry::make('date')
-                            ->label('Date')
+                            ->label(__('Date'))
                             ->date('d/m/Y'),
                         TextEntry::make('is_finished')
-                            ->label('Terminée')
+                            ->label(__('Terminée'))
                             ->badge()
                             ->formatStateUsing(fn (bool $state): string => $state ? 'Oui' : 'Non')
                             ->color(fn (bool $state): string => $state ? 'success' : 'warning'),
@@ -95,17 +108,17 @@ class ProductionTaskResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('production.batch_number')
-                    ->label('Batch')
+                    ->label(__('Batch'))
                     ->formatStateUsing(fn (mixed $state, ?ProductionTask $record): string => $record?->production?->getLotDisplayLabel() ?? '-')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('production.product.name')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('productionTaskType.name')
-                    ->label('Type tâche')
-                    ->placeholder('Type non renseigné')
+                    ->label(__('Type tâche'))
+                    ->placeholder(__('Type non renseigné'))
                     ->searchable()
                     ->sortable(),
 

@@ -18,8 +18,8 @@ class EditIngredientCategory extends EditRecord
                 if ($record->ingredients()->count() > 0) {
                     Notification::make()
                         ->danger()
-                        ->title('Opération Impossible')
-                        ->body('Supprimez les ingrédients liés à la catégorie'.$record->name.' pour la supprimer.')
+                        ->title(__('Opération Impossible'))
+                        ->body(__('Supprimez les ingrédients liés à la catégorie :name pour la supprimer.', ['name' => $record->name]))
                         ->send();
 
                     return;
@@ -27,8 +27,8 @@ class EditIngredientCategory extends EditRecord
 
                 Notification::make()
                     ->success()
-                    ->title('Catégorie '.$record->name.' Supprimée')
-                    ->body('Le Fournisseur a été supprimé avec succès.')
+                    ->title(__('Catégorie :name supprimée', ['name' => $record->name]))
+                    ->body(__('La catégorie :name a été supprimée avec succès.', ['name' => $record->name]))
                     ->send();
 
                 $record->delete();

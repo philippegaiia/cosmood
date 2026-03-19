@@ -14,10 +14,11 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
-class ProductResource extends Resource
+class ProductResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = Product::class;
 
@@ -25,14 +26,26 @@ class ProductResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
+    protected static ?int $navigationSort = 0;
+
     public static function getNavigationGroup(): ?string
     {
-        return __('Produits');
+        return __('navigation.groups.references');
     }
 
     public static function getNavigationLabel(): string
     {
-        return __('Produits');
+        return __('navigation.items.products');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('resources.products.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('resources.products.plural');
     }
 
     public static function form(Schema $schema): Schema
@@ -70,5 +83,13 @@ class ProductResource extends Resource
     public static function canDelete(Model $record): bool
     {
         return ! $record->hasProductionHistory();
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'getting-started/setup-order',
+            'reference-data/products',
+        ];
     }
 }

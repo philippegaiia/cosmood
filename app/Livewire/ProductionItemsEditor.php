@@ -121,7 +121,7 @@ class ProductionItemsEditor extends Component
             'batch_number' => $masterbatch->batch_number,
             'permanent_batch_number' => $masterbatch->permanent_batch_number,
             'replaces_phase' => $replacedPhase,
-            'replaces_phase_label' => Phases::tryFrom($replacedPhase)?->getLabel() ?? '-',
+            'replaces_phase_label' => Phases::labelFor($replacedPhase),
         ];
 
         $this->collapsedItems = $this->masterbatchService
@@ -378,7 +378,7 @@ class ProductionItemsEditor extends Component
             'id' => null,
             'ingredient_id' => null,
             'ingredient_name' => null,
-            'phase' => Phases::Saponification->value,
+            'phase' => $this->resolveDefaultPhaseForNewItem(),
             'percentage_of_oils' => 1,
             'calculation_mode' => FormulaItemCalculationMode::PercentOfOils->value,
             'organic' => true,
@@ -388,6 +388,20 @@ class ProductionItemsEditor extends Component
         $this->selectedIngredientId = null;
         $this->selectedSupplyId = null;
         $this->showEditModal = true;
+    }
+
+    private function resolveDefaultPhaseForNewItem(): string
+    {
+        if ($this->productionId === null) {
+            return Phases::defaultForFormula(false)->value;
+        }
+
+        $production = Production::query()
+            ->select(['id', 'formula_id'])
+            ->with('formula:id,is_soap')
+            ->find($this->productionId);
+
+        return Phases::defaultForFormula((bool) ($production?->formula?->is_soap ?? false))->value;
     }
 
     public function editItem(int $index): void
@@ -658,7 +672,7 @@ class ProductionItemsEditor extends Component
             }
         } catch (\InvalidArgumentException $e) {
             Notification::make()
-                ->title('Erreur d\'allocation')
+                ->title(__('Erreur d\'allocation'))
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
@@ -701,7 +715,7 @@ class ProductionItemsEditor extends Component
             }
         } catch (\Exception $e) {
             Notification::make()
-                ->title('Erreur lors de la division')
+                ->title(__('Erreur lors de la division'))
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
@@ -745,7 +759,7 @@ class ProductionItemsEditor extends Component
             }
         } catch (\Exception $e) {
             Notification::make()
-                ->title('Erreur lors de la fusion')
+                ->title(__('Erreur lors de la fusion'))
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
@@ -793,26 +807,26 @@ class ProductionItemsEditor extends Component
             // Check if it's a split item and offer to merge
             if ($item->isSplitChild()) {
                 Notification::make('deallocated-split-'.$item->id)
-                    ->title('Item désalloué')
-                    ->body('Cet item est un item divisé. Voulez-vous le fusionner avec l\'item parent ?')
+                    ->title(__('Item désalloué'))
+                    ->body(__('Cet item est un item divisé. Voulez-vous le fusionner avec l\'item parent ?'))
                     ->success()
                     ->actions([
                         Action::make('merge')
-                            ->label('Fusionner avec parent')
+                            ->label(__('Fusionner avec parent'))
                             ->button()
                             ->color('primary')
                             ->dispatch('mergeSplitItem', ['itemId' => $item->id])
                             ->close(),
                         Action::make('keep')
-                            ->label('Garder séparé')
+                            ->label(__('Garder séparé'))
                             ->close(),
                     ])
                     ->persistent()
                     ->send();
             } else {
                 Notification::make()
-                    ->title('Item désalloué')
-                    ->body('L\'item a été désalloué avec succès.')
+                    ->title(__('Item désalloué'))
+                    ->body(__('L\'item a été désalloué avec succès.'))
                     ->success()
                     ->send();
             }
@@ -822,7 +836,7 @@ class ProductionItemsEditor extends Component
             $this->loadItems($production);
         } catch (\Exception $e) {
             Notification::make()
-                ->title('Erreur lors de la désallocation')
+                ->title(__('Erreur lors de la désallocation'))
                 ->body($e->getMessage())
                 ->danger()
                 ->send();
@@ -1004,8 +1018,8 @@ class ProductionItemsEditor extends Component
 
         if ($production === null || ! $production->masterbatch_lot_id) {
             Notification::make()
-                ->title('Erreur')
-                ->body('Aucun masterbatch assigné à cette production.')
+                ->title(__('Erreur'))
+                ->body(__('Aucun masterbatch assigné à cette production.'))
                 ->danger()
                 ->send();
 
@@ -1018,8 +1032,8 @@ class ProductionItemsEditor extends Component
 
         if ($updated === 0) {
             Notification::make()
-                ->title('Information')
-                ->body('Aucune traçabilité à importer.')
+                ->title(__('Information'))
+                ->body(__('Aucune traçabilité à importer.'))
                 ->info()
                 ->send();
 
@@ -1027,7 +1041,7 @@ class ProductionItemsEditor extends Component
         }
 
         Notification::make()
-            ->title('Traçabilité importée')
+            ->title(__('Traçabilité importée'))
             ->body(sprintf('%d item(s) mis à jour.', $updated))
             ->success()
             ->send();

@@ -16,23 +16,23 @@ class QcTemplatesTable
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Nom')
+                    ->label(__('Nom'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('product_types_count')
-                    ->label('Types liés')
+                    ->label(__('Types liés'))
                     ->counts('productTypes')
                     ->badge()
                     ->sortable(),
                 TextColumn::make('items_count')
-                    ->label('Contrôles')
+                    ->label(__('Contrôles'))
                     ->counts('items')
                     ->badge(),
                 IconColumn::make('is_default')
-                    ->label('Défaut')
+                    ->label(__('Défaut'))
                     ->boolean(),
                 IconColumn::make('is_active')
-                    ->label('Actif')
+                    ->label(__('Actif'))
                     ->boolean(),
             ])
             ->filters([

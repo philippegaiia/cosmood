@@ -27,6 +27,18 @@ class UserResource extends Resource
 
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedUsers;
 
+    protected static ?int $navigationSort = 20;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.configuration');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.users');
+    }
+
     public static function form(Schema $schema): Schema
     {
         return $schema

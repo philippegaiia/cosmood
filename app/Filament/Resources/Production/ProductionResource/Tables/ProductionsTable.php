@@ -61,34 +61,34 @@ class ProductionsTable
         return $table
             ->columns([
                 TextColumn::make('product.name')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('production_date')
-                    ->label('Date')
+                    ->label(__('Date'))
                     ->date('d/m/Y')
                     ->sortable(),
                 TextColumn::make('permanent_batch_number')
-                    ->label('Batch permanent')
-                    ->placeholder('-')
+                    ->label(__('Batch permanent'))
+                    ->placeholder(__('-'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('batch_number')
-                    ->label('Batch planif')
+                    ->label(__('Batch planif'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('wave.name')
-                    ->label('Vague')
+                    ->label(__('Vague'))
                     ->badge()
-                    ->placeholder('Autonome')
+                    ->placeholder(__('Autonome'))
                     ->sortable(),
                 TextColumn::make('productionLine.name')
-                    ->label('Ligne')
+                    ->label(__('Ligne'))
                     ->badge()
-                    ->placeholder('Non affectée')
+                    ->placeholder(__('Non affectée'))
                     ->sortable(),
                 TextColumn::make('composite_status')
-                    ->label('État')
+                    ->label(__('État'))
                     ->state(fn (Production $record): string => StatusColorScheme::forProduction($record)['label'])
                     ->badge()
                     ->color(fn (Production $record): string => StatusColorScheme::forProduction($record)['color'])
@@ -107,34 +107,34 @@ class ProductionsTable
                     ->color(fn (Production $record): string => $record->getFabricationReadinessColor())
                     ->tooltip(fn (Production $record): string => $record->getFabricationReadinessTooltip()),
                 TextColumn::make('planned_quantity')
-                    ->label('Quantité planifiée')
+                    ->label(__('Quantité planifiée'))
                     ->numeric()
                     ->suffix(' kg')
                     ->sortable(),
                 TextColumn::make('expected_units')
-                    ->label('Unités attendues')
+                    ->label(__('Unités attendues'))
                     ->numeric()
                     ->sortable(),
                 IconColumn::make('is_masterbatch')
-                    ->label('MB')
+                    ->label(__('MB'))
                     ->boolean()
                     ->trueIcon(Heroicon::OutlinedBeaker)
                     ->falseIcon(Heroicon::OutlinedMinus),
                 IconColumn::make('uses_masterbatch')
-                    ->label('Utilise MB')
+                    ->label(__('Utilise MB'))
                     ->boolean()
                     ->getStateUsing(fn (Production $record): bool => $record->masterbatch_lot_id !== null)
                     ->trueIcon(Heroicon::OutlinedLink),
             ])
             ->filters([
                 SelectFilter::make('production_wave_id')
-                    ->label('Vague')
+                    ->label(__('Vague'))
                     ->relationship('wave', 'name'),
                 SelectFilter::make('status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->options(ProductionStatus::class),
                 SelectFilter::make('production_line_id')
-                    ->label('Ligne')
+                    ->label(__('Ligne'))
                     ->relationship('productionLine', 'name'),
             ])
             ->recordActions([
@@ -152,7 +152,7 @@ class ProductionsTable
                         self::sendConfirmationNotification($summary);
                     }),
                 Action::make('duplicate')
-                    ->label('Dupliquer')
+                    ->label(__('Dupliquer'))
                     ->icon(Heroicon::OutlinedDocumentDuplicate)
                     ->color('gray')
                     ->requiresConfirmation()
@@ -302,37 +302,37 @@ class ProductionsTable
             ])
             ->toolbarActions([
                 BulkAction::make('assignPermanentBatchNumbers')
-                    ->label('Attribuer lots permanents')
+                    ->label(__('Attribuer lots permanents'))
                     ->icon(Heroicon::OutlinedHashtag)
                     ->requiresConfirmation()
                     ->deselectRecordsAfterCompletion()
                     ->action(fn (Collection $records) => self::assignPermanentBatchNumbers($records)),
                 BulkAction::make('printSelectedDocuments')
-                    ->label('Imprimer fiches sélectionnées')
+                    ->label(__('Imprimer fiches sélectionnées'))
                     ->icon(Heroicon::OutlinedPrinter)
                     ->url(fn (Collection $selectedRecords): string => self::getBulkDocumentsUrl($selectedRecords))
                     ->openUrlInNewTab(),
                 BulkAction::make('rescheduleSelected')
-                    ->label('Replanifier sélection')
+                    ->label(__('Replanifier sélection'))
                     ->icon(Heroicon::OutlinedCalendarDays)
                     ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->schema([
                         DatePicker::make('start_date')
-                            ->label('Nouveau départ')
+                            ->label(__('Nouveau départ'))
                             ->native(false)
                             ->required()
                             ->default(now()->toDateString()),
                         TextInput::make('fallback_daily_capacity')
-                            ->label('Capacité / jour sans ligne')
+                            ->label(__('Capacité / jour sans ligne'))
                             ->numeric()
                             ->minValue(1)
                             ->default(4)
                             ->required(),
                         Toggle::make('skip_weekends')
-                            ->label('Ignorer weekends')
+                            ->label(__('Ignorer weekends'))
                             ->default(true),
                         Toggle::make('skip_holidays')
-                            ->label('Ignorer jours fériés')
+                            ->label(__('Ignorer jours fériés'))
                             ->default(true),
                     ])
                     ->deselectRecordsAfterCompletion()
@@ -346,7 +346,7 @@ class ProductionsTable
                         );
 
                         Notification::make()
-                            ->title('Productions replanifiées')
+                            ->title(__('Productions replanifiées'))
                             ->body(sprintf(
                                 '%d replanifiée(s), %d ignorée(s).',
                                 (int) $summary['rescheduled_count'],
@@ -400,8 +400,8 @@ class ProductionsTable
         $duplicate->save();
 
         Notification::make()
-            ->title('Production dupliquée')
-            ->body('Nouveau batch: '.$duplicate->batch_number)
+            ->title(__('Production dupliquée'))
+            ->body(__('Nouveau batch : :batch', ['batch' => $duplicate->batch_number]))
             ->success()
             ->send();
     }
@@ -439,7 +439,7 @@ class ProductionsTable
             ->assignForProductions($records->pluck('id')->all());
 
         Notification::make()
-            ->title('Lots permanents attribués')
+            ->title(__('Lots permanents attribués'))
             ->body($assigned.' lot(s) permanent(s) attribué(s).')
             ->success()
             ->send();

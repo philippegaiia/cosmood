@@ -30,23 +30,23 @@ class ContactsRelationManager extends RelationManager
                     ->relationship('supplier', 'name')
                     ->visible(fn ($livewire) => $livewire instanceof CreateSupplierContact)
                     ->required()
-                    ->label('Fournisseur'),
+                    ->label(__('Fournisseur')),
                 TextInput::make('first_name')
                     ->required()
                     ->maxLength(30)
-                    ->label('Prénom'),
+                    ->label(__('Prénom')),
                 TextInput::make('last_name')
                     ->required()
                     ->maxLength(30)
-                    ->label('Nom'),
+                    ->label(__('Nom')),
                 TextInput::make('phone')
                     ->tel()
                     ->maxLength(15)
-                    ->label('Téléphone'),
+                    ->label(__('Téléphone')),
                 TextInput::make('mobile')
                     ->tel()
                     ->maxLength(15)
-                    ->label('Mobile'),
+                    ->label(__('Mobile')),
                 TextInput::make('email')
                     ->email()
                     ->required()

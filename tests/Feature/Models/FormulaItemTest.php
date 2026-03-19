@@ -50,6 +50,13 @@ describe('FormulaItem Model', function () {
         expect($formulaItem->phase)->toBe(Phases::Additives);
     });
 
+    it('can have aqueous phase', function () {
+        $formulaItem = FormulaItem::factory()->create(['phase' => Phases::Aqueous]);
+
+        expect($formulaItem->phase)->toBe(Phases::Aqueous)
+            ->and($formulaItem->phase->getLabel())->toBe(__('Phase aqueuse'));
+    });
+
     it('rejects negative percentage values', function () {
         expect(function (): void {
             FormulaItem::factory()->create([

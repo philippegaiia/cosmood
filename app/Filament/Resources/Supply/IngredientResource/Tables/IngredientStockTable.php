@@ -47,19 +47,19 @@ class IngredientStockTable
             )
             ->columns([
                 TextColumn::make('name')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->searchable()
                     ->sortable()
                     ->icon(fn (Ingredient $record): ?Heroicon => self::getAlertIcon($record)),
 
                 TextColumn::make('ingredient_category.name')
-                    ->label('Catégorie')
+                    ->label(__('Catégorie'))
                     ->searchable()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 ViewColumn::make('stock_status')
-                    ->label('État')
+                    ->label(__('État'))
                     ->view('components.ingredient-stock-status')
                     ->getStateUsing(function (Ingredient $record): array {
                         $available = $record->getTotalAvailableStock();
@@ -79,7 +79,7 @@ class IngredientStockTable
                     }),
 
                 TextColumn::make('total_stock')
-                    ->label('Stock total')
+                    ->label(__('Stock total'))
                     ->state(fn (Ingredient $record): float => $record->getTotalPhysicalStock())
                     ->numeric(decimalPlaces: 3)
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query
@@ -89,7 +89,7 @@ class IngredientStockTable
                                      WHERE sl.ingredient_id = ingredients.id) '.$direction)),
 
                 TextColumn::make('available_stock')
-                    ->label('Disponible')
+                    ->label(__('Disponible'))
                     ->state(fn (Ingredient $record): float => $record->getTotalAvailableStock())
                     ->numeric(decimalPlaces: 3)
                     ->color(fn (Ingredient $record): string => match (true) {
@@ -104,7 +104,7 @@ class IngredientStockTable
                                      WHERE sl.ingredient_id = ingredients.id) '.$direction)),
 
                 TextColumn::make('allocated_stock')
-                    ->label('Alloué')
+                    ->label(__('Alloué'))
                     ->state(fn (Ingredient $record): float => $record->getTotalAllocatedStock())
                     ->numeric(decimalPlaces: 3)
                     ->toggleable(isToggledHiddenByDefault: true)
@@ -115,30 +115,30 @@ class IngredientStockTable
                                      WHERE sl.ingredient_id = ingredients.id) '.$direction)),
 
                 TextColumn::make('supplier_listings_count')
-                    ->label('Lots')
+                    ->label(__('Lots'))
                     ->counts('supplier_listings')
                     ->sortable(),
 
                 TextColumn::make('stock_min')
-                    ->label('Stock min')
+                    ->label(__('Stock min'))
                     ->numeric(decimalPlaces: 3)
                     ->sortable(),
 
                 TextColumn::make('base_unit')
-                    ->label('Unité')
+                    ->label(__('Unité'))
                     ->badge()
                     ->sortable(),
             ])
             ->filters([
                 SelectFilter::make('ingredient_category')
-                    ->label('Catégorie')
+                    ->label(__('Catégorie'))
                     ->relationship('ingredient_category', 'name')
                     ->searchable()
                     ->preload(),
 
                 TernaryFilter::make('has_stock')
-                    ->label('A du stock')
-                    ->placeholder('Tous')
+                    ->label(__('A du stock'))
+                    ->placeholder(__('Tous'))
                     ->trueLabel('En stock')
                     ->falseLabel('Rupture')
                     ->queries(
@@ -151,7 +151,7 @@ class IngredientStockTable
                     ),
 
                 SelectFilter::make('has_out_of_stock_lots')
-                    ->label('Lots épuisés')
+                    ->label(__('Lots épuisés'))
                     ->options([
                         'yes' => 'Avec lots épuisés',
                         'no' => 'Tous les lots actifs',
@@ -169,8 +169,8 @@ class IngredientStockTable
                     }),
 
                 TernaryFilter::make('stock_alert')
-                    ->label('Alerte stock')
-                    ->placeholder('Tous')
+                    ->label(__('Alerte stock'))
+                    ->placeholder(__('Tous'))
                     ->trueLabel('Stock faible')
                     ->falseLabel('Stock OK')
                     ->queries(
@@ -195,7 +195,7 @@ class IngredientStockTable
             ->recordActions([
                 ActionGroup::make([
                     Action::make('view_supplies')
-                        ->label('Voir lots')
+                        ->label(__('Voir lots'))
                         ->icon(Heroicon::Eye)
                         ->color('gray')
                         ->url(fn (Ingredient $record): string => SupplyResource::getUrl('index', [
@@ -207,18 +207,18 @@ class IngredientStockTable
                         ])),
 
                     Action::make('create_order')
-                        ->label('Commander')
+                        ->label(__('Commander'))
                         ->icon(Heroicon::ShoppingCart)
                         ->color('primary')
                         ->requiresConfirmation()
-                        ->modalHeading('Créer une commande')
-                        ->modalDescription('Voulez-vous créer une commande fournisseur pour cet ingrédient ?')
+                        ->modalHeading(__('Créer une commande'))
+                        ->modalDescription(__('Voulez-vous créer une commande fournisseur pour cet ingrédient ?'))
                         ->action(function (Ingredient $record): void {
                             // Redirect to supplier order creation with ingredient pre-filled
                             Notification::make()
                                 ->success()
-                                ->title('Redirection')
-                                ->body('Fonctionnalité à implémenter : créer commande pour '.$record->name)
+                                ->title(__('Redirection'))
+                                ->body(__('Fonctionnalité à implémenter : créer commande pour :name', ['name' => $record->name]))
                                 ->send();
                         }),
 
@@ -231,8 +231,8 @@ class IngredientStockTable
                             if ($record->supplier_listings()->count() > 0) {
                                 Notification::make()
                                     ->danger()
-                                    ->title('Opération Impossible')
-                                    ->body('Supprimez les références fournisseur liées à l\'ingrédient '.$record->name.' pour le supprimer.')
+                                    ->title(__('Opération Impossible'))
+                                    ->body(__('Supprimez les références fournisseur liées à l\'ingrédient :name pour le supprimer.', ['name' => $record->name]))
                                     ->send();
 
                                 return;
@@ -240,8 +240,8 @@ class IngredientStockTable
 
                             Notification::make()
                                 ->success()
-                                ->title('Ingrédient Supprimé')
-                                ->body('L\'ingrédient '.$record->name.' a été supprimé avec succès.')
+                                ->title(__('Ingrédient Supprimé'))
+                                ->body(__('L\'ingrédient :name a été supprimé avec succès.', ['name' => $record->name]))
                                 ->send();
 
                             $record->delete();

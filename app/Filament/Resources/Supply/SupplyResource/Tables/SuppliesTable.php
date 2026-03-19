@@ -79,34 +79,34 @@ class SuppliesTable
                 ], 'quantity'))
             ->columns([
                 TextColumn::make('supplierListing.ingredient.name')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->searchable()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: false)
                     ->icon(fn (Supply $record): ?Heroicon => self::getIngredientAlertIcon($record)),
 
                 TextColumn::make('batch_number')
-                    ->label('Lot')
+                    ->label(__('Lot'))
                     ->searchable()
                     ->sortable()
-                    ->placeholder('-'),
+                    ->placeholder(__('-')),
 
                 TextColumn::make('source')
-                    ->label('Source')
+                    ->label(__('Source'))
                     ->state(fn (Supply $record): string => $record->source_production_id !== null ? 'Interne' : 'Achat')
                     ->badge()
                     ->color(fn (Supply $record): string => $record->source_production_id !== null ? 'info' : 'gray')
                     ->sortable(query: fn (Builder $query, string $direction): Builder => $query->orderByRaw('CASE WHEN source_production_id IS NULL THEN 0 ELSE 1 END '.$direction)),
 
                 TextColumn::make('source_reference')
-                    ->label('Réf source')
+                    ->label(__('Réf source'))
                     ->state(fn (Supply $record): string => $record->source_production_id !== null
                         ? ($record->sourceProduction?->getLotDisplayLabel() ?? '-')
                         : ($record->order_ref ?? '-'))
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 ViewColumn::make('stock_availability')
-                    ->label('Stock disponible')
+                    ->label(__('Stock disponible'))
                     ->view('components.stock-meter')
                     ->getStateUsing(function (Supply $record): array {
                         $available = $record->getAvailableQuantity();
@@ -129,18 +129,18 @@ class SuppliesTable
                         ->orderByRaw('(COALESCE(quantity_in, initial_quantity, 0) - COALESCE(quantity_out, 0) - COALESCE('.Supply::ALLOCATED_QUANTITY_SUM_ATTRIBUTE.', 0)) '.$direction)),
 
                 TextColumn::make('unit_price')
-                    ->label('Prix unitaire')
+                    ->label(__('Prix unitaire'))
                     ->numeric(decimalPlaces: 2)
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('delivery_date')
-                    ->label('Entrée')
+                    ->label(__('Entrée'))
                     ->date('d/m/Y')
                     ->sortable(),
 
                 TextColumn::make('expiry_date')
-                    ->label('DLUO')
+                    ->label(__('DLUO'))
                     ->date()
                     ->sortable()
                     ->color(fn (Supply $record): ?string => $record->expiry_date === null
@@ -148,17 +148,17 @@ class SuppliesTable
                         : ($record->expiry_date->isPast() ? 'danger' : ($record->expiry_date->lte(now()->addDays(45)) ? 'warning' : 'success'))),
 
                 TextColumn::make('supplierListing.supplier.name')
-                    ->label('Fournisseur')
+                    ->label(__('Fournisseur'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('supplierListing.name')
-                    ->label('Réf fournisseur')
+                    ->label(__('Réf fournisseur'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 IconColumn::make('is_in_stock')
-                    ->label('En stock')
+                    ->label(__('En stock'))
                     ->boolean(),
 
                 TextColumn::make('created_at')
@@ -172,20 +172,20 @@ class SuppliesTable
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('last_used_at')
-                    ->label('Dernière utilisation')
+                    ->label(__('Dernière utilisation'))
                     ->dateTime('d/m/Y')
                     ->sortable()
-                    ->placeholder('Jamais utilisé')
+                    ->placeholder(__('Jamais utilisé'))
                     ->toggleable(),
             ])
             ->filters([
                 SelectFilter::make('ingredient')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->relationship('supplierListing.ingredient', 'name')
                     ->searchable()
                     ->preload(),
                 SelectFilter::make('source')
-                    ->label('Source')
+                    ->label(__('Source'))
                     ->options([
                         'purchase' => 'Achat',
                         'internal' => 'Interne',
@@ -198,7 +198,7 @@ class SuppliesTable
                         };
                     }),
                 TernaryFilter::make('is_in_stock')
-                    ->label('En stock'),
+                    ->label(__('En stock')),
             ])
             ->recordActions([
                 ActionGroup::make([
@@ -206,27 +206,27 @@ class SuppliesTable
                     EditAction::make(),
 
                     Action::make('adjust')
-                        ->label('Ajuster')
+                        ->label(__('Ajuster'))
                         ->icon(Heroicon::AdjustmentsHorizontal)
                         ->color('warning')
                         ->visible(fn (): bool => auth()->user()?->canManageSupplyInventory() ?? false)
                         ->schema([
                             TextInput::make('adjustment_quantity')
-                                ->label('Quantité d\'ajustement')
+                                ->label(__('Quantité d\'ajustement'))
                                 ->numeric()
                                 ->step(0.001)
                                 ->required()
-                                ->helperText('Positive = ajout de stock, Négative = retrait de stock'),
+                                ->helperText(__('Positive = ajout de stock, Négative = retrait de stock')),
 
                             DateTimePicker::make('moved_at')
-                                ->label('Date et heure')
+                                ->label(__('Date et heure'))
                                 ->default(now())
                                 ->required(),
 
                             Textarea::make('reason')
-                                ->label('Raison de l\'ajustement')
+                                ->label(__('Raison de l\'ajustement'))
                                 ->required()
-                                ->placeholder('Ex: Inventaire, correction erreur, etc.'),
+                                ->placeholder(__('Ex: Inventaire, correction erreur, etc.')),
                         ])
                         ->action(function (array $data, Supply $record): void {
                             if (! (auth()->user()?->canManageSupplyInventory() ?? false)) {
@@ -259,13 +259,13 @@ class SuppliesTable
                         ->successNotificationTitle('Ajustement créé'),
 
                     Action::make('markOutOfStock')
-                        ->label('Marquer épuisé')
+                        ->label(__('Marquer épuisé'))
                         ->icon(Heroicon::ArchiveBoxXMark)
                         ->color('danger')
                         ->visible(fn (Supply $record): bool => $record->is_in_stock && (auth()->user()?->canManageSupplyInventory() ?? false))
                         ->requiresConfirmation()
-                        ->modalHeading('Marquer ce lot comme épuisé?')
-                        ->modalDescription('Cette action marquera le lot comme hors stock. Assurez-vous d\'avoir effectué un ajustement manuel si nécessaire.')
+                        ->modalHeading(__('Marquer ce lot comme épuisé?'))
+                        ->modalDescription(__('Cette action marquera le lot comme hors stock. Assurez-vous d\'avoir effectué un ajustement manuel si nécessaire.'))
                         ->action(function (Supply $record): void {
                             if (! (auth()->user()?->canManageSupplyInventory() ?? false)) {
                                 Notification::make()
@@ -280,7 +280,7 @@ class SuppliesTable
                             $record->update(['is_in_stock' => false]);
 
                             Notification::make()
-                                ->title('Lot marqué comme épuisé')
+                                ->title(__('Lot marqué comme épuisé'))
                                 ->body("Le lot {$record->batch_number} a été marqué comme hors stock.")
                                 ->success()
                                 ->send();
@@ -482,26 +482,26 @@ class SuppliesTable
             ])
             ->groups([
                 Group::make('supplierListing.ingredient.name')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->collapsible(),
                 Group::make('supplierListing.supplier.name')
-                    ->label('Fournisseur')
+                    ->label(__('Fournisseur'))
                     ->collapsible(),
                 Group::make('source')
-                    ->label('Source')
+                    ->label(__('Source'))
                     ->getTitleFromRecordUsing(fn (Supply $record): string => $record->source_production_id !== null ? 'Interne' : 'Achat')
                     ->collapsible(),
             ])
             ->toolbarActions([
                 BulkActionGroup::make([
                     BulkAction::make('markOutOfStock')
-                        ->label('Marquer épuisés')
+                        ->label(__('Marquer épuisés'))
                         ->icon(Heroicon::ArchiveBoxXMark)
                         ->color('danger')
                         ->visible(fn (): bool => auth()->user()?->canManageSupplyInventory() ?? false)
                         ->requiresConfirmation()
-                        ->modalHeading('Marquer les lots comme épuisés?')
-                        ->modalDescription('Cette action marquera tous les lots sélectionnés comme hors stock.')
+                        ->modalHeading(__('Marquer les lots comme épuisés?'))
+                        ->modalDescription(__('Cette action marquera tous les lots sélectionnés comme hors stock.'))
                         ->action(function (Collection $records): void {
                             if (! (auth()->user()?->canManageSupplyInventory() ?? false)) {
                                 Notification::make()
@@ -522,7 +522,7 @@ class SuppliesTable
                             }
 
                             Notification::make()
-                                ->title('Lots marqués comme épuisés')
+                                ->title(__('Lots marqués comme épuisés'))
                                 ->body("{$count} lot(s) ont été marqués comme hors stock.")
                                 ->success()
                                 ->send();

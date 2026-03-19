@@ -17,42 +17,42 @@ class ProductTypesTable
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Nom')
+                    ->label(__('resources.product_types.table.name'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('productCategory.name')
-                    ->label('Catégorie')
+                    ->label(__('resources.product_types.table.category'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('qcTemplate.name')
-                    ->label('Modèle QC')
+                    ->label(__('resources.product_types.table.qc_template'))
                     ->badge()
-                    ->placeholder('-')
+                    ->placeholder(__('-'))
                     ->sortable(),
                 TextColumn::make('defaultProductionLine.name')
-                    ->label('Ligne défaut')
+                    ->label(__('resources.product_types.table.default_line'))
                     ->badge()
-                    ->placeholder('-')
+                    ->placeholder(__('-'))
                     ->sortable(),
                 TextColumn::make('sizing_mode')
-                    ->label('Mode de calcul')
+                    ->label(__('resources.product_types.table.sizing_mode'))
                     ->badge()
                     ->sortable(),
                 TextColumn::make('default_batch_size')
-                    ->label('Batch défaut')
+                    ->label(__('resources.product_types.table.default_batch'))
                     ->numeric()
                     ->sortable()
                     ->suffix(' kg'),
                 TextColumn::make('expected_units_output')
-                    ->label('Unités attendues')
+                    ->label(__('resources.product_types.table.expected_units'))
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('batchSizePresets_count')
-                    ->label('Préréglages')
+                    ->label(__('resources.product_types.table.presets'))
                     ->counts('batchSizePresets')
                     ->badge(),
                 IconColumn::make('is_active')
-                    ->label('Actif')
+                    ->label(__('resources.product_types.table.is_active'))
                     ->boolean()
                     ->sortable(),
             ])

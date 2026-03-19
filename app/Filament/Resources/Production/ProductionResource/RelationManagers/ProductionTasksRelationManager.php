@@ -33,21 +33,21 @@ class ProductionTasksRelationManager extends RelationManager
                     ->placeholder(__('Tâche manuelle'))
                     ->searchable(),
                 TextColumn::make('workflow_status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->state(function (ProductionTask $record): string {
                         if ($record->isCancelled()) {
-                            return 'Annulée';
+                            return __('Annulée');
                         }
 
                         if ($record->is_finished) {
-                            return 'Terminée';
+                            return __('Terminée');
                         }
 
                         if ($record->scheduled_date && Carbon::parse($record->scheduled_date)->isFuture()) {
-                            return 'Non démarrée';
+                            return __('Non démarrée');
                         }
 
-                        return 'Démarrée';
+                        return __('Démarrée');
                     })
                     ->badge()
                     ->color(function (ProductionTask $record): string|array|null {
@@ -78,41 +78,41 @@ class ProductionTasksRelationManager extends RelationManager
                         ];
                     }),
                 TextColumn::make('scheduled_date')
-                    ->label('Date planifiée')
+                    ->label(__('Date planifiée'))
                     ->date('d/m/Y')
                     ->sortable(),
                 TextColumn::make('duration_minutes')
-                    ->label('Durée (min)')
+                    ->label(__('Durée (min)'))
                     ->numeric(),
                 TextColumn::make('source')
-                    ->label('Source')
+                    ->label(__('Source'))
                     ->badge(),
                 IconColumn::make('is_manual_schedule')
-                    ->label('Planning manuel')
+                    ->label(__('Planning manuel'))
                     ->boolean(),
                 IconColumn::make('is_finished')
-                    ->label('Terminée')
+                    ->label(__('Terminée'))
                     ->boolean(),
                 IconColumn::make('dependency_bypassed_at')
-                    ->label('Bypass')
+                    ->label(__('Bypass'))
                     ->boolean()
                     ->state(fn (ProductionTask $record): bool => $record->dependency_bypassed_at !== null),
                 TextColumn::make('dependencyBypassedBy.name')
-                    ->label('Bypass par')
+                    ->label(__('Bypass par'))
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('dependency_bypassed_at')
-                    ->label('Bypass le')
+                    ->label(__('Bypass le'))
                     ->dateTime('d/m/Y H:i')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('dependency_bypass_reason')
-                    ->label('Raison bypass')
+                    ->label(__('Raison bypass'))
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('cancelled_at')
-                    ->label('Annulée le')
+                    ->label(__('Annulée le'))
                     ->dateTime('d/m/Y H:i')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('cancelled_reason')
-                    ->label('Raison annulation')
+                    ->label(__('Raison annulation'))
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->headerActions([
@@ -121,7 +121,7 @@ class ProductionTasksRelationManager extends RelationManager
             ->emptyStateDescription(__('Toutes les tâches sont générées automatiquement à partir des modèles de tâches associés au type de produit. Pour ajouter une tâche manquante, configurez un modèle de tâche ou ajoutez une note à la production.'))
             ->recordActions([
                 Action::make('finish')
-                    ->label('Terminer')
+                    ->label(__('Terminer'))
                     ->color('success')
                     ->icon(Heroicon::OutlinedCheckCircle)
                     ->visible(fn (ProductionTask $record): bool => $this->canFinishTask($record))
@@ -156,13 +156,13 @@ class ProductionTasksRelationManager extends RelationManager
                         }
                     }),
                 Action::make('force_finish')
-                    ->label('Forcer terminer')
+                    ->label(__('Forcer terminer'))
                     ->color('warning')
                     ->icon(Heroicon::OutlinedExclamationTriangle)
                     ->visible(fn (ProductionTask $record): bool => $this->canForceFinishTask($record))
                     ->schema([
                         Textarea::make('reason')
-                            ->label('Raison du bypass')
+                            ->label(__('Raison du bypass'))
                             ->required()
                             ->rows(3),
                     ])
@@ -213,12 +213,12 @@ class ProductionTasksRelationManager extends RelationManager
                         }
                     }),
                 Action::make('reschedule')
-                    ->label('Planifier')
+                    ->label(__('Planifier'))
                     ->icon(Heroicon::OutlinedCalendarDays)
                     ->visible(fn (ProductionTask $record): bool => $this->canManageTaskPlanning($record))
                     ->schema([
                         DatePicker::make('scheduled_date')
-                            ->label('Nouvelle date')
+                            ->label(__('Nouvelle date'))
                             ->native(false)
                             ->required(),
                     ])
@@ -236,7 +236,7 @@ class ProductionTasksRelationManager extends RelationManager
                         app(TaskGenerationService::class)->setManualSchedule($record, $data['scheduled_date']);
                     }),
                 Action::make('reset_auto')
-                    ->label('Retour auto')
+                    ->label(__('Retour auto'))
                     ->icon(Heroicon::OutlinedArrowPath)
                     ->visible(fn (ProductionTask $record): bool => $record->is_manual_schedule && $this->canManageTaskPlanning($record))
                     ->action(function (ProductionTask $record): void {
@@ -253,13 +253,13 @@ class ProductionTasksRelationManager extends RelationManager
                         app(TaskGenerationService::class)->resetToAutoSchedule($record);
                     }),
                 Action::make('cancel')
-                    ->label('Annuler')
+                    ->label(__('Annuler'))
                     ->icon(Heroicon::OutlinedXCircle)
                     ->color('danger')
                     ->visible(fn (ProductionTask $record): bool => ! $record->isCancelled() && $this->canManageTaskPlanning($record))
                     ->schema([
                         Textarea::make('reason')
-                            ->label('Raison')
+                            ->label(__('Raison'))
                             ->required(),
                     ])
                     ->action(function (ProductionTask $record, array $data): void {

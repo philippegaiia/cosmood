@@ -16,6 +16,7 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -27,19 +28,35 @@ use Illuminate\Database\Eloquent\Model;
  * - Tab-based filtering (all, in stock, alerts)
  * - Delegated table configuration via SuppliesTable
  */
-class SupplyResource extends Resource
+class SupplyResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = Supply::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
-
-    protected static ?string $navigationLabel = 'Inventaire';
-
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-c-book-open';
+
+    protected static ?int $navigationSort = 20;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.operations');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.inventory');
+    }
 
     public static function canCreate(): bool
     {
         return false;
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'stock-and-allocations/stock-lots',
+            'stock-and-allocations/allocations',
+        ];
     }
 
     /**
@@ -52,7 +69,7 @@ class SupplyResource extends Resource
     {
         return $schema
             ->components([
-                Section::make('Lot et source')
+                Section::make(__('Lot et source'))
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -60,7 +77,7 @@ class SupplyResource extends Resource
                     ])
                     ->schema([
                         Select::make('supplier_listing_id')
-                            ->label('Ingrédient')
+                            ->label(__('Ingrédient'))
                             ->relationship(
                                 name: 'supplierListing',
                                 titleAttribute: 'name',
@@ -72,14 +89,14 @@ class SupplyResource extends Resource
                             ->preload()
                             ->required(),
                         TextInput::make('order_ref')
-                            ->label('Réf commande')
+                            ->label(__('Réf commande'))
                             ->maxLength(255),
                         TextInput::make('batch_number')
-                            ->label('N° lot')
+                            ->label(__('N° lot'))
                             ->maxLength(255),
                     ]),
 
-                Section::make('Quantités')
+                Section::make(__('Quantités'))
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -88,25 +105,25 @@ class SupplyResource extends Resource
                     ])
                     ->schema([
                         TextInput::make('initial_quantity')
-                            ->label('Qté initiale')
+                            ->label(__('Qté initiale'))
                             ->numeric()
                             ->disabled()
                             ->dehydrated(false)
                             ->helperText(__('Valeur en lecture seule. Utiliser l\'action "Ajuster" depuis la liste inventaire.')),
                         TextInput::make('quantity_in')
-                            ->label('Qté reçue')
+                            ->label(__('Qté reçue'))
                             ->numeric()
                             ->disabled()
                             ->dehydrated(false)
                             ->helperText(__('Valeur en lecture seule. Utiliser l\'action "Ajuster" depuis la liste inventaire.')),
                         TextInput::make('quantity_out')
-                            ->label('Qté consommée')
+                            ->label(__('Qté consommée'))
                             ->numeric()
                             ->disabled()
                             ->dehydrated(false)
                             ->helperText(__('Valeur en lecture seule. Utiliser l\'action "Ajuster" depuis la liste inventaire.')),
                         TextInput::make('allocated_quantity_display')
-                            ->label('Qté réservée')
+                            ->label(__('Qté réservée'))
                             ->numeric()
                             ->disabled()
                             ->dehydrated(false)
@@ -117,13 +134,13 @@ class SupplyResource extends Resource
                             })
                             ->helperText(__('Quantité réservée pour les productions en cours (calculée automatiquement)')),
                         ToggleButtons::make('is_in_stock')
-                            ->label('En stock')
+                            ->label(__('En stock'))
                             ->inline(false)
                             ->boolean()
                             ->grouped(),
                     ]),
 
-                Section::make('Prix et dates')
+                Section::make(__('Prix et dates'))
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -132,12 +149,12 @@ class SupplyResource extends Resource
                     ])
                     ->schema([
                         TextInput::make('unit_price')
-                            ->label('Prix unitaire')
+                            ->label(__('Prix unitaire'))
                             ->numeric(),
                         DatePicker::make('delivery_date')
-                            ->label('Date d\'entrée'),
+                            ->label(__('Date d\'entrée')),
                         DatePicker::make('expiry_date')
-                            ->label('DLUO'),
+                            ->label(__('DLUO')),
                     ]),
             ]);
     }

@@ -80,7 +80,7 @@ class ProductionForm
      */
     private static function getPlanningTab(): Tab
     {
-        return Tab::make('Planification')
+        return Tab::make(__('Planification'))
             ->icon(Heroicon::OutlinedCalendarDays)
             ->schema([
                 self::getBatchIdentificationSection(),
@@ -101,7 +101,7 @@ class ProductionForm
      */
     private static function getBatchIdentificationSection(): Section
     {
-        return Section::make('Lot de production')
+        return Section::make(__('Lot de production'))
             ->columnSpanFull()
             ->columns([
                 'default' => 1,
@@ -109,7 +109,7 @@ class ProductionForm
             ])
             ->schema([
                 Select::make('production_wave_id')
-                    ->label('Vague de production')
+                    ->label(__('Vague de production'))
                     ->relationship(
                         name: 'wave',
                         titleAttribute: 'name',
@@ -124,7 +124,7 @@ class ProductionForm
                     ->searchable()
                     ->preload()
                     ->live()
-                    ->placeholder('Aucune (production autonome)')
+                    ->placeholder(__('Aucune (production autonome)'))
                     ->helperText(__('Disponible uniquement pour les vagues en brouillon ou approuvées.'))
                     ->nullable(),
                 Select::make('production_line_id')
@@ -138,15 +138,15 @@ class ProductionForm
                     ->helperText(__('Utilise la ligne par défaut du type produit si vide.'))
                     ->nullable(),
                 TextInput::make('batch_number')
-                    ->label('Réf. planification')
-                    ->helperText('Si vide, une référence courte est attribuée automatiquement (ex: T00001).')
-                    ->placeholder('Auto (T00001)')
+                    ->label(__('Réf. planification'))
+                    ->helperText(__('Si vide, une référence courte est attribuée automatiquement (ex: T00001).'))
+                    ->placeholder(__('Auto (T00001)'))
                     ->required(fn (string $operation): bool => $operation === 'edit')
                     ->maxLength(255)
                     ->unique(),
                 TextInput::make('permanent_batch_number')
-                    ->label('Lot permanent')
-                    ->placeholder('Attribué automatiquement au démarrage')
+                    ->label(__('Lot permanent'))
+                    ->placeholder(__('Attribué automatiquement au démarrage'))
                     ->disabled()
                     ->dehydrated(false),
             ]);
@@ -163,7 +163,7 @@ class ProductionForm
      */
     private static function getProductSelectionSection(): Section
     {
-        return Section::make('Choisir produit')
+        return Section::make(__('Choisir produit'))
             ->columnSpanFull()
             ->columns([
                 'default' => 1,
@@ -172,7 +172,7 @@ class ProductionForm
             ])
             ->schema([
                 Select::make('product_id')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->relationship('product', 'name')
                     ->native(false)
                     ->searchable()
@@ -182,7 +182,7 @@ class ProductionForm
                     ->afterStateUpdated(fn (Set $set, Get $get, ?string $state) => self::handleProductUpdate($set, $get, $state))
                     ->required(),
                 Select::make('formula_id')
-                    ->label('Formule')
+                    ->label(__('Formule'))
                     ->relationship('formula', 'name')
                     ->disabled()
                     ->dehydrated()
@@ -195,7 +195,7 @@ class ProductionForm
                     ->helperText(__('Déterminé automatiquement par le produit sélectionné'))
                     ->nullable(),
                 Select::make('batch_size_preset_id')
-                    ->label('Préréglage de taille')
+                    ->label(__('Préréglage de taille'))
                     ->options(fn (Get $get) => self::getBatchSizePresetOptions($get))
                     ->live()
                     ->afterStateUpdated(fn (Set $set, Get $get, ?string $state) => self::handleBatchSizePresetUpdate($set, $get, $state))
@@ -214,7 +214,7 @@ class ProductionForm
      */
     private static function getBatchSizeSection(): Section
     {
-        return Section::make('Taille de batch')
+        return Section::make(__('Taille de batch'))
             ->columnSpanFull()
             ->columns([
                 'default' => 1,
@@ -223,7 +223,7 @@ class ProductionForm
             ])
             ->schema([
                 Select::make('sizing_mode')
-                    ->label('Mode de calcul')
+                    ->label(__('Mode de calcul'))
                     ->options(SizingMode::class)
                     ->required()
                     ->live(),
@@ -234,17 +234,17 @@ class ProductionForm
                     ->required()
                     ->suffix('kg'),
                 TextInput::make('expected_units')
-                    ->label('Unités attendues')
+                    ->label(__('Unités attendues'))
                     ->numeric()
                     ->minValue(0)
                     ->required(),
                 TextInput::make('expected_waste_kg')
-                    ->label('Perte estimée (kg)')
+                    ->label(__('Perte estimée (kg)'))
                     ->numeric()
                     ->minValue(0)
                     ->suffix('kg'),
                 TextInput::make('actual_units')
-                    ->label('Unités réelles')
+                    ->label(__('Unités réelles'))
                     ->numeric()
                     ->minValue(0)
                     ->visibleOn('edit'),
@@ -262,14 +262,14 @@ class ProductionForm
      */
     private static function getDatesSection(): Section
     {
-        return Section::make('Dates')
+        return Section::make(__('Dates'))
             ->columnSpanFull()
             ->schema([
-                Fieldset::make('Période')
+                Fieldset::make(__('Période'))
                     ->columnSpanFull()
                     ->schema([
                         DatePicker::make('production_date')
-                            ->label('Date de production')
+                            ->label(__('Date de production'))
                             ->required()
                             ->live()
                             ->afterStateUpdated(fn (Set $set, Get $get, ?string $state) => self::handleProductionDateUpdate($set, $get, $state))
@@ -279,7 +279,7 @@ class ProductionForm
                             ->native(false)
                             ->weekStartsOnMonday(),
                         DatePicker::make('ready_date')
-                            ->label('Date de disponibilité')
+                            ->label(__('Date de disponibilité'))
                             ->afterOrEqual('production_date')
                             ->helperText(fn (Get $get): string => self::getReadyDateHelperText($get))
                             ->native(false)
@@ -306,7 +306,7 @@ class ProductionForm
      */
     private static function getMasterbatchConfigSection(): Section
     {
-        return Section::make('Configuration Masterbatch')
+        return Section::make(__('Configuration Masterbatch'))
             ->columnSpanFull()
             ->columns([
                 'default' => 1,
@@ -314,25 +314,25 @@ class ProductionForm
             ])
             ->schema([
                 Toggle::make('is_masterbatch')
-                    ->label('Créer ce lot comme masterbatch')
-                    ->helperText('Activez pour fabriquer un masterbatch intermédiaire.')
+                    ->label(__('Créer ce lot comme masterbatch'))
+                    ->helperText(__('Activez pour fabriquer un masterbatch intermédiaire.'))
                     ->default(false)
                     ->live()
                     ->disabled(fn (string $operation) => $operation === 'edit')
                     ->afterStateUpdated(fn (Set $set, Get $get, ?bool $state) => self::handleMasterbatchToggle($set, $get, $state)),
                 Select::make('replaces_phase')
-                    ->label('Phase remplacée par ce masterbatch')
+                    ->label(__('Phase remplacée par ce masterbatch'))
                     ->options([
                         'saponified_oils' => 'Huiles Saponifiées',
                         'lye' => 'Milieux Réactionnel',
                         'additives' => 'Additifs',
                     ])
-                    ->helperText('Définit quelle phase sera remplacée dans les futurs lots.')
+                    ->helperText(__('Définit quelle phase sera remplacée dans les futurs lots.'))
                     ->visible(fn (Get $get) => $get('is_masterbatch') === true)
                     ->required(fn (Get $get) => $get('is_masterbatch') === true)
                     ->disabled(fn (string $operation) => $operation === 'edit'),
                 Select::make('produced_ingredient_id')
-                    ->label('Ingrédient fabriqué (intermédiaire)')
+                    ->label(__('Ingrédient fabriqué (intermédiaire)'))
                     ->relationship(
                         name: 'producedIngredient',
                         titleAttribute: 'name',
@@ -340,7 +340,7 @@ class ProductionForm
                     )
                     ->searchable()
                     ->preload()
-                    ->helperText('Ingrédient de type fabriqué associé à ce masterbatch.')
+                    ->helperText(__('Ingrédient de type fabriqué associé à ce masterbatch.'))
                     ->visible(fn (Get $get) => $get('is_masterbatch') === true)
                     ->required(fn (Get $get) => $get('is_masterbatch') === true)
                     ->dehydrated(fn (Get $get): bool => $get('is_masterbatch') === true)
@@ -361,7 +361,7 @@ class ProductionForm
      */
     private static function getExecutionTab(): Tab
     {
-        return Tab::make('Exécution')
+        return Tab::make(__('Exécution'))
             ->icon(Heroicon::OutlinedPlay)
             ->hiddenOn('create')
             ->schema([
@@ -380,7 +380,7 @@ class ProductionForm
      */
     private static function getProductionFlowSection(): Section
     {
-        return Section::make('Flux de production')
+        return Section::make(__('Flux de production'))
             ->columnSpanFull()
             ->columns([
                 'default' => 1,
@@ -392,14 +392,14 @@ class ProductionForm
                     ->default(ProductionStatus::Planned->value)
                     ->dehydrated(fn (string $operation): bool => $operation === 'create'),
                 ToggleButtons::make('status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->options(fn (?Production $record): array => self::getStatusOptions($record))
-                    ->helperText('Transitions contrôlées pour éviter les incohérences de stock et de planification.')
+                    ->helperText(__('Transitions contrôlées pour éviter les incohérences de stock et de planification.'))
                     ->inline()
                     ->required()
                     ->visibleOn('edit'),
                 Textarea::make('notes')
-                    ->label('Notes')
+                    ->label(__('Notes'))
                     ->columnSpanFull()
                     ->rows(3),
             ]);
@@ -415,7 +415,7 @@ class ProductionForm
      */
     private static function getMasterbatchSelectionSection(): Section
     {
-        return Section::make('Masterbatch à utiliser')
+        return Section::make(__('Masterbatch à utiliser'))
             ->columnSpanFull()
             ->columns([
                 'default' => 1,
@@ -423,11 +423,11 @@ class ProductionForm
             ])
             ->schema([
                 Select::make('masterbatch_lot_id')
-                    ->label('Lot masterbatch à utiliser')
+                    ->label(__('Lot masterbatch à utiliser'))
                     ->options(fn () => self::getMasterbatchOptions())
                     ->searchable()
-                    ->helperText('Choisissez un lot masterbatch déjà terminé, puis utilisez "Importer traçabilité MB" dans l\'onglet Composition.')
-                    ->placeholder('Aucun')
+                    ->helperText(__('Choisissez un lot masterbatch déjà terminé, puis utilisez "Importer traçabilité MB" dans l\'onglet Composition.'))
+                    ->placeholder(__('Aucun'))
                     ->nullable(),
             ])
             ->visibleOn('edit')
@@ -447,12 +447,12 @@ class ProductionForm
      */
     private static function getCompositionTab(): Tab
     {
-        return Tab::make('Composition & lots')
+        return Tab::make(__('Composition & lots'))
             ->icon(Heroicon::OutlinedBeaker)
             ->hiddenOn('create')
             ->schema([
-                Section::make('Gestion des items')
-                    ->description('Gérez les ingrédients, phases et lots supply de cette production.')
+                Section::make(__('Gestion des items'))
+                    ->description(__('Gérez les ingrédients, phases et lots supply de cette production.'))
                     ->schema([
                         TextEntry::make('items_info')
                             ->hiddenLabel()
@@ -460,15 +460,15 @@ class ProductionForm
                     ])
                     ->footer([
                         Action::make('manageItems')
-                            ->label('Gérer les items')
+                            ->label(__('Gérer les items'))
                             ->icon(Heroicon::OutlinedBeaker)
                             ->color('primary')
-                            ->modalHeading('Composition & lots de production')
-                            ->modalDescription('Gérez les ingrédients, phases et lots supply de cette production.')
+                            ->modalHeading(__('Composition & lots de production'))
+                            ->modalDescription(__('Gérez les ingrédients, phases et lots supply de cette production.'))
                             ->modalWidth('7xl')
                             ->modalContent(fn (?Production $record) => view('components.production-items-modal', ['productionId' => $record?->id]))
                             ->modalSubmitAction(false)
-                            ->modalCancelActionLabel('Fermer')
+                            ->modalCancelActionLabel(__('Fermer'))
                             ->slideOver(),
                     ])
                     ->visibleOn('edit')
@@ -721,7 +721,7 @@ class ProductionForm
             return null;
         }
 
-        return 'La date de production doit être >= au début de vague ('.$wave->planned_start_date->format('d/m/Y').').';
+        return __('La date de production doit être >= au début de vague (:date).', ['date' => $wave->planned_start_date->format('d/m/Y')]);
     }
 
     private static function getReadyDateHelperText(Get $get): string
@@ -854,12 +854,7 @@ class ProductionForm
             ->orderByDesc('production_date')
             ->get()
             ->mapWithKeys(function (Production $masterbatch): array {
-                $phaseLabel = match ($masterbatch->replaces_phase) {
-                    'saponified_oils' => 'Huiles Saponifiées',
-                    'lye' => 'Milieux Réactionnel',
-                    'additives' => 'Additifs',
-                    default => Phases::tryFrom((string) $masterbatch->replaces_phase)?->getLabel() ?? 'Phase inconnue',
-                };
+                $phaseLabel = Phases::labelFor($masterbatch->replaces_phase, __('Phase inconnue'));
 
                 return [
                     $masterbatch->id => trim($masterbatch->getLotDisplayLabel().' - '.($masterbatch->product?->name ?? 'Masterbatch').' ('.$phaseLabel.')'),

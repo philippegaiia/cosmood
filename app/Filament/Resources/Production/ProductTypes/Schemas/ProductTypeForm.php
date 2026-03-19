@@ -21,7 +21,7 @@ class ProductTypeForm
     {
         return $schema
             ->components([
-                Section::make('Informations générales')
+                Section::make(__('resources.product_types.form.sections.general_information'))
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -30,25 +30,25 @@ class ProductTypeForm
                     ])
                     ->schema([
                         TextInput::make('name')
-                            ->label('Nom')
+                            ->label(__('resources.product_types.form.fields.name'))
                             ->required()
                             ->maxLength(255)
                             ->live(onBlur: true)
                             ->afterStateUpdated(fn ($state, Set $set) => $set('slug', Str::slug($state))),
                         TextInput::make('slug')
-                            ->label('Slug')
+                            ->label(__('resources.product_types.form.fields.slug'))
                             ->required()
                             ->maxLength(255)
                             ->unique()
-                            ->helperText('Généré automatiquement à partir du nom, modifiable si besoin.'),
+                            ->helperText(__('resources.product_types.form.helpers.slug')),
                         Select::make('product_category_id')
-                            ->label('Catégorie de produit')
+                            ->label(__('resources.product_types.form.fields.product_category'))
                             ->relationship('productCategory', 'name')
                             ->searchable()
                             ->preload()
                             ->nullable(),
                         Select::make('qc_template_id')
-                            ->label(__('Modèle QC'))
+                            ->label(__('resources.product_types.form.fields.qc_template'))
                             ->relationship(
                                 name: 'qcTemplate',
                                 titleAttribute: 'name',
@@ -57,9 +57,9 @@ class ProductTypeForm
                             ->searchable()
                             ->preload()
                             ->nullable()
-                            ->helperText(__('Choisissez le modèle QC partagé par ce type de produit.')),
+                            ->helperText(__('resources.product_types.form.helpers.qc_template')),
                         Select::make('allowed_production_line_ids')
-                            ->label(__('Lignes de production autorisées'))
+                            ->label(__('resources.product_types.form.fields.allowed_production_lines'))
                             ->options(fn (): array => ProductionLine::query()
                                 ->where('is_active', true)
                                 ->orderBy('sort_order')
@@ -72,7 +72,7 @@ class ProductTypeForm
                             ->native(false)
                             ->live()
                             ->dehydrated(false)
-                            ->helperText(__('Définit sur quelles lignes ce type de produit peut être planifié.'))
+                            ->helperText(__('resources.product_types.form.helpers.allowed_production_lines'))
                             ->afterStateHydrated(function (Select $component, ?ProductType $record): void {
                                 if (! $record) {
                                     $component->state([]);
@@ -98,7 +98,7 @@ class ProductTypeForm
                                 }
                             }),
                         Select::make('default_production_line_id')
-                            ->label(__('Ligne de production par défaut'))
+                            ->label(__('resources.product_types.form.fields.default_production_line'))
                             ->options(fn (Get $get): array => ProductionLine::query()
                                 ->whereIn('id', self::normalizeProductionLineIds($get('allowed_production_line_ids') ?? []))
                                 ->orderBy('sort_order')
@@ -110,11 +110,11 @@ class ProductTypeForm
                             ->native(false)
                             ->nullable(),
                         Toggle::make('is_active')
-                            ->label(__('Actif'))
+                            ->label(__('resources.product_types.form.fields.is_active'))
                             ->default(true),
                     ]),
 
-                Section::make('Paramètres de taille de batch')
+                Section::make(__('resources.product_types.form.sections.batch_size_settings'))
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -123,35 +123,35 @@ class ProductTypeForm
                     ])
                     ->schema([
                         Select::make('sizing_mode')
-                            ->label('Mode de calcul')
+                            ->label(__('resources.product_types.form.fields.sizing_mode'))
                             ->options(SizingMode::class)
                             ->default(SizingMode::OilWeight)
                             ->required()
                             ->live()
                             ->columnSpanFull(),
                         TextInput::make('default_batch_size')
-                            ->label('Taille de batch par défaut (kg)')
+                            ->label(__('resources.product_types.form.fields.default_batch_size'))
                             ->numeric()
                             ->default(0)
                             ->required()
                             ->suffix('kg'),
                         TextInput::make('expected_units_output')
-                            ->label('Unités attendues')
+                            ->label(__('resources.product_types.form.fields.expected_units_output'))
                             ->numeric()
                             ->default(0)
                             ->required(),
                         TextInput::make('expected_waste_kg')
-                            ->label('Perte estimée (kg)')
+                            ->label(__('resources.product_types.form.fields.expected_waste'))
                             ->numeric()
                             ->suffix('kg'),
                         TextInput::make('unit_fill_size')
-                            ->label('Taille de remplissage unitaire (g)')
+                            ->label(__('resources.product_types.form.fields.unit_fill_size'))
                             ->numeric()
                             ->suffix('g')
                             ->visible(fn (Get $get) => $get('sizing_mode') === SizingMode::FinalMass->value),
                     ]),
 
-                Section::make('Préréglages de taille de batch')
+                Section::make(__('resources.product_types.form.sections.batch_size_presets'))
                     ->columnSpanFull()
                     ->schema([
                         Repeater::make('batchSizePresets')
@@ -159,24 +159,24 @@ class ProductTypeForm
                             ->relationship()
                             ->schema([
                                 TextInput::make('name')
-                                    ->label('Nom')
+                                    ->label(__('resources.product_types.form.fields.preset_name'))
                                     ->required()
                                     ->maxLength(255),
                                 TextInput::make('batch_size')
-                                    ->label('Taille (kg)')
+                                    ->label(__('resources.product_types.form.fields.preset_batch_size'))
                                     ->numeric()
                                     ->required()
                                     ->suffix('kg'),
                                 TextInput::make('expected_units')
-                                    ->label('Unités attendues')
+                                    ->label(__('resources.product_types.form.fields.preset_expected_units'))
                                     ->numeric()
                                     ->required(),
                                 TextInput::make('expected_waste_kg')
-                                    ->label('Perte (kg)')
+                                    ->label(__('resources.product_types.form.fields.preset_expected_waste'))
                                     ->numeric()
                                     ->suffix('kg'),
                                 Toggle::make('is_default')
-                                    ->label('Par défaut')
+                                    ->label(__('resources.product_types.form.fields.preset_is_default'))
                                     ->default(false),
                             ])
                             ->columns([
@@ -187,7 +187,7 @@ class ProductTypeForm
                             ->defaultItems(0)
                             ->reorderableWithButtons()
                             ->collapsible()
-                            ->itemLabel(fn (array $state): string => $state['name'] ?? 'Nouveau préréglage'),
+                            ->itemLabel(fn (array $state): string => $state['name'] ?? __('resources.product_types.form.items.new_preset')),
                     ])
                     ->collapsible(),
             ]);

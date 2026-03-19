@@ -21,6 +21,7 @@ use Filament\Schemas\Components\Section;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
 /**
  * Production resource definition.
@@ -36,17 +37,23 @@ use Filament\Tables\Table;
  * @see ProductionsTable Table configuration
  * @see ProductionItemsRelationManager Items management
  */
-class ProductionResource extends Resource
+class ProductionResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = Production::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Production';
-
-    protected static ?string $navigationLabel = 'Productions';
-
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 0;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.operations');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.productions');
+    }
 
     /**
      * Configure the production form schema.
@@ -138,6 +145,15 @@ class ProductionResource extends Resource
             'create' => CreateProduction::route('/create'),
             'view' => ViewProduction::route('/{record}'),
             'edit' => EditProduction::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'execution/productions',
+            'execution/tasks-qc-and-outputs',
+            'stock-and-allocations/allocations',
         ];
     }
 }

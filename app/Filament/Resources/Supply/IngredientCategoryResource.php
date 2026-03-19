@@ -28,13 +28,24 @@ class IngredientCategoryResource extends Resource
 {
     protected static ?string $model = IngredientCategory::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
-
-    protected static ?string $navigationLabel = 'Catégories Ingrédients';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedTag;
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 1;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.references');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.ingredient_categories');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.ingredients');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -55,7 +66,7 @@ class IngredientCategoryResource extends Resource
                     }),
 
                 TextInput::make('name')
-                    ->label('Nom')
+                    ->label(__('Nom'))
                     ->required()
                     ->maxLength(50)
                     ->live(onBlur: true)
@@ -89,17 +100,17 @@ class IngredientCategoryResource extends Resource
 
                 TextColumn::make('name')
                     ->searchable()
-                    ->label('Nom'),
+                    ->label(__('Nom')),
                 TextColumn::make('code')
                     ->searchable(),
                 TextColumn::make('parent.name')
                     ->sortable()
-                    ->label('Catégorie Parente'),
+                    ->label(__('Catégorie Parente')),
                 TextColumn::make('slug')
                     ->searchable(),
                 IconColumn::make('is_visible')
                     ->boolean()
-                    ->label('Visible'),
+                    ->label(__('Visible')),
                 TextColumn::make('deleted_at')
                     ->dateTime()
                     ->sortable()
@@ -123,8 +134,8 @@ class IngredientCategoryResource extends Resource
                         if ($record->ingredients()->count() > 0) {
                             Notification::make()
                                 ->danger()
-                                ->title('Opération Impossible')
-                                ->body('Supprimez les ingrédients liés à la catégorie'.$record->name.' pour la supprimer.')
+                                ->title(__('Opération Impossible'))
+                                ->body(__('Supprimez les ingrédients liés à la catégorie :name pour la supprimer.', ['name' => $record->name]))
                                 ->send();
 
                             return;
@@ -132,8 +143,8 @@ class IngredientCategoryResource extends Resource
 
                         Notification::make()
                             ->success()
-                            ->title('Catégorie Supprimée')
-                            ->body('La catégorie '.$record->name.' a été supprimé avec succès.')
+                            ->title(__('Catégorie Supprimée'))
+                            ->body(__('La catégorie :name a été supprimée avec succès.', ['name' => $record->name]))
                             ->send();
 
                         $record->delete();

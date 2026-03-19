@@ -29,6 +29,64 @@ beforeEach(function (): void {
     $this->actingAs(User::factory()->create());
 });
 
+it('defaults new manual items to phase a for non-soap productions', function (): void {
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formule creme',
+        'slug' => 'formule-creme-phase-a',
+        'code' => 'FRM-PHASE-A',
+        'is_active' => true,
+        'is_soap' => false,
+    ]);
+
+    $production = Production::query()->create([
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'slug' => 'batch-phase-a-default',
+        'batch_number' => 'T91001',
+        'status' => ProductionStatus::Planned,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 100,
+        'expected_units' => 100,
+    ]);
+
+    Livewire::test(ProductionItemsEditor::class, ['productionId' => $production->id])
+        ->call('addItem')
+        ->assertSet('editingItem.phase', Phases::PhaseA->value);
+});
+
+it('keeps saponification as the default manual phase for soap productions', function (): void {
+    $product = Product::factory()->create();
+    $formula = Formula::query()->create([
+        'name' => 'Formule savon',
+        'slug' => 'formule-savon-saponification',
+        'code' => 'FRM-SAPO-DEFAULT',
+        'is_active' => true,
+        'is_soap' => true,
+    ]);
+
+    $production = Production::query()->create([
+        'product_id' => $product->id,
+        'formula_id' => $formula->id,
+        'slug' => 'batch-saponification-default',
+        'batch_number' => 'T91002',
+        'status' => ProductionStatus::Planned,
+        'production_date' => now()->toDateString(),
+        'ready_date' => now()->addDay()->toDateString(),
+        'organic' => true,
+        'sizing_mode' => SizingMode::OilWeight,
+        'planned_quantity' => 100,
+        'expected_units' => 100,
+    ]);
+
+    Livewire::test(ProductionItemsEditor::class, ['productionId' => $production->id])
+        ->call('addItem')
+        ->assertSet('editingItem.phase', Phases::Saponification->value);
+});
+
 it('merges a split child into its parent when deleting from dot menu', function (): void {
     $product = Product::factory()->create();
     $formula = Formula::query()->create([
@@ -349,7 +407,7 @@ it('allows setting coefficient for a new unit-based item from modal flow', funct
 
     expect($savedItem)->not->toBeNull()
         ->and((float) $savedItem->percentage_of_oils)->toBe(2.0)
-        ->and($savedItem->phase)->toBe(Phases::Saponification->value)
+        ->and($savedItem->phase)->toBe(Phases::PhaseA->value)
         ->and($savedItem->calculation_mode?->value)->toBe(FormulaItemCalculationMode::QuantityPerUnit->value)
         ->and((float) $savedItem->required_quantity)->toBe(110.0);
 });

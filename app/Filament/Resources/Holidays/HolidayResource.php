@@ -13,16 +13,25 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class HolidayResource extends Resource
+class HolidayResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = Holiday::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Administration';
-
-    protected static ?int $navigationSort = 50;
+    protected static ?int $navigationSort = 1;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCalendarDays;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.configuration');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.settings');
+    }
 
     public static function getModelLabel(): string
     {
@@ -36,7 +45,7 @@ class HolidayResource extends Resource
 
     public static function getNavigationLabel(): string
     {
-        return __('Jours fériés');
+        return __('navigation.items.holidays');
     }
 
     public static function form(Schema $schema): Schema
@@ -62,6 +71,14 @@ class HolidayResource extends Resource
             'index' => ListHolidays::route('/'),
             'create' => CreateHoliday::route('/create'),
             'edit' => EditHoliday::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'settings/holidays',
+            'planning/production-waves',
         ];
     }
 }

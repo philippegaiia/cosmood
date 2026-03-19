@@ -9,7 +9,6 @@ use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Auth;
 
@@ -28,7 +27,7 @@ class EditSupplierOrder extends EditRecord
         ]);
     }
 
-    protected function beforeSave(): void
+    public function save(bool $shouldRedirect = true, bool $shouldSendSavedNotification = true): void
     {
         if ($notificationData = $this->getStatusTransitionAuthorizationNotificationData()) {
             Notification::make()
@@ -37,7 +36,7 @@ class EditSupplierOrder extends EditRecord
                 ->body($notificationData['body'])
                 ->send();
 
-            throw new Halt;
+            return;
         }
 
         if ($notificationData = $this->getReceiptReadinessNotificationData()) {
@@ -47,12 +46,9 @@ class EditSupplierOrder extends EditRecord
                 ->body($notificationData['body'])
                 ->send();
 
-            throw new Halt;
+            return;
         }
-    }
 
-    public function save(bool $shouldRedirect = true, bool $shouldSendSavedNotification = true): void
-    {
         try {
             parent::save($shouldRedirect, $shouldSendSavedNotification);
         } catch (\InvalidArgumentException $exception) {
@@ -68,17 +64,17 @@ class EditSupplierOrder extends EditRecord
     {
         return [
             Action::make('exportPdf')
-                ->label('Exporter PO PDF')
+                ->label(__('Exporter PO PDF'))
                 ->icon(Heroicon::OutlinedDocumentArrowDown)
                 ->url(fn (): string => route('supplier-orders.po-pdf', $this->record))
                 ->openUrlInNewTab(),
             Action::make('printPo')
-                ->label('Imprimer PO')
+                ->label(__('Imprimer PO'))
                 ->icon(Heroicon::OutlinedPrinter)
                 ->url(fn (): string => route('supplier-orders.po-print', $this->record))
                 ->openUrlInNewTab(),
             Action::make('copyEmail')
-                ->label('Copier email')
+                ->label(__('Copier email'))
                 ->icon(Heroicon::OutlinedClipboardDocument)
                 ->url(fn (): string => route('supplier-orders.po-email-copy', $this->record))
                 ->openUrlInNewTab(),

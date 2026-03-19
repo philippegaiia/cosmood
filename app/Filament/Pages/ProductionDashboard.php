@@ -14,15 +14,21 @@ class ProductionDashboard extends Dashboard
 {
     protected static ?string $title = 'Dashboard Production';
 
-    protected static ?string $navigationLabel = 'Dashboard Production';
-
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBeaker;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Production';
-
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 0;
 
     protected static string $routePath = '/production-dashboard';
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.pilotage');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.production');
+    }
 
     public function getWidgets(): array
     {

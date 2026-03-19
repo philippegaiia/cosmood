@@ -13,13 +13,17 @@ use App\Filament\Widgets\StockAlertsWidget;
 use App\Filament\Widgets\TodaysProductionsWidget;
 use App\Filament\Widgets\TodaysTasksWidget;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
+use EslamRedaDiv\FilamentCopilot\FilamentCopilotPlugin;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
+use Filament\Navigation\NavigationGroup;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
+use Filament\Support\Icons\Heroicon;
 use Filament\View\PanelsRenderHook;
+use Guava\FilamentKnowledgeBase\Plugins\KnowledgeBaseCompanionPlugin;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
@@ -65,13 +69,26 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->plugins([
                 FilamentShieldPlugin::make(),
+                FilamentCopilotPlugin::make(),
+                KnowledgeBaseCompanionPlugin::make()
+                    ->knowledgeBasePanelId('knowledge-base')
+                    ->modalPreviews()
+                    ->slideOverPreviews()
+                    ->modalTitleBreadcrumbs(),
             ])
             // ->databaseNotifications()
+            ->collapsibleNavigationGroups()
             ->navigationGroups([
-                'Achats',
-                'Production',
-                'Produits Finis',
-                'Gestion Utilisateurs',
+                NavigationGroup::make(__('navigation.groups.pilotage'))
+                    ->icon(Heroicon::OutlinedHome),
+                NavigationGroup::make(__('navigation.groups.operations'))
+                    ->icon(Heroicon::OutlinedRectangleStack),
+                NavigationGroup::make(__('navigation.groups.references'))
+                    ->icon(Heroicon::OutlinedSquare3Stack3d)
+                    ->collapsed(),
+                NavigationGroup::make(__('navigation.groups.configuration'))
+                    ->icon(Heroicon::OutlinedCog6Tooth)
+                    ->collapsed(),
             ])
             ->unsavedChangesAlerts()
             ->renderHook(

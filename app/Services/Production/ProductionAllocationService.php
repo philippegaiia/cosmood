@@ -297,8 +297,8 @@ class ProductionAllocationService
     public function consumeForProduction(Production $production, bool $includePackaging = true, bool $includeNonPackaging = true): void
     {
         $production->productionItems()
-            ->when(! $includePackaging, fn ($q) => $q->where('phase', '!=', '40'))
-            ->when(! $includeNonPackaging, fn ($q) => $q->where('phase', '40'))
+            ->when(! $includePackaging, fn ($q) => $q->where('phase', '!=', Phases::Packaging->value))
+            ->when(! $includeNonPackaging, fn ($q) => $q->where('phase', Phases::Packaging->value))
             ->each(fn ($item) => $this->consume($item));
     }
 
@@ -971,16 +971,7 @@ class ProductionAllocationService
 
     private function normalizeReplacedPhase(?string $phase): ?string
     {
-        if ($phase === null) {
-            return null;
-        }
-
-        return match ($phase) {
-            'saponified_oils' => Phases::Saponification->value,
-            'lye' => Phases::Lye->value,
-            'additives' => Phases::Additives->value,
-            default => $phase,
-        };
+        return Phases::normalize($phase);
     }
 
     private function resolveIngredientForSupply(Supply $supply): Ingredient

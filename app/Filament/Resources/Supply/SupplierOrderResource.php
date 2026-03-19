@@ -35,24 +35,39 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
-class SupplierOrderResource extends Resource
+class SupplierOrderResource extends Resource implements HasKnowledgeBase
 {
     private const FALLBACK_ESTIMATED_DELIVERY_DAYS = 8;
 
     protected static ?string $model = SupplierOrder::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
-
-    protected static ?string $navigationLabel = 'Commandes fournisseurs';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedShoppingCart;
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 10;
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'procurement/supplier-orders',
+            'procurement/procurement-overview',
+        ];
+    }
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.operations');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.supplier_orders');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -77,7 +92,7 @@ class SupplierOrderResource extends Resource
                     ->columns(4)
                     ->columnSpanFull(),
 
-                Section::make('Détails Commande')
+                Section::make(__('Détails Commande'))
                     ->schema([
                         Select::make('supplier_id')
                             ->relationship('supplier', 'name')
@@ -118,12 +133,12 @@ class SupplierOrderResource extends Resource
                             ->columnSpan(2),
 
                         Select::make('production_wave_id')
-                            ->label('Référence vague')
+                            ->label(__('Référence vague'))
                             ->relationship('wave', 'name')
                             ->searchable()
                             ->preload()
                             ->getOptionLabelFromRecordUsing(fn (ProductionWave $record): string => $record->name.' ('.$record->slug.')')
-                            ->helperText('Lie cette commande à une vague pour la mise à jour automatique des statuts d\'approvisionnement.')
+                            ->helperText(__('Lie cette commande à une vague pour la mise à jour automatique des statuts d\'approvisionnement.'))
                             ->columnSpan(2)
                             ->nullable(),
 
@@ -146,7 +161,7 @@ class SupplierOrderResource extends Resource
                             ->disabled()
                             ->dehydrated(),
 
-                        Fieldset::make('Statut commande')
+                        Fieldset::make(__('Statut commande'))
                             ->schema([
                                 ToggleButtons::make('order_status')
                                     ->hiddenLabel()
@@ -157,10 +172,10 @@ class SupplierOrderResource extends Resource
                                     ->columnSpanFull(),
                             ]),
 
-                        Fieldset::make('Dates')
+                        Fieldset::make(__('Dates'))
                             ->schema([
                                 DatePicker::make('order_date')
-                                    ->label('Date Commande')
+                                    ->label(__('Date Commande'))
                                     ->required()
                                     ->default(now())
                                     ->live()
@@ -195,28 +210,28 @@ class SupplierOrderResource extends Resource
                                     ->weekStartsOnMonday(),
                             ])->columns(2),
 
-                        Fieldset::make('Documents')
+                        Fieldset::make(__('Documents'))
                             ->schema([
                                 TextInput::make('confirmation_number')
-                                    ->label('Numéro de confirmation')
+                                    ->label(__('Numéro de confirmation'))
                                     ->maxLength(50)
                                     ->columnSpan(1),
                                 TextInput::make('invoice_number')
-                                    ->label('Numéro facture')
+                                    ->label(__('Numéro facture'))
                                     ->maxLength(50)
                                     ->columnSpan(1),
                                 TextInput::make('bl_number')
-                                    ->label('Numéro bon de livraison')
+                                    ->label(__('Numéro bon de livraison'))
                                     ->maxLength(50)
                                     ->columnSpan(1),
                             ])->columns(3),
 
                         TextInput::make('freight_cost')
-                            ->label('Coût de transport')
+                            ->label(__('Coût de transport'))
                             ->numeric(),
 
-                        Section::make('Informations sur la Commande')
-                            ->description('The items you have selected for purchase')
+                        Section::make(__('Informations sur la Commande'))
+                            ->description(__('The items you have selected for purchase'))
                             ->schema([
                                 MarkdownEditor::make('description'),
                             ])
@@ -226,7 +241,7 @@ class SupplierOrderResource extends Resource
                     ])->columnSpanFull(),
                 //  ]);
 
-                Section::make('Items Commande')
+                Section::make(__('Items Commande'))
                     ->schema([
                         Repeater::make('supplier_order_items')
                             ->relationship()
@@ -260,7 +275,7 @@ class SupplierOrderResource extends Resource
                                     ->searchable(),
 
                                 TextInput::make('quantity')
-                                    ->label('Nb UOM')
+                                    ->label(__('Nb UOM'))
                                     ->numeric()
                                     ->minValue(fn (Get $get): float|int => self::isUnitBasedSupplierListingSelection($get) ? 1 : 0.001)
                                     ->step(fn (Get $get): float|int => self::isUnitBasedSupplierListingSelection($get) ? 1 : 0.001)
@@ -294,7 +309,7 @@ class SupplierOrderResource extends Resource
                                     ->columnSpan(2),
 
                                 TextInput::make('unit_price')
-                                    ->label('Prix')
+                                    ->label(__('Prix'))
                                     // ->dehydrated()
                                     ->numeric()
                                     ->minValue(0)
@@ -302,13 +317,13 @@ class SupplierOrderResource extends Resource
                                     ->columnSpan(2),
 
                                 TextInput::make('batch_number')
-                                    ->label('No. Lot')
+                                    ->label(__('No. Lot'))
                                     // ->live()
                                     ->disabled(fn (Get $get): bool => self::isSupplierOrderItemLocked($get))
                                     ->columnSpan(2),
 
                                 DatePicker::make('expiry_date')
-                                    ->label('DLUO')
+                                    ->label(__('DLUO'))
                                     ->displayFormat('M Y')
                                     ->native(false)
                                     ->closeOnDateSelection()
@@ -399,7 +414,7 @@ class SupplierOrderResource extends Resource
                             ->defaultItems(1)
                             ->deleteAction(
                                 function (Action $action) {
-                                    $action->label('Supprimer')
+                                    $action->label(__('Supprimer'))
                                         ->icon('heroicon-m-trash')
                                         ->requiresConfirmation()
                                         ->hidden(fn (array $arguments, Repeater $component) =>
@@ -413,7 +428,7 @@ class SupplierOrderResource extends Resource
                             ->addAction(fn (Action $action) => $action->label(__('Ajouter une ligne'))->icon('heroicon-m-plus')->color('success'))
                             ->extraItemActions([
                                 Action::make('createNewInventory')
-                                    ->label('Créer Stock')
+                                    ->label(__('Créer Stock'))
                                     ->hidden(
                                         fn (array $arguments, Repeater $component, $record) => ! (Auth::user()?->canReceiveSupplierOrdersIntoStock() ?? false)
                                             || ! isset($component->getRawItemState($arguments['item'])['id'])
@@ -447,7 +462,7 @@ class SupplierOrderResource extends Resource
 
                                         if (! isset($record->id) || $supplierOrderItemId <= 0) {
                                             Notification::make()
-                                                ->title('Item de commande introuvable')
+                                                ->title(__('Item de commande introuvable'))
                                                 ->warning()
                                                 ->send();
 
@@ -458,7 +473,7 @@ class SupplierOrderResource extends Resource
 
                                         if (! $supplierOrderItem) {
                                             Notification::make()
-                                                ->title('Item de commande introuvable')
+                                                ->title(__('Item de commande introuvable'))
                                                 ->warning()
                                                 ->send();
 
@@ -467,7 +482,7 @@ class SupplierOrderResource extends Resource
 
                                         if ($supplierOrderItem->isInSupplies() || $supplierOrderItem->supply()->exists()) {
                                             Notification::make()
-                                                ->title('Cet item est déjà en stock')
+                                                ->title(__('Cet item est déjà en stock'))
                                                 ->warning()
                                                 ->send();
 
@@ -476,8 +491,8 @@ class SupplierOrderResource extends Resource
 
                                         if ($record->order_status !== OrderStatus::Checked) {
                                             Notification::make()
-                                                ->title('Commande non contrôlée')
-                                                ->body('Le statut doit être Contrôlée pour créer le stock.')
+                                                ->title(__('Commande non contrôlée'))
+                                                ->body(__('Le statut doit être Contrôlée pour créer le stock.'))
                                                 ->warning()
                                                 ->send();
 
@@ -503,8 +518,8 @@ class SupplierOrderResource extends Resource
 
                                         if ($missingFields !== []) {
                                             Notification::make()
-                                                ->title('Données incomplètes')
-                                                ->body('Compléter: '.implode(', ', $missingFields))
+                                                ->title(__('Données incomplètes'))
+                                                ->body(__('Compléter : :fields', ['fields' => implode(', ', $missingFields)]))
                                                 ->warning()
                                                 ->send();
 
@@ -527,24 +542,24 @@ class SupplierOrderResource extends Resource
                                             );
 
                                             Notification::make()
-                                                ->title('Nouvelle création d\'inventaire')
+                                                ->title(__('Nouvelle création d\'inventaire'))
                                                 ->body(__('Lot final créé: :batch', ['batch' => (string) $supply->batch_number]))
                                                 ->success()
                                                 ->send();
                                         } catch (\RuntimeException $exception) {
                                             Notification::make()
-                                                ->title('Cet item est déjà en stock')
+                                                ->title(__('Cet item est déjà en stock'))
                                                 ->warning()
                                                 ->send();
                                         } catch (\InvalidArgumentException $exception) {
                                             Notification::make()
-                                                ->title('Impossible de créer le stock')
+                                                ->title(__('Impossible de créer le stock'))
                                                 ->body($exception->getMessage())
                                                 ->warning()
                                                 ->send();
                                         } catch (\Throwable $exception) {
                                             Notification::make()
-                                                ->title('Erreur de création de stock')
+                                                ->title(__('Erreur de création de stock'))
                                                 ->danger()
                                                 ->send();
                                         }
@@ -567,39 +582,39 @@ class SupplierOrderResource extends Resource
             ]))
             ->columns([
                 TextColumn::make('supplier.name')
-                    ->label('Fournisseur')
+                    ->label(__('Fournisseur'))
                     ->sortable()
                     ->searchable(),
 
                 TextColumn::make('order_status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->badge()
                     ->searchable(),
 
                 TextColumn::make('order_ref')
-                    ->label('Référence')
+                    ->label(__('Référence'))
                     ->searchable(),
 
                 TextColumn::make('stock_follow_up')
-                    ->label('Suivi stock')
+                    ->label(__('Suivi stock'))
                     ->state(fn (SupplierOrder $record): ?string => self::getOrderListStockBadgeLabel($record))
                     ->badge()
                     ->color(fn (SupplierOrder $record): string => self::getOrderListStockBadgeColor($record))
-                    ->placeholder('-'),
+                    ->placeholder(__('-')),
 
                 TextColumn::make('wave.name')
-                    ->label('Vague')
+                    ->label(__('Vague'))
                     ->badge()
-                    ->placeholder('-')
+                    ->placeholder(__('-'))
                     ->sortable(),
 
                 TextColumn::make('order_date')
-                    ->label('Date Commande')
+                    ->label(__('Date Commande'))
                     ->date()
                     ->sortable(),
 
                 TextColumn::make('delivery_date')
-                    ->label('Date Livraison')
+                    ->label(__('Date Livraison'))
                     ->date()
                     ->sortable(),
 
@@ -629,23 +644,23 @@ class SupplierOrderResource extends Resource
             ])
             ->filters([
                 SelectFilter::make('production_wave_id')
-                    ->label('Vague')
+                    ->label(__('Vague'))
                     ->relationship('wave', 'name'),
             ])
 
             ->recordActions([
                 Action::make('exportPdf')
-                    ->label('PO PDF')
+                    ->label(__('PO PDF'))
                     ->icon(Heroicon::OutlinedDocumentArrowDown)
                     ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-pdf', $record))
                     ->openUrlInNewTab(),
                 Action::make('printPo')
-                    ->label('Imprimer PO')
+                    ->label(__('Imprimer PO'))
                     ->icon(Heroicon::OutlinedPrinter)
                     ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-print', $record))
                     ->openUrlInNewTab(),
                 Action::make('copyEmail')
-                    ->label('Copier email')
+                    ->label(__('Copier email'))
                     ->icon(Heroicon::OutlinedClipboardDocument)
                     ->url(fn (SupplierOrder $record): string => route('supplier-orders.po-email-copy', $record))
                     ->openUrlInNewTab(),

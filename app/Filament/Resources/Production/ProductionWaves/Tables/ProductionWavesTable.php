@@ -33,11 +33,11 @@ class ProductionWavesTable
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Nom')
+                    ->label(__('Nom'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->badge()
                     ->sortable(),
                 TextColumn::make('coverage_signal')
@@ -53,7 +53,7 @@ class ProductionWavesTable
                     ->color(fn (ProductionWave $record): string => (string) ($record->getAttribute('fabrication_signal_color') ?? $record->getFabricationSignalColor()))
                     ->tooltip(fn (ProductionWave $record): string => (string) ($record->getAttribute('fabrication_signal_tooltip') ?? $record->getFabricationSignalTooltip())),
                 TextColumn::make('status_sync_advisory')
-                    ->label('Alerte flux')
+                    ->label(__('Alerte flux'))
                     ->state(fn (ProductionWave $record): ?string => $record->getStatusAdvisoryMessage())
                     ->badge()
                     ->color('warning')
@@ -62,31 +62,31 @@ class ProductionWavesTable
                     ->label(__('Productions'))
                     ->badge(),
                 TextColumn::make('planned_start_date')
-                    ->label('Début prévu')
+                    ->label(__('Début prévu'))
                     ->date('d/m/Y')
                     ->sortable(),
                 TextColumn::make('planned_end_date')
-                    ->label('Fin prévue')
+                    ->label(__('Fin prévue'))
                     ->date('d/m/Y')
                     ->sortable(),
                 TextColumn::make('approvedBy.name')
-                    ->label('Approuvé par')
+                    ->label(__('Approuvé par'))
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('approved_at')
-                    ->label('Approuvé le')
+                    ->label(__('Approuvé le'))
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('completed_at')
-                    ->label('Terminé le')
+                    ->label(__('Terminé le'))
                     ->dateTime('d/m/Y H:i')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->recordActions([
                 Action::make('approve')
-                    ->label('Approuver')
+                    ->label(__('Approuver'))
                     ->icon(Heroicon::OutlinedCheckBadge)
                     ->color('info')
                     ->requiresConfirmation()
@@ -109,7 +109,7 @@ class ProductionWavesTable
                         );
                     }),
                 Action::make('start')
-                    ->label('Démarrer')
+                    ->label(__('Démarrer'))
                     ->icon(Heroicon::OutlinedPlay)
                     ->color('warning')
                     ->requiresConfirmation()
@@ -119,7 +119,7 @@ class ProductionWavesTable
                         $record->start();
                     }),
                 Action::make('complete')
-                    ->label('Terminer')
+                    ->label(__('Terminer'))
                     ->icon(Heroicon::OutlinedCheck)
                     ->color('success')
                     ->requiresConfirmation()
@@ -141,7 +141,7 @@ class ProductionWavesTable
                         }
                     }),
                 Action::make('cancel')
-                    ->label('Annuler')
+                    ->label(__('Annuler'))
                     ->icon(Heroicon::OutlinedXMark)
                     ->color('danger')
                     ->requiresConfirmation()
@@ -151,52 +151,52 @@ class ProductionWavesTable
                         $record->cancel();
                     }),
                 Action::make('hardDeleteWave')
-                    ->label('Supprimer définitivement')
+                    ->label(__('Supprimer définitivement'))
                     ->icon(Heroicon::OutlinedTrash)
                     ->color('danger')
                     ->requiresConfirmation()
                     ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCompleted() && (auth()->user()?->canDeleteWaves() ?? false))
                     ->authorize(fn (): bool => auth()->user()?->canDeleteWaves() ?? false)
-                    ->modalDescription('Supprime définitivement la vague et ses productions. Les allocations doivent être désallouées et les engagements PO retirés manuellement.')
+                    ->modalDescription(__('Supprime définitivement la vague et ses productions. Les allocations doivent être désallouées et les engagements PO retirés manuellement.'))
                     ->action(function (ProductionWave $record): void {
                         try {
                             app(WaveDeletionService::class)->hardDeleteWaveWithProductions($record);
 
                             Notification::make()
-                                ->title('Vague supprimée définitivement')
+                                ->title(__('Vague supprimée définitivement'))
                                 ->success()
                                 ->send();
                         } catch (\InvalidArgumentException $exception) {
                             Notification::make()
-                                ->title('Suppression impossible')
+                                ->title(__('Suppression impossible'))
                                 ->body($exception->getMessage())
                                 ->danger()
                                 ->send();
                         }
                     }),
                 Action::make('replanWave')
-                    ->label('Replanifier')
+                    ->label(__('Replanifier'))
                     ->icon(Heroicon::OutlinedCalendarDays)
                     ->color('info')
                     ->visible(fn (ProductionWave $record): bool => ! $record->isInProgress() && ! $record->isCancelled() && ! $record->isCompleted() && (int) ($record->productions_count ?? 0) > 0 && (auth()->user()?->canManageProductionPlanning() ?? false))
                     ->authorize(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                     ->schema([
                         DatePicker::make('start_date')
-                            ->label('Nouveau départ')
+                            ->label(__('Nouveau départ'))
                             ->native(false)
                             ->required()
                             ->default(fn (ProductionWave $record): string => $record->planned_start_date?->toDateString() ?? now()->toDateString()),
                         TextInput::make('fallback_daily_capacity')
-                            ->label('Capacité / jour sans ligne')
+                            ->label(__('Capacité / jour sans ligne'))
                             ->numeric()
                             ->minValue(1)
                             ->default(4)
                             ->required(),
                         Toggle::make('skip_weekends')
-                            ->label('Ignorer weekends')
+                            ->label(__('Ignorer weekends'))
                             ->default(true),
                         Toggle::make('skip_holidays')
-                            ->label('Ignorer jours fériés')
+                            ->label(__('Ignorer jours fériés'))
                             ->default(true),
                     ])
                     ->action(function (ProductionWave $record, array $data): void {
@@ -220,7 +220,7 @@ class ProductionWavesTable
 
                         if ($summary['planned_count'] === 0) {
                             Notification::make()
-                                ->title('Aucune production replanifiée')
+                                ->title(__('Aucune production replanifiée'))
                                 ->warning()
                                 ->send();
 
@@ -228,7 +228,7 @@ class ProductionWavesTable
                         }
 
                         Notification::make()
-                            ->title('Vague replanifiée')
+                            ->title(__('Vague replanifiée'))
                             ->body(sprintf(
                                 '%d batch(es) replanifiés du %s au %s.',
                                 (int) $summary['planned_count'],
@@ -334,7 +334,7 @@ class ProductionWavesTable
                             ->send();
                     }),
                 Action::make('printProcurementPlan')
-                    ->label('Imprimer plan')
+                    ->label(__('Imprimer plan'))
                     ->icon(Heroicon::OutlinedPrinter)
                     ->color('gray')
                     ->url(fn (ProductionWave $record): string => route('production-waves.procurement-plan.print', $record))

@@ -32,12 +32,12 @@ class StockMovementsRelationManager extends RelationManager
                 ->orderBy('moved_at', 'desc'))
             ->columns([
                 TextColumn::make('moved_at')
-                    ->label('Date')
+                    ->label(__('Date'))
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 TextColumn::make('movement_type')
-                    ->label('Type')
+                    ->label(__('Type'))
                     ->badge()
                     ->formatStateUsing(fn (SuppliesMovement $record): string => match ($record->movement_type) {
                         'in', 'entry', 'reception' => 'Entrée',
@@ -55,30 +55,30 @@ class StockMovementsRelationManager extends RelationManager
                     }),
 
                 TextColumn::make('quantity')
-                    ->label('Quantité')
+                    ->label(__('Quantité'))
                     ->numeric(decimalPlaces: 3)
                     ->color(fn (SuppliesMovement $record): string => $record->quantity < 0 ? 'danger' : 'success')
                     ->sortable(),
 
                 TextColumn::make('unit')
-                    ->label('Unité'),
+                    ->label(__('Unité')),
 
                 TextColumn::make('production.batch_number')
-                    ->label('Production')
-                    ->placeholder('-')
+                    ->label(__('production.label'))
+                    ->placeholder(__('-'))
                     ->url(fn (SuppliesMovement $record): ?string => $record->production_id
                         ? route('filament.admin.resources.production.productions.view', ['record' => $record->production_id])
                         : null)
                     ->sortable(),
 
                 TextColumn::make('user.name')
-                    ->label('Utilisateur')
-                    ->placeholder('-')
+                    ->label(__('Utilisateur'))
+                    ->placeholder(__('-'))
                     ->sortable(),
 
                 TextColumn::make('reason')
-                    ->label('Raison')
-                    ->placeholder('-')
+                    ->label(__('Raison'))
+                    ->placeholder(__('-'))
                     ->limit(50)
                     ->toggleable(isToggledHiddenByDefault: true),
             ])

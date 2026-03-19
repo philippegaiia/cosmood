@@ -37,7 +37,7 @@ class ProductionItemGenerationService
         DB::transaction(function () use ($production, $formula, $product): void {
             $formula->loadMissing('formulaItems.ingredient');
 
-            // Generate items from formula ingredients (phases 10/20/30)
+            // Generate items from formula ingredients using the phase chosen on the formula.
             foreach ($formula->formulaItems as $formulaItem) {
                 $resolvedMode = $this->quantityCalculator->resolveCalculationMode(
                     ingredientBaseUnit: $formulaItem->ingredient?->base_unit,

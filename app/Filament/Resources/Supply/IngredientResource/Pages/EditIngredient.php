@@ -18,8 +18,8 @@ class EditIngredient extends EditRecord
                 if ($record->supplier_listings()->count() > 0) {
                     Notification::make()
                         ->danger()
-                        ->title('Opération Impossible')
-                        ->body('Supprimez les ingrédients référencés liés à l\'ingrédient'.$record->name.' pour le supprimer.')
+                        ->title(__('Opération Impossible'))
+                        ->body(__('Supprimez les ingrédients référencés liés à l\'ingrédient :name pour le supprimer.', ['name' => $record->name]))
                         ->send();
 
                     return;
@@ -27,8 +27,8 @@ class EditIngredient extends EditRecord
 
                 Notification::make()
                     ->success()
-                    ->title('Ingrédient Supprimé')
-                    ->body('L\'ingrédient'.$record->name.' a été supprimé avec succès.')
+                    ->title(__('Ingrédient Supprimé'))
+                    ->body(__('L\'ingrédient :name a été supprimé avec succès.', ['name' => $record->name]))
                     ->send();
 
                 $record->delete();

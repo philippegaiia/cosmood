@@ -16,19 +16,19 @@ class ProductionLinesTable
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Nom')
+                    ->label(__('Nom'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('daily_batch_capacity')
-                    ->label('Capacité / jour')
+                    ->label(__('Capacité / jour'))
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('sort_order')
-                    ->label('Ordre')
+                    ->label(__('Ordre'))
                     ->numeric()
                     ->sortable(),
                 IconColumn::make('is_active')
-                    ->label('Actif')
+                    ->label(__('Actif'))
                     ->boolean()
                     ->sortable(),
             ])

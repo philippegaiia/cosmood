@@ -28,19 +28,39 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Database\Eloquent\Builder;
 
-class SupplierListingResource extends Resource
+class SupplierListingResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = SupplierListing::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
-
-    protected static ?string $navigationLabel = 'Ingrédients référencés';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedDocumentCheck;
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 2;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.references');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.supplier_listings');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.suppliers');
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'procurement/suppliers-and-listings',
+            'procurement/supplier-orders',
+        ];
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -85,11 +105,11 @@ class SupplierListingResource extends Resource
                 TextInput::make('supplier_code')
                     ->maxLength(255),
                 Select::make('pkg')
-                    ->label('Conditionnement')
+                    ->label(__('Conditionnement'))
                     ->options(Packaging::class)
                     ->default(Packaging::Bidon->value),
                 TextInput::make('unit_weight')
-                    ->label('Contenu UOM')
+                    ->label(__('Contenu UOM'))
                     ->numeric()
                     ->inputMode(fn (Get $get): string => self::isUnitBasedIngredientSelection($get) ? 'numeric' : 'decimal')
                     ->step(fn (Get $get): float|int => self::isUnitBasedIngredientSelection($get) ? 1 : 0.001)
@@ -131,7 +151,7 @@ class SupplierListingResource extends Resource
             ->columns([
 
                 TextColumn::make('name')
-                    ->label('designation')
+                    ->label(__('designation'))
                     ->formatStateUsing(fn (SupplierListing $record) => $record->name.' ('.self::formatListingUom($record).')')
                     ->weight(FontWeight::Bold)
                     ->searchable(['name', 'unit_of_measure']),
@@ -150,22 +170,22 @@ class SupplierListingResource extends Resource
                     ->sortable(),
 
                 TextColumn::make('pkg')
-                    ->label('Packaging')
+                    ->label(__('Packaging'))
 
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('unit_weight')
-                    ->label('UOM')
+                    ->label(__('UOM'))
                     ->formatStateUsing(fn (SupplierListing $record): string => self::formatListingUom($record))
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('price')
-                    ->label('Prix')
+                    ->label(__('Prix'))
                     ->money('EUR')
                     ->sortable(),
                 IconColumn::make('organic')
-                    ->label('Bio')
+                    ->label(__('Bio'))
                     ->boolean()
                     ->sortable(),
                 IconColumn::make('fairtrade')
@@ -178,7 +198,7 @@ class SupplierListingResource extends Resource
                     ->boolean()
                     ->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('is_active')
-                    ->label('Actif')
+                    ->label(__('Actif'))
                     ->boolean(),
                 TextColumn::make('created_at')
                     ->dateTime()
@@ -201,8 +221,8 @@ class SupplierListingResource extends Resource
                             if ($record->supplies()->count() > 0 || $record->supplier_order_items()->count() > 0) {
                                 Notification::make()
                                     ->danger()
-                                    ->title('Opération Impossible')
-                                    ->body('Cet ingrédient est référencé dans des commandes fournisseur et dans les stocks ingrédients.')
+                                    ->title(__('Opération Impossible'))
+                                    ->body(__('Cet ingrédient est référencé dans des commandes fournisseur et dans les stocks ingrédients.'))
                                     ->send();
 
                                 return;
@@ -210,8 +230,8 @@ class SupplierListingResource extends Resource
 
                             Notification::make()
                                 ->success()
-                                ->title('Fournisseur Supprimé')
-                                ->body('Ingrédient '.$record->name.' supprimé avec succès.')
+                                ->title(__('Fournisseur Supprimé'))
+                                ->body(__('Ingrédient :name supprimé avec succès.', ['name' => $record->name]))
                                 ->send();
 
                             $record->delete();

@@ -2,6 +2,7 @@
 
 namespace App\Models\Production;
 
+use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
@@ -976,12 +977,7 @@ class Production extends Model implements Eventable
             return null;
         }
 
-        return match ((string) $masterbatch->replaces_phase) {
-            'saponified_oils' => '10',
-            'lye' => '20',
-            'additives' => '30',
-            default => (string) $masterbatch->replaces_phase,
-        };
+        return Phases::normalize((string) $masterbatch->replaces_phase);
     }
 
     private function resolveProducedIngredientIdForOutput(): ?int

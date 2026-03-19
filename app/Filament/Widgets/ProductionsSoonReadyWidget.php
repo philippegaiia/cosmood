@@ -44,35 +44,35 @@ class ProductionsSoonReadyWidget extends BaseWidget
             )
             ->columns([
                 TextColumn::make('batch_number')
-                    ->label('Lot')
+                    ->label(__('Lot'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('product.name')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('production_date')
-                    ->label('Date début')
+                    ->label(__('Date début'))
                     ->date('d/m/Y')
                     ->sortable(),
 
                 TextColumn::make('planned_quantity')
-                    ->label('Qté planifiée')
+                    ->label(__('Qté planifiée'))
                     ->numeric()
                     ->suffix(' kg')
                     ->sortable(),
 
                 TextColumn::make('actual_units')
-                    ->label('Unités produites')
+                    ->label(__('Unités produites'))
                     ->numeric()
-                    ->placeholder('-')
+                    ->placeholder(__('-'))
                     ->sortable(),
             ])
             ->actions([
                 Action::make('finish')
-                    ->label('Terminer')
+                    ->label(__('Terminer'))
                     ->icon(Heroicon::Check)
                     ->color('success')
                     ->requiresConfirmation()
@@ -103,13 +103,13 @@ class ProductionsSoonReadyWidget extends BaseWidget
                     }),
 
                 Action::make('view')
-                    ->label('Voir')
+                    ->label(__('Voir'))
                     ->icon(Heroicon::Eye)
                     ->color('gray')
                     ->url(fn (Production $record): string => ProductionResource::getUrl('view', ['record' => $record])),
             ])
-            ->emptyStateHeading('Aucune production en cours')
-            ->emptyStateDescription('Aucune production n\'est actuellement en cours.')
+            ->emptyStateHeading(__('Aucune production en cours'))
+            ->emptyStateDescription(__('Aucune production n\'est actuellement en cours.'))
             ->paginated(false);
     }
 

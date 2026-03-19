@@ -27,15 +27,15 @@ class ProductionsRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('batch_number')
-                    ->label('Lot')
+                    ->label(__('Lot'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('product.name')
-                    ->label('Produit')
+                    ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('status')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->badge()
                     ->sortable(),
                 TextColumn::make('procurement_signal')
@@ -53,20 +53,20 @@ class ProductionsRelationManager extends RelationManager
                         ? 'success'
                         : ($record->hasCoveredItems() ? 'info' : 'gray')),
                 TextColumn::make('planned_quantity')
-                    ->label('Qté planifiée (kg)')
+                    ->label(__('Qté planifiée (kg)'))
                     ->numeric(decimalPlaces: 3)
                     ->sortable(),
                 TextColumn::make('production_date')
-                    ->label('Date production')
+                    ->label(__('Date production'))
                     ->date('d/m/Y')
                     ->sortable(),
                 TextColumn::make('productionLine.name')
-                    ->label('Ligne')
+                    ->label(__('Ligne'))
                     ->badge()
-                    ->placeholder('Non affectée')
+                    ->placeholder(__('Non affectée'))
                     ->sortable(),
                 TextColumn::make('ready_date')
-                    ->label('Date prêt')
+                    ->label(__('Date prêt'))
                     ->date('d/m/Y')
                     ->sortable(),
             ])

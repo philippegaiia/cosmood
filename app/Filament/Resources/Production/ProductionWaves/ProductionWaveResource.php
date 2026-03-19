@@ -14,18 +14,30 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class ProductionWaveResource extends Resource
+class ProductionWaveResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = ProductionWave::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedQueueList;
 
-    protected static ?string $navigationLabel = 'Vagues de Production';
+    protected static ?int $navigationSort = 1;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Production';
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.operations');
+    }
 
-    protected static ?int $navigationSort = 5;
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.production_waves');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.productions');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -50,6 +62,14 @@ class ProductionWaveResource extends Resource
             'index' => ListProductionWaves::route('/'),
             'create' => CreateProductionWave::route('/create'),
             'edit' => EditProductionWave::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'planning/production-waves',
+            'stock-and-allocations/allocations',
         ];
     }
 }

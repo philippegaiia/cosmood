@@ -30,19 +30,34 @@ use Filament\Tables;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Support\Str;
 
-class SupplierResource extends Resource
+class SupplierResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = Supplier::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
-
-    protected static ?string $navigationLabel = 'Fournisseurs';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingOffice;
 
-    protected static ?int $navigationSort = 1;
+    protected static ?int $navigationSort = 20;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.references');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.suppliers');
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'procurement/suppliers-and-listings',
+            'procurement/supplier-orders',
+        ];
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -50,10 +65,10 @@ class SupplierResource extends Resource
            // ->schema([
                 // Forms\Components\Group::make()
             ->components([
-                Section::make('Détails Fournisseur')
+                Section::make(__('Détails Fournisseur'))
                     ->schema([
                         TextInput::make('name')
-                            ->label('Raison Sociale')
+                            ->label(__('Raison Sociale'))
                             ->required()
                             ->maxLength(100)
                             ->live(onBlur: true)
@@ -72,7 +87,7 @@ class SupplierResource extends Resource
 
                         TextInput::make('slug')
                             // ->disabledOn('edit')
-                            ->label('Slug')
+                            ->label(__('Slug'))
                             ->required()
                             ->dehydrated()
                             ->unique()
@@ -86,7 +101,7 @@ class SupplierResource extends Resource
                             ->columnSpan(2),
 
                         TextInput::make('Customer_code')
-                            ->label('Code Client')
+                            ->label(__('Code Client'))
                             ->maxLength(100)
                             ->columnSpan(2),
 
@@ -100,27 +115,27 @@ class SupplierResource extends Resource
                             ->columnSpan(2),
 
                         Toggle::make('is_active')
-                            ->label('Actif')
+                            ->label(__('Actif'))
                             ->inline(false)
                             ->columnSpan(2),
 
                         TextInput::make('address1')
-                            ->label('Adresse')
+                            ->label(__('Adresse'))
                             ->maxLength(100)
                             ->columnSpan(3),
 
                         TextInput::make('address2')
-                            ->label('Complément d\'adresse')
+                            ->label(__('Complément d\'adresse'))
                             ->maxLength(100)
                             ->columnSpan(3),
 
                         TextInput::make('zipcode')
-                            ->label('Code Postal')
+                            ->label(__('Code Postal'))
                             ->maxLength(10)
                             ->columnSpan(2),
 
                         TextInput::make('country')
-                            ->label('Pays')
+                            ->label(__('Pays'))
                             ->maxLength(255)
                             ->columnSpan(4),
 
@@ -132,7 +147,7 @@ class SupplierResource extends Resource
                         TextInput::make('phone')
                             ->tel()
                             ->telRegex('/^[+]*[(]{0,1}[0-9]{1,4}[)]{0,1}[-\s\.\/0-9]*$/')
-                            ->label('Téléphone')
+                            ->label(__('Téléphone'))
                             ->maxLength(15)
                             ->columnSpan(2),
 
@@ -144,7 +159,7 @@ class SupplierResource extends Resource
 
                 // Forms\Components\Group::make()
                 // ->schema([
-                Section::make('Notes')
+                Section::make(__('Notes'))
                     ->collapsed()
                     ->schema([
 
@@ -161,26 +176,26 @@ class SupplierResource extends Resource
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Raison Sociale')
+                    ->label(__('Raison Sociale'))
                     ->sortable()
                     ->searchable(),
 
                 TextColumn::make('address1')
-                    ->label('Adresse')
+                    ->label(__('Adresse'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('address2')
-                    ->label('Complément d\'adresse')
+                    ->label(__('Complément d\'adresse'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('zipcode')
-                    ->label('Code Postal')
+                    ->label(__('Code Postal'))
                     ->searchable(),
 
                 TextColumn::make('country')
-                    ->label('Pays')
+                    ->label(__('Pays'))
                     ->searchable(),
 
                 TextColumn::make('email')
@@ -188,7 +203,7 @@ class SupplierResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 TextColumn::make('phone')
-                    ->label('Téléphone')
+                    ->label(__('Téléphone'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
@@ -221,8 +236,8 @@ class SupplierResource extends Resource
                             if ($record->contacts()->count() > 0 || $record->supplier_listings()->count() > 0) {
                                 Notification::make()
                                     ->danger()
-                                    ->title('Opération Impossible')
-                                    ->body('Supprimez les fichiers liés à ce fournisseur pour le supprimer.')
+                                    ->title(__('Opération Impossible'))
+                                    ->body(__('Supprimez les fichiers liés à ce fournisseur pour le supprimer.'))
                                     ->send();
 
                                 return;
@@ -230,8 +245,8 @@ class SupplierResource extends Resource
 
                             Notification::make()
                                 ->success()
-                                ->title('Fournisseur Supprimé')
-                                ->body('Le Fournisseur a été supprimé avec succès.')
+                                ->title(__('Fournisseur Supprimé'))
+                                ->body(__('Le Fournisseur a été supprimé avec succès.'))
                                 ->send();
 
                             $record->delete();
@@ -260,10 +275,10 @@ class SupplierResource extends Resource
         return $schema
             ->components([
 
-                Section::make('Détails Fournisseur')
+                Section::make(__('Détails Fournisseur'))
                     ->schema([
                         TextEntry::make('name')
-                            ->label('Raison Sociale')
+                            ->label(__('Raison Sociale'))
                             ->columnSpan(2),
 
                         TextEntry::make('code')
@@ -277,31 +292,31 @@ class SupplierResource extends Resource
                             ->columnSpan(1),
 
                         TextEntry::make('address1')
-                            ->label('Adresse'),
+                            ->label(__('Adresse')),
 
                         TextEntry::make('address2')
-                            ->label('Adresse Complément'),
+                            ->label(__('Adresse Complément')),
 
                         TextEntry::make('zipcode')
-                            ->label('Code Postal'),
+                            ->label(__('Code Postal')),
 
                         TextEntry::make('city')
-                            ->label('VIlle'),
+                            ->label(__('VIlle')),
 
                         TextEntry::make('country')
-                            ->label('Pays'),
+                            ->label(__('Pays')),
 
                         TextEntry::make('email'),
 
                         TextEntry::make('phone')
-                            ->label('Téléphone'),
+                            ->label(__('Téléphone')),
 
                         TextEntry::make('website')
-                            ->label('Site Internet'),
+                            ->label(__('Site Internet')),
 
                     ])->columns(4),
 
-                Section::make('Notes')
+                Section::make(__('Notes'))
                     ->collapsed()
                     ->schema([
                         TextEntry::make('description')

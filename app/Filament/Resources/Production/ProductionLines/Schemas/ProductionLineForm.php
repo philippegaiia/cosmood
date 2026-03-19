@@ -16,7 +16,7 @@ class ProductionLineForm
     {
         return $schema
             ->components([
-                Section::make('Informations ligne')
+                Section::make(__('Informations ligne'))
                     ->columnSpanFull()
                     ->columns([
                         'default' => 1,
@@ -25,7 +25,7 @@ class ProductionLineForm
                     ])
                     ->schema([
                         TextInput::make('name')
-                            ->label('Nom')
+                            ->label(__('Nom'))
                             ->required()
                             ->live(onBlur: true)
                             ->afterStateUpdated(function (?string $state, Set $set): void {
@@ -33,26 +33,26 @@ class ProductionLineForm
                             })
                             ->maxLength(255),
                         TextInput::make('slug')
-                            ->label('Slug')
+                            ->label(__('Slug'))
                             ->required()
                             ->unique()
                             ->maxLength(255),
                         TextInput::make('daily_batch_capacity')
-                            ->label('Capacité / jour')
+                            ->label(__('Capacité / jour'))
                             ->numeric()
                             ->minValue(1)
                             ->default(1)
                             ->required(),
                         TextInput::make('sort_order')
-                            ->label('Ordre')
+                            ->label(__('Ordre'))
                             ->numeric()
                             ->default(0)
                             ->required(),
                         Toggle::make('is_active')
-                            ->label('Actif')
+                            ->label(__('Actif'))
                             ->default(true),
                         Textarea::make('notes')
-                            ->label('Notes')
+                            ->label(__('Notes'))
                             ->rows(3)
                             ->columnSpanFull(),
                     ]),

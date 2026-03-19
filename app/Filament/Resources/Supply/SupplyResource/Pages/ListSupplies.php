@@ -24,14 +24,14 @@ class ListSupplies extends ListRecords
     public function getTabs(): array
     {
         return [
-            'all' => Tab::make('Tous les lots')
+            'all' => Tab::make(__('Tous les lots'))
                 ->badge(Supply::query()->count()),
 
-            'in_stock' => Tab::make('En stock')
+            'in_stock' => Tab::make(__('En stock'))
                 ->modifyQueryUsing(fn (Builder $query): Builder => $query->where('is_in_stock', true))
                 ->badge(Supply::query()->where('is_in_stock', true)->count()),
 
-            'alert' => Tab::make('Alerte stock')
+            'alert' => Tab::make(__('Alerte stock'))
                 ->modifyQueryUsing(function (Builder $query): Builder {
                     return $query->whereHas('supplierListing.ingredient', function ($q) {
                         $q->whereColumn('stock_min', '>', 0)
@@ -61,7 +61,7 @@ class ListSupplies extends ListRecords
     {
         return [
             Action::make('movements')
-                ->label('Voir mouvements')
+                ->label(__('Voir mouvements'))
                 ->icon('heroicon-o-arrows-right-left')
                 ->url(StockMovementResource::getUrl('index'))
                 ->openUrlInNewTab()

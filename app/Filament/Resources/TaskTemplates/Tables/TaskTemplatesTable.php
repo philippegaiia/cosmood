@@ -16,22 +16,22 @@ class TaskTemplatesTable
         return $table
             ->columns([
                 TextColumn::make('name')
-                    ->label('Nom')
+                    ->label(__('Nom'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('productType.name')
-                    ->label('Type produit')
+                    ->label(__('Type produit'))
                     ->badge()
-                    ->placeholder('Global'),
+                    ->placeholder(__('Global')),
                 TextColumn::make('items_count')
-                    ->label('Nombre de tâches')
+                    ->label(__('Nombre de tâches'))
                     ->counts('items')
                     ->badge(),
                 IconColumn::make('is_default')
-                    ->label('Par défaut')
+                    ->label(__('Par défaut'))
                     ->boolean(),
                 TextColumn::make('created_at')
-                    ->label('Créé le')
+                    ->label(__('Créé le'))
                     ->dateTime('d/m/Y')
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),

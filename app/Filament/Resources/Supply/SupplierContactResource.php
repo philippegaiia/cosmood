@@ -26,13 +26,24 @@ class SupplierContactResource extends Resource
 {
     protected static ?string $model = SupplierContact::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
-
-    protected static ?string $navigationLabel = 'Contacts Fournisseurs';
-
     protected static string|\BackedEnum|null $navigationIcon = Heroicon::OutlinedUserGroup;
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.references');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.supplier_contacts');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.suppliers');
+    }
 
     public static function form(Schema $schema): Schema
     {

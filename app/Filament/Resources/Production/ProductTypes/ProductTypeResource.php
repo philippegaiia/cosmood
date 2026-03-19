@@ -13,18 +13,40 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class ProductTypeResource extends Resource
+class ProductTypeResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = ProductType::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedSquare3Stack3d;
 
-    protected static ?string $navigationLabel = 'Types de Produit';
+    protected static ?int $navigationSort = 1;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Produits';
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.references');
+    }
 
-    protected static ?int $navigationSort = 15;
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.product_types');
+    }
+
+    public static function getModelLabel(): string
+    {
+        return __('resources.product_types.singular');
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return __('resources.product_types.plural');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.products');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -47,6 +69,14 @@ class ProductTypeResource extends Resource
             'index' => ListProductTypes::route('/'),
             'create' => CreateProductType::route('/create'),
             'edit' => EditProductType::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'getting-started/setup-order',
+            'reference-data/product-types',
         ];
     }
 }

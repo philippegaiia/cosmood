@@ -30,22 +30,22 @@ class ProductionQcChecksRelationManager extends RelationManager
         return $table
             ->columns([
                 TextColumn::make('sort_order')
-                    ->label('#')
+                    ->label(__('#'))
                     ->sortable(),
                 TextColumn::make('label')
-                    ->label('Contrôle')
+                    ->label(__('Contrôle'))
                     ->searchable(),
                 TextColumn::make('completion')
-                    ->label('Statut')
+                    ->label(__('Statut'))
                     ->badge()
                     ->state(fn (ProductionQcCheck $record): string => $record->getCompletionLabel())
                     ->color(fn (ProductionQcCheck $record): string|array|null => $record->getCompletionColor()),
                 TextColumn::make('input_type')
-                    ->label('Type')
+                    ->label(__('Type'))
                     ->badge()
                     ->formatStateUsing(fn (ProductionQcCheck $record): string => $record->input_type?->getLabel() ?? '-'),
                 TextColumn::make('limits')
-                    ->label('Tolérance')
+                    ->label(__('Tolérance'))
                     ->state(function (ProductionQcCheck $record): string {
                         if ($record->min_value === null && $record->max_value === null) {
                             return '-';
@@ -54,50 +54,50 @@ class ProductionQcChecksRelationManager extends RelationManager
                         return trim(($record->min_value ?? '-').' - '.($record->max_value ?? '-').' '.($record->unit ?? ''));
                     }),
                 TextColumn::make('target_value')
-                    ->label('Cible')
-                    ->placeholder('-'),
+                    ->label(__('Cible'))
+                    ->placeholder(__('-')),
                 TextColumn::make('measured_value')
-                    ->label('Mesure')
+                    ->label(__('Mesure'))
                     ->state(fn (ProductionQcCheck $record): string => $record->getDisplayValue() ?? '-'),
                 TextColumn::make('result')
-                    ->label('Résultat')
+                    ->label(__('Résultat'))
                     ->badge()
                     ->color(fn (ProductionQcCheck $record): string|array|null => $record->result?->getColor())
                     ->formatStateUsing(fn (ProductionQcCheck $record): string => $record->result?->getLabel() ?? '-')
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('checkedBy.name')
-                    ->label('Contrôlé par')
-                    ->placeholder('-'),
+                    ->label(__('Contrôlé par'))
+                    ->placeholder(__('-')),
                 TextColumn::make('checked_at')
-                    ->label('Contrôlé le')
+                    ->label(__('Contrôlé le'))
                     ->dateTime('d/m/Y H:i')
-                    ->placeholder('-'),
+                    ->placeholder(__('-')),
             ])
             ->recordActions([
                 Action::make('recordResult')
-                    ->label('Saisir')
+                    ->label(__('Saisir'))
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->visible(fn (ProductionQcCheck $record): bool => $this->canRecordQc($record))
                     ->authorize(fn (ProductionQcCheck $record): bool => $this->canRecordQc($record))
                     ->schema([
                         Hidden::make('input_type'),
                         TextInput::make('value_number')
-                            ->label('Valeur numérique')
+                            ->label(__('Valeur numérique'))
                             ->numeric()
                             ->step(0.001)
                             ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Number->value),
                         Select::make('value_boolean')
-                            ->label('Valeur oui/non')
+                            ->label(__('Valeur oui/non'))
                             ->options([
                                 1 => 'Oui',
                                 0 => 'Non',
                             ])
                             ->visible(fn (Get $get): bool => $get('input_type') === QcInputType::Boolean->value),
                         TextInput::make('value_text')
-                            ->label('Valeur texte')
+                            ->label(__('Valeur texte'))
                             ->visible(fn (Get $get): bool => in_array($get('input_type'), [QcInputType::Text->value, QcInputType::Select->value], true)),
                         Textarea::make('notes')
-                            ->label('Notes')
+                            ->label(__('Notes'))
                             ->rows(3),
                     ])
                     ->fillForm(fn (ProductionQcCheck $record): array => [
@@ -130,12 +130,12 @@ class ProductionQcChecksRelationManager extends RelationManager
                         ]);
 
                         Notification::make()
-                            ->title('Contrôle QC mis à jour')
+                            ->title(__('Contrôle QC mis à jour'))
                             ->success()
                             ->send();
                     }),
                 Action::make('markUndone')
-                    ->label('Marquer non fait')
+                    ->label(__('Marquer non fait'))
                     ->icon(Heroicon::OutlinedArrowUturnLeft)
                     ->color('warning')
                     ->visible(fn (ProductionQcCheck $record): bool => $record->isDone() && $this->canResetQc($record))
@@ -161,7 +161,7 @@ class ProductionQcChecksRelationManager extends RelationManager
                         ]);
 
                         Notification::make()
-                            ->title('Contrôle QC repassé en non fait')
+                            ->title(__('Contrôle QC repassé en non fait'))
                             ->warning()
                             ->send();
                     }),

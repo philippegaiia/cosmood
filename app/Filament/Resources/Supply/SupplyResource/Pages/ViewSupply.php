@@ -25,13 +25,13 @@ class ViewSupply extends ViewRecord
             EditAction::make()
                 ->visible(fn (): bool => auth()->user()?->canManageSupplyInventory() ?? false),
             Action::make('releaseAllAllocations')
-                ->label('Libérer toutes les réservations')
+                ->label(__('Libérer toutes les réservations'))
                 ->color('danger')
                 ->icon('heroicon-o-lock-open')
                 ->requiresConfirmation()
-                ->modalHeading('Libérer toutes les réservations')
-                ->modalDescription('Cette action va libérer toutes les réservations actives pour ce lot. Les productions concernées ne seront plus approvisionnées.')
-                ->modalSubmitActionLabel('Oui, libérer')
+                ->modalHeading(__('Libérer toutes les réservations'))
+                ->modalDescription(__('Cette action va libérer toutes les réservations actives pour ce lot. Les productions concernées ne seront plus approvisionnées.'))
+                ->modalSubmitActionLabel(__('Oui, libérer'))
                 ->visible(fn (): bool => auth()->user()?->canManageProductionPlanning() ?? false)
                 ->action(function (): void {
                     if (! (auth()->user()?->canManageProductionPlanning() ?? false)) {
@@ -59,7 +59,7 @@ class ViewSupply extends ViewRecord
                     }
 
                     Notification::make()
-                        ->title('Réservations libérées')
+                        ->title(__('Réservations libérées'))
                         ->body("{$count} réservation(s) ont été libérées.")
                         ->success()
                         ->send();

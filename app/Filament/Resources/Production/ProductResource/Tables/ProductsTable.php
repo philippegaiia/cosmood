@@ -18,45 +18,54 @@ class ProductsTable
         return $table
             ->columns([
                 TextColumn::make('name')
+                    ->label(__('resources.products.table.name'))
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('productCategory.name')
-                    ->label(__('Catégorie'))
+                    ->label(__('resources.products.table.category'))
                     ->sortable(),
                 TextColumn::make('productType.name')
-                    ->label(__('Type'))
+                    ->label(__('resources.products.table.type'))
                     ->sortable()
                     ->placeholder(__('-')),
                 TextColumn::make('formula_name')
-                    ->label(__('Formule par défaut'))
+                    ->label(__('resources.products.table.default_formula'))
                     ->state(fn (Product $record): ?string => $record->defaultFormula()?->name)
                     ->placeholder(__('-')),
                 TextColumn::make('code')
+                    ->label(__('resources.products.table.code'))
                     ->searchable(),
                 TextColumn::make('producedIngredient.name')
-                    ->label(__('Ingrédient fabriqué'))
+                    ->label(__('resources.products.table.manufactured_ingredient'))
                     ->placeholder(__('-'))
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('wp_code')
+                    ->label(__('resources.products.table.ecommerce_sku'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('launch_date')
+                    ->label(__('resources.products.table.launch_date'))
                     ->date()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('net_weight')
+                    ->label(__('resources.products.table.net_weight'))
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('ean_code')
+                    ->label(__('resources.products.table.ean_code'))
                     ->searchable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 ToggleColumn::make('is_active')
+                    ->label(__('resources.products.table.is_active'))
                     ->sortable(),
                 TextColumn::make('created_at')
+                    ->label(__('resources.products.table.created_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('updated_at')
+                    ->label(__('resources.products.table.updated_at'))
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
@@ -67,7 +76,7 @@ class ProductsTable
             ->recordActions([
                 EditAction::make(),
                 ReplicateAction::make()
-                    ->label(__('Dupliquer'))
+                    ->label(__('resources.products.actions.duplicate'))
                     ->excludeAttributes([
                         'id',
                         'created_at',
@@ -76,7 +85,9 @@ class ProductsTable
                     ])
                     ->requiresConfirmation()
                     ->mutateRecordDataUsing(function (array $data): array {
-                        $data['name'] = ($data['name'] ?? __('Produit')).' (copy)';
+                        $data['name'] = __('resources.products.table.copy_name', [
+                            'name' => $data['name'] ?? __('resources.products.singular'),
+                        ]);
 
                         return $data;
                     })

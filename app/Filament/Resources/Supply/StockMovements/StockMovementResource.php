@@ -20,13 +20,24 @@ class StockMovementResource extends Resource
 {
     protected static ?string $model = SuppliesMovement::class;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Achats';
-
-    protected static ?string $navigationLabel = 'Mouvements de stock';
-
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-arrows-right-left';
 
-    protected static ?int $navigationSort = 4;
+    protected static ?int $navigationSort = 1;
+
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.operations');
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.stock_movements');
+    }
+
+    public static function getNavigationParentItem(): ?string
+    {
+        return __('navigation.items.inventory');
+    }
 
     public static function canViewAny(): bool
     {

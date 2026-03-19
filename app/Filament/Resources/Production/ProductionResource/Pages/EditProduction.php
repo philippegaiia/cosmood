@@ -128,7 +128,7 @@ class EditProduction extends EditRecord
 
                 Notification::make()
                     ->warning()
-                    ->title('Confirmer le changement de statut')
+                    ->title(__('Confirmer le changement de statut'))
                     ->body($this->getStatusTransitionConfirmationMessage())
                     ->send();
 
@@ -347,22 +347,22 @@ class EditProduction extends EditRecord
     {
         return [
             Action::make('exportPdf')
-                ->label('PDF production')
+                ->label(__('PDF production'))
                 ->icon(Heroicon::OutlinedDocumentArrowDown)
                 ->url(fn (): string => route('productions.sheet-pdf', $this->record))
                 ->openUrlInNewTab(),
             Action::make('printSheet')
-                ->label('Fiche de production')
+                ->label(__('Fiche de production'))
                 ->icon(Heroicon::OutlinedPrinter)
                 ->url(fn (): string => route('productions.print-sheet', $this->record))
                 ->openUrlInNewTab(),
             Action::make('followSheet')
-                ->label('Fiche suivi')
+                ->label(__('Fiche suivi'))
                 ->icon(Heroicon::OutlinedDocumentText)
                 ->url(fn (): string => route('productions.follow-sheet', $this->record))
                 ->openUrlInNewTab(),
             Action::make('applyMasterbatchTraceability')
-                ->label('Importer traçabilité MB')
+                ->label(__('Importer traçabilité MB'))
                 ->icon(Heroicon::OutlinedArrowDownTray)
                 ->color('warning')
                 ->visible(fn (): bool => (bool) $this->record?->masterbatch_lot_id)
@@ -374,8 +374,8 @@ class EditProduction extends EditRecord
 
                     if ($updatedCount === 0) {
                         Notification::make()
-                            ->title('Aucun item mis à jour')
-                            ->body('Vérifier les ingrédients/phase ET que la traçabilité du masterbatch contient bien des lots supply.')
+                            ->title(__('Aucun item mis à jour'))
+                            ->body(__('Vérifier les ingrédients/phase ET que la traçabilité du masterbatch contient bien des lots supply.'))
                             ->warning()
                             ->send();
 
@@ -383,7 +383,7 @@ class EditProduction extends EditRecord
                     }
 
                     Notification::make()
-                        ->title('Traçabilité masterbatch importée')
+                        ->title(__('Traçabilité masterbatch importée'))
                         ->body($updatedCount.' item(s) de production mis à jour.')
                         ->success()
                         ->send();
@@ -397,8 +397,8 @@ class EditProduction extends EditRecord
                         $suffix = $mismatches->count() > 3 ? ' (+'.($mismatches->count() - 3).' autres)' : '';
 
                         Notification::make()
-                            ->title('Alerte cohérence pourcentages')
-                            ->body('Des écarts de % ont été détectés: '.$preview.$suffix)
+                            ->title(__('Alerte cohérence pourcentages'))
+                            ->body(__('Des écarts de % ont été détectés : :preview:suffix', ['preview' => $preview, 'suffix' => $suffix]))
                             ->warning()
                             ->send();
                     }

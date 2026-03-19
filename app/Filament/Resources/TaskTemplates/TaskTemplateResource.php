@@ -13,18 +13,25 @@ use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
+use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class TaskTemplateResource extends Resource
+class TaskTemplateResource extends Resource implements HasKnowledgeBase
 {
     protected static ?string $model = TaskTemplate::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedClipboardDocumentList;
 
-    protected static ?string $navigationLabel = 'Modèles de Tâches';
+    protected static ?int $navigationSort = 10;
 
-    protected static string|\UnitEnum|null $navigationGroup = 'Production';
+    public static function getNavigationGroup(): ?string
+    {
+        return __('navigation.groups.configuration');
+    }
 
-    protected static ?int $navigationSort = 50;
+    public static function getNavigationLabel(): string
+    {
+        return __('navigation.items.production_models');
+    }
 
     public static function form(Schema $schema): Schema
     {
@@ -47,6 +54,14 @@ class TaskTemplateResource extends Resource
             'index' => ListTaskTemplates::route('/'),
             'create' => CreateTaskTemplate::route('/create'),
             'edit' => EditTaskTemplate::route('/{record}/edit'),
+        ];
+    }
+
+    public static function getDocumentation(): array|string
+    {
+        return [
+            'reference-data/qc-and-task-templates',
+            'execution/tasks-qc-and-outputs',
         ];
     }
 }

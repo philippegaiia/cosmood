@@ -31,23 +31,23 @@ class ListSupplierOrders extends ListRecords
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Draft->value))
                 ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Draft->value)->count()),
 
-            'passed' => Tab::make('Passées')
+            'passed' => Tab::make(__('Passées'))
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Passed->value))
                 ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Passed->value)->count()),
 
-            'confirmed' => Tab::make('Confirmée')
+            'confirmed' => Tab::make(__('Confirmée'))
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Confirmed->value))
                 ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Confirmed->value)->count()),
 
-            'delivered' => Tab::make('Livrées')
+            'delivered' => Tab::make(__('Livrées'))
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Delivered->value))
                 ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Delivered->value)->count()),
 
-            'checked' => Tab::make('Contrôlées')
+            'checked' => Tab::make(__('Contrôlées'))
                 ->modifyQueryUsing(fn (Builder $query) => $query->where('order_status', OrderStatus::Checked->value))
                 ->badge(SupplierOrder::query()->where('order_status', OrderStatus::Checked->value)->count()),
 
-            'stock-missing' => Tab::make('Stock manquant')
+            'stock-missing' => Tab::make(__('Stock manquant'))
                 ->modifyQueryUsing(fn (Builder $query) => $query
                     ->where('order_status', OrderStatus::Checked->value)
                     ->whereHas('supplier_order_items', fn (Builder $itemsQuery): Builder => $itemsQuery->whereNull('moved_to_stock_at')))

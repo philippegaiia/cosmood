@@ -40,17 +40,17 @@ class ViewProduction extends ViewRecord
     {
         $actions = [
             Action::make('exportPdf')
-                ->label('Exporter PDF')
+                ->label(__('Exporter PDF'))
                 ->icon(Heroicon::OutlinedDocumentArrowDown)
                 ->url(fn (): string => route('productions.sheet-pdf', $this->record))
                 ->openUrlInNewTab(),
             Action::make('printSheet')
-                ->label('Fiche production')
+                ->label(__('Fiche production'))
                 ->icon(Heroicon::OutlinedPrinter)
                 ->url(fn (): string => route('productions.print-sheet', $this->record))
                 ->openUrlInNewTab(),
             Action::make('followSheet')
-                ->label('Fiche suivi')
+                ->label(__('Fiche suivi'))
                 ->icon(Heroicon::OutlinedDocumentText)
                 ->url(fn (): string => route('productions.follow-sheet', $this->record))
                 ->openUrlInNewTab(),

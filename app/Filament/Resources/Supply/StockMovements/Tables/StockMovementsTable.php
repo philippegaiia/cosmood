@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Supply\StockMovements\Tables;
 
 use App\Models\Supply\SuppliesMovement;
+use Filament\Forms\Components\DatePicker;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
 use Filament\Tables\Filters\SelectFilter;
@@ -41,22 +42,22 @@ class StockMovementsTable
                 ]))
             ->columns([
                 TextColumn::make('moved_at')
-                    ->label('Date')
+                    ->label(__('Date'))
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
                 TextColumn::make('supply.supplierListing.ingredient.name')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->searchable()
                     ->sortable(),
 
                 TextColumn::make('supply.batch_number')
-                    ->label('Lot')
-                    ->placeholder('-')
+                    ->label(__('Lot'))
+                    ->placeholder(__('-'))
                     ->sortable(),
 
                 TextColumn::make('movement_type')
-                    ->label('Type')
+                    ->label(__('Type'))
                     ->badge()
                     ->formatStateUsing(fn (SuppliesMovement $record): string => match ($record->movement_type) {
                         'entry', 'reception' => 'Entrée',
@@ -74,44 +75,44 @@ class StockMovementsTable
                     }),
 
                 TextColumn::make('quantity')
-                    ->label('Quantité')
+                    ->label(__('Quantité'))
                     ->numeric(decimalPlaces: 3)
                     ->color(fn (SuppliesMovement $record): string => $record->quantity < 0 ? 'danger' : 'success')
                     ->sortable(),
 
                 TextColumn::make('supply.supplierListing.ingredient.base_unit')
-                    ->label('Unité'),
+                    ->label(__('Unité')),
 
                 TextColumn::make('production.batch_number')
-                    ->label('Production')
-                    ->placeholder('-')
+                    ->label(__('production.label'))
+                    ->placeholder(__('-'))
                     ->url(fn (SuppliesMovement $record): ?string => $record->production_id
                         ? route('filament.admin.resources.production.productions.view', ['record' => $record->production_id])
                         : null)
                     ->sortable(),
 
                 TextColumn::make('user.name')
-                    ->label('Utilisateur')
-                    ->placeholder('-')
+                    ->label(__('Utilisateur'))
+                    ->placeholder(__('-'))
                     ->sortable(),
 
                 TextColumn::make('reason')
-                    ->label('Raison')
-                    ->placeholder('-')
+                    ->label(__('Raison'))
+                    ->placeholder(__('-'))
                     ->limit(50)
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
                 Filter::make('last_3_months')
-                    ->label('3 derniers mois')
+                    ->label(__('3 derniers mois'))
                     ->query(fn (Builder $query): Builder => $query->where('moved_at', '>=', Carbon::now()->subMonths(3)))
                     ->default(),
 
                 Filter::make('date_range')
-                    ->label('Période personnalisée')
+                    ->label(__('Période personnalisée'))
                     ->schema([
-                        \Filament\Forms\Components\DatePicker::make('from')->label('Du'),
-                        \Filament\Forms\Components\DatePicker::make('to')->label('Au'),
+                        DatePicker::make('from')->label(__('Du')),
+                        DatePicker::make('to')->label(__('Au')),
                     ])
                     ->query(function (Builder $query, array $data): Builder {
                         return $query
@@ -120,7 +121,7 @@ class StockMovementsTable
                     }),
 
                 SelectFilter::make('movement_type')
-                    ->label('Type')
+                    ->label(__('Type'))
                     ->options([
                         'entry' => 'Entrée',
                         'allocation' => 'Allocation',
@@ -129,13 +130,13 @@ class StockMovementsTable
                     ]),
 
                 SelectFilter::make('ingredient')
-                    ->label('Ingrédient')
+                    ->label(__('Ingrédient'))
                     ->relationship('supply.supplierListing.ingredient', 'name')
                     ->searchable()
                     ->preload(),
 
                 SelectFilter::make('production')
-                    ->label('Production')
+                    ->label(__('production.label'))
                     ->relationship('production', 'batch_number')
                     ->searchable()
                     ->preload(),
