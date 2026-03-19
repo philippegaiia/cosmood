@@ -5,6 +5,9 @@ namespace App\Filament\Resources\Production;
 use App\Enums\FormulaItemCalculationMode;
 use App\Enums\IngredientBaseUnit;
 use App\Enums\Phases;
+use App\Filament\Resources\Production\FormulaResource\CopilotTools\ListFormulasTool;
+use App\Filament\Resources\Production\FormulaResource\CopilotTools\SearchFormulasTool;
+use App\Filament\Resources\Production\FormulaResource\CopilotTools\ViewFormulaTool;
 use App\Filament\Resources\Production\FormulaResource\Pages\CreateFormula;
 use App\Filament\Resources\Production\FormulaResource\Pages\EditFormula;
 use App\Filament\Resources\Production\FormulaResource\Pages\ListFormulas;
@@ -13,6 +16,7 @@ use App\Models\Production\Formula;
 use App\Models\Production\FormulaItem;
 use App\Models\Production\Product;
 use App\Models\Supply\Ingredient;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
@@ -41,7 +45,7 @@ use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 
-class FormulaResource extends Resource implements HasKnowledgeBase
+class FormulaResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = Formula::class;
 
@@ -79,6 +83,20 @@ class FormulaResource extends Resource implements HasKnowledgeBase
         return [
             'reference-data/formulas',
             'reference-data/products',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to formulas, including their code, active status, soap flag, linked products, and composition line counts.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListFormulasTool,
+            new SearchFormulasTool,
+            new ViewFormulaTool,
         ];
     }
 

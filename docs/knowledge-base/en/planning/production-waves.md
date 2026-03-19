@@ -1,5 +1,6 @@
 ---
 title: Production Waves
+id: planning/production-waves
 order: 4
 ---
 

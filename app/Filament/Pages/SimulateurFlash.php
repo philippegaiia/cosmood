@@ -2,13 +2,15 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\CopilotTools\SimulateurFlash\ExplainFlashSimulatorTool;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotPage;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class SimulateurFlash extends Page implements HasKnowledgeBase
+class SimulateurFlash extends Page implements CopilotPage, HasKnowledgeBase
 {
     protected static ?string $title = 'Simulateur Flash';
 
@@ -46,6 +48,18 @@ class SimulateurFlash extends Page implements HasKnowledgeBase
             'planning/flash-simulator',
             'planning/production-waves',
             'getting-started/first-production-checklist',
+        ];
+    }
+
+    public static function copilotPageDescription(): ?string
+    {
+        return 'Read-only guidance for the flash simulator: explain what it is for, what it does not do, and how to use it safely before converting a simulation into a wave.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ExplainFlashSimulatorTool,
         ];
     }
 }

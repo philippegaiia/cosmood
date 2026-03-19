@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\Production\ProductTypes;
 
+use App\Filament\Resources\Production\ProductTypes\CopilotTools\ListProductTypesTool;
+use App\Filament\Resources\Production\ProductTypes\CopilotTools\SearchProductTypesTool;
+use App\Filament\Resources\Production\ProductTypes\CopilotTools\ViewProductTypeTool;
 use App\Filament\Resources\Production\ProductTypes\Pages\CreateProductType;
 use App\Filament\Resources\Production\ProductTypes\Pages\EditProductType;
 use App\Filament\Resources\Production\ProductTypes\Pages\ListProductTypes;
@@ -9,13 +12,14 @@ use App\Filament\Resources\Production\ProductTypes\Schemas\ProductTypeForm;
 use App\Filament\Resources\Production\ProductTypes\Tables\ProductTypesTable;
 use App\Models\Production\ProductType;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class ProductTypeResource extends Resource implements HasKnowledgeBase
+class ProductTypeResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = ProductType::class;
 
@@ -77,6 +81,20 @@ class ProductTypeResource extends Resource implements HasKnowledgeBase
         return [
             'getting-started/setup-order',
             'reference-data/product-types',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to product types, including sizing mode, default batch settings, QC template linkage, and allowed production lines.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListProductTypesTool,
+            new SearchProductTypesTool,
+            new ViewProductTypeTool,
         ];
     }
 }

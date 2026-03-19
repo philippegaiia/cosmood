@@ -1,5 +1,6 @@
 ---
 title: Procurement Overview
+id: procurement/procurement-overview
 order: 2
 ---
 

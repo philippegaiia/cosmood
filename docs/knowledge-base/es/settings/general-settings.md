@@ -1,5 +1,6 @@
 ---
 title: Parámetros generales
+id: settings/general-settings
 order: 1
 ---
 

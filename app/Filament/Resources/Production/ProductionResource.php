@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\Production;
 
+use App\Filament\Resources\Production\ProductionResource\CopilotTools\ListProductionsTool;
+use App\Filament\Resources\Production\ProductionResource\CopilotTools\SearchProductionsTool;
+use App\Filament\Resources\Production\ProductionResource\CopilotTools\ViewProductionTool;
 use App\Filament\Resources\Production\ProductionResource\Pages\CreateProduction;
 use App\Filament\Resources\Production\ProductionResource\Pages\EditProduction;
 use App\Filament\Resources\Production\ProductionResource\Pages\ListProductions;
@@ -15,6 +18,7 @@ use App\Filament\Resources\Production\ProductionResource\Tables\ProductionsTable
 use App\Models\Production\Production;
 use App\Services\Production\StatusColorScheme;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\Resource;
 use Filament\Schemas\Components\Section;
@@ -37,7 +41,7 @@ use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
  * @see ProductionsTable Table configuration
  * @see ProductionItemsRelationManager Items management
  */
-class ProductionResource extends Resource implements HasKnowledgeBase
+class ProductionResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = Production::class;
 
@@ -154,6 +158,20 @@ class ProductionResource extends Resource implements HasKnowledgeBase
             'execution/productions',
             'execution/tasks-qc-and-outputs',
             'stock-and-allocations/allocations',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to production batches, their statuses, dates, lines, waves, and supply-readiness context.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListProductionsTool,
+            new SearchProductionsTool,
+            new ViewProductionTool,
         ];
     }
 }

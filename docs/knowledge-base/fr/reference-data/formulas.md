@@ -1,5 +1,6 @@
 ---
 title: Formules
+id: reference-data/formulas
 order: 4
 ---
 

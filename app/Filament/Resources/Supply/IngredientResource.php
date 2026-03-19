@@ -3,11 +3,15 @@
 namespace App\Filament\Resources\Supply;
 
 use App\Enums\IngredientBaseUnit;
+use App\Filament\Resources\Supply\IngredientResource\CopilotTools\ListIngredientsTool;
+use App\Filament\Resources\Supply\IngredientResource\CopilotTools\SearchIngredientsTool;
+use App\Filament\Resources\Supply\IngredientResource\CopilotTools\ViewIngredientTool;
 use App\Filament\Resources\Supply\IngredientResource\Pages\CreateIngredient;
 use App\Filament\Resources\Supply\IngredientResource\Pages\EditIngredient;
 use App\Filament\Resources\Supply\IngredientResource\Pages\ListIngredients;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\IngredientCategory;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -25,7 +29,7 @@ use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class IngredientResource extends Resource implements HasKnowledgeBase
+class IngredientResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = Ingredient::class;
 
@@ -59,6 +63,20 @@ class IngredientResource extends Resource implements HasKnowledgeBase
             'reference-data/ingredients',
             'procurement/suppliers-and-listings',
             'stock-and-allocations/stock-lots',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to ingredients, including category, code, stock alerts, pricing, and whether they are manufactured or packaging ingredients.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListIngredientsTool,
+            new SearchIngredientsTool,
+            new ViewIngredientTool,
         ];
     }
 

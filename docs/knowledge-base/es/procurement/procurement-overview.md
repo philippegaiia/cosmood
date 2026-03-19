@@ -1,5 +1,6 @@
 ---
 title: Resumen de compras
+id: procurement/procurement-overview
 order: 2
 ---
 

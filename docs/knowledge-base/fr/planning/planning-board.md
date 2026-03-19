@@ -1,5 +1,6 @@
 ---
 title: Planning board
+id: planning/planning-board
 order: 1
 ---
 

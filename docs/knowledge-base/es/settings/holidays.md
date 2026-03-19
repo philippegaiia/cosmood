@@ -1,5 +1,6 @@
 ---
 title: Días festivos
+id: settings/holidays
 order: 3
 ---
 

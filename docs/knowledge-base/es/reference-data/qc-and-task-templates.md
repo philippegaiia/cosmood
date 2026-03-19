@@ -1,5 +1,6 @@
 ---
 title: Plantillas de QC y de tareas
+id: reference-data/qc-and-task-templates
 order: 5
 ---
 

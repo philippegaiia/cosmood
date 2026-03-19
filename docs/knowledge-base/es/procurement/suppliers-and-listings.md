@@ -1,5 +1,6 @@
 ---
 title: Proveedores y referencias
+id: procurement/suppliers-and-listings
 order: 3
 ---
 

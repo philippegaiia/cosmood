@@ -1,5 +1,6 @@
 ---
 title: Lignes de production
+id: settings/production-lines
 order: 2
 ---
 

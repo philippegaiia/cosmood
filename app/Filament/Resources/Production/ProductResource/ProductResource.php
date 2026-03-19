@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\Production\ProductResource;
 
+use App\Filament\Resources\Production\ProductResource\CopilotTools\ListProductsTool;
+use App\Filament\Resources\Production\ProductResource\CopilotTools\SearchProductsTool;
+use App\Filament\Resources\Production\ProductResource\CopilotTools\ViewProductTool;
 use App\Filament\Resources\Production\ProductResource\Pages\CreateProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\EditProduct;
 use App\Filament\Resources\Production\ProductResource\Pages\ListProducts;
@@ -10,6 +13,7 @@ use App\Filament\Resources\Production\ProductResource\Schemas\ProductForm;
 use App\Filament\Resources\Production\ProductResource\Tables\ProductsTable;
 use App\Models\Production\Product;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -18,7 +22,7 @@ use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
-class ProductResource extends Resource implements HasKnowledgeBase
+class ProductResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = Product::class;
 
@@ -90,6 +94,20 @@ class ProductResource extends Resource implements HasKnowledgeBase
         return [
             'getting-started/setup-order',
             'reference-data/products',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to products, including their product type, launch date, default formula, packaging linkage, and active status.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListProductsTool,
+            new SearchProductsTool,
+            new ViewProductTool,
         ];
     }
 }

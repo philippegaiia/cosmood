@@ -1,5 +1,6 @@
 ---
 title: Pilotage achats
+id: procurement/procurement-overview
 order: 2
 ---
 

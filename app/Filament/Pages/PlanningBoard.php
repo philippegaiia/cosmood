@@ -2,13 +2,15 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\CopilotTools\PlanningBoard\GetPlanningBoardSummaryTool;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotPage;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class PlanningBoard extends Page implements HasKnowledgeBase
+class PlanningBoard extends Page implements CopilotPage, HasKnowledgeBase
 {
     protected static ?string $title = 'Planning production';
 
@@ -46,6 +48,18 @@ class PlanningBoard extends Page implements HasKnowledgeBase
             'planning/planning-board',
             'planning/production-waves',
             'settings/production-lines',
+        ];
+    }
+
+    public static function copilotPageDescription(): ?string
+    {
+        return 'Read-only planning board for planners. Use it to understand upcoming production load by line, spot unassigned productions, and summarize the next days of capacity usage.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new GetPlanningBoardSummaryTool,
         ];
     }
 }

@@ -1,5 +1,6 @@
 ---
 title: Supplier Orders
+id: procurement/supplier-orders
 order: 1
 ---
 

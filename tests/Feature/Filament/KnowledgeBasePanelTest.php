@@ -28,6 +28,21 @@ it('registers the knowledge base plugins on the expected panels', function (): v
         ->and($knowledgeBasePlugin->getAnchorSymbol())->toBeNull();
 });
 
+it('opens the knowledge base from admin in a new tab', function (): void {
+    /** @var KnowledgeBaseCompanionPlugin $plugin */
+    $plugin = Filament::getPanel('admin')->getPlugin(KnowledgeBaseCompanionPlugin::ID);
+
+    expect($plugin->shouldOpenKnowledgeBasePanelInNewTab())->toBeTrue();
+});
+
+it('renders an explicit back to admin link inside the knowledge base panel', function (): void {
+    $contents = File::get(resource_path('views/filament/knowledge-base/back-to-admin.blade.php'));
+
+    expect($contents)
+        ->toContain('getDefaultPanel()->getUrl()')
+        ->toContain('back-to-default-panel');
+});
+
 it('links key resources to documentation entries', function (): void {
     expect(ProductTypeResource::getDocumentation())->toBe(['getting-started/setup-order', 'reference-data/product-types'])
         ->and(ProductResource::getDocumentation())->toBe(['getting-started/setup-order', 'reference-data/products'])

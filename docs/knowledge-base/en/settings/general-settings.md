@@ -1,5 +1,6 @@
 ---
 title: General Settings
+id: settings/general-settings
 order: 1
 ---
 

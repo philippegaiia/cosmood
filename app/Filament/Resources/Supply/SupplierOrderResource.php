@@ -3,6 +3,9 @@
 namespace App\Filament\Resources\Supply;
 
 use App\Enums\OrderStatus;
+use App\Filament\Resources\Supply\SupplierOrderResource\CopilotTools\ListSupplierOrdersTool;
+use App\Filament\Resources\Supply\SupplierOrderResource\CopilotTools\SearchSupplierOrdersTool;
+use App\Filament\Resources\Supply\SupplierOrderResource\CopilotTools\ViewSupplierOrderTool;
 use App\Filament\Resources\Supply\SupplierOrderResource\Pages\CreateSupplierOrder;
 use App\Filament\Resources\Supply\SupplierOrderResource\Pages\EditSupplierOrder;
 use App\Filament\Resources\Supply\SupplierOrderResource\Pages\ListSupplierOrders;
@@ -13,6 +16,7 @@ use App\Models\Supply\SupplierOrder;
 use App\Models\Supply\SupplierOrderItem;
 use App\Models\User;
 use App\Services\InventoryMovementService;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Forms\Components\DatePicker;
@@ -41,7 +45,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
 
-class SupplierOrderResource extends Resource implements HasKnowledgeBase
+class SupplierOrderResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     private const FALLBACK_ESTIMATED_DELIVERY_DAYS = 8;
 
@@ -56,6 +60,20 @@ class SupplierOrderResource extends Resource implements HasKnowledgeBase
         return [
             'procurement/supplier-orders',
             'procurement/procurement-overview',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to supplier orders, their statuses, linked suppliers, delivery dates, and optional production wave linkage.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListSupplierOrdersTool,
+            new SearchSupplierOrdersTool,
+            new ViewSupplierOrderTool,
         ];
     }
 

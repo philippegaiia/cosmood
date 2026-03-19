@@ -1,5 +1,6 @@
 ---
 title: Suppliers and Listings
+id: procurement/suppliers-and-listings
 order: 3
 ---
 

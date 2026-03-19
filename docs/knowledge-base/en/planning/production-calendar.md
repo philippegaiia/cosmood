@@ -1,5 +1,6 @@
 ---
 title: Production Calendar
+id: planning/production-calendar
 order: 2
 ---
 

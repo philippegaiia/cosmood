@@ -1,5 +1,6 @@
 ---
 title: QC and Task Templates
+id: reference-data/qc-and-task-templates
 order: 5
 ---
 

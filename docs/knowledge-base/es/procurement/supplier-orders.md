@@ -1,5 +1,6 @@
 ---
 title: Pedidos a proveedor
+id: procurement/supplier-orders
 order: 1
 ---
 

@@ -1,5 +1,6 @@
 ---
 title: Product Types
+id: reference-data/product-types
 order: 1
 ---
 

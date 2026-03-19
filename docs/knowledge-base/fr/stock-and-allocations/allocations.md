@@ -1,5 +1,6 @@
 ---
 title: Allocations
+id: stock-and-allocations/allocations
 order: 2
 ---
 

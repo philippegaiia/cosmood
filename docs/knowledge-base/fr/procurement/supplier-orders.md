@@ -1,5 +1,6 @@
 ---
 title: Commandes fournisseur
+id: procurement/supplier-orders
 order: 1
 ---
 

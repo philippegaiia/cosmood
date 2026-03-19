@@ -72,6 +72,7 @@ class AdminPanelProvider extends PanelProvider
                 FilamentCopilotPlugin::make(),
                 KnowledgeBaseCompanionPlugin::make()
                     ->knowledgeBasePanelId('knowledge-base')
+                    ->openKnowledgeBasePanelInNewTab()
                     ->modalPreviews()
                     ->slideOverPreviews()
                     ->modalTitleBreadcrumbs(),

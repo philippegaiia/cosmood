@@ -1,5 +1,6 @@
 ---
 title: Ingredients
+id: reference-data/ingredients
 order: 2
 ---
 

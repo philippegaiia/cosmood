@@ -1,5 +1,6 @@
 ---
 title: Holidays
+id: settings/holidays
 order: 3
 ---
 

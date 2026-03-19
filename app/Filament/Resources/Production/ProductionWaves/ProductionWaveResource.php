@@ -2,6 +2,9 @@
 
 namespace App\Filament\Resources\Production\ProductionWaves;
 
+use App\Filament\Resources\Production\ProductionWaves\CopilotTools\ListProductionWavesTool;
+use App\Filament\Resources\Production\ProductionWaves\CopilotTools\SearchProductionWavesTool;
+use App\Filament\Resources\Production\ProductionWaves\CopilotTools\ViewProductionWaveTool;
 use App\Filament\Resources\Production\ProductionWaves\Pages\CreateProductionWave;
 use App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave;
 use App\Filament\Resources\Production\ProductionWaves\Pages\ListProductionWaves;
@@ -10,13 +13,14 @@ use App\Filament\Resources\Production\ProductionWaves\Schemas\ProductionWaveForm
 use App\Filament\Resources\Production\ProductionWaves\Tables\ProductionWavesTable;
 use App\Models\Production\ProductionWave;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class ProductionWaveResource extends Resource implements HasKnowledgeBase
+class ProductionWaveResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = ProductionWave::class;
 
@@ -70,6 +74,20 @@ class ProductionWaveResource extends Resource implements HasKnowledgeBase
         return [
             'planning/production-waves',
             'stock-and-allocations/allocations',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to production waves, including their status, dates, linked productions, and planning context.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListProductionWavesTool,
+            new SearchProductionWavesTool,
+            new ViewProductionWaveTool,
         ];
     }
 }

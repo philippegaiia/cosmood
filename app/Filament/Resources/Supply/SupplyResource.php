@@ -2,12 +2,16 @@
 
 namespace App\Filament\Resources\Supply;
 
+use App\Filament\Resources\Supply\SupplyResource\CopilotTools\ListSuppliesTool;
+use App\Filament\Resources\Supply\SupplyResource\CopilotTools\SearchSuppliesTool;
+use App\Filament\Resources\Supply\SupplyResource\CopilotTools\ViewSupplyTool;
 use App\Filament\Resources\Supply\SupplyResource\Pages\EditSupply;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ListSupplies;
 use App\Filament\Resources\Supply\SupplyResource\Pages\ViewSupply;
 use App\Filament\Resources\Supply\SupplyResource\RelationManagers;
 use App\Filament\Resources\Supply\SupplyResource\Tables\SuppliesTable;
 use App\Models\Supply\Supply;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -28,7 +32,7 @@ use Illuminate\Database\Eloquent\Model;
  * - Tab-based filtering (all, in stock, alerts)
  * - Delegated table configuration via SuppliesTable
  */
-class SupplyResource extends Resource implements HasKnowledgeBase
+class SupplyResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = Supply::class;
 
@@ -56,6 +60,20 @@ class SupplyResource extends Resource implements HasKnowledgeBase
         return [
             'stock-and-allocations/stock-lots',
             'stock-and-allocations/allocations',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return 'Read-only access to supply lots, including stock quantities, allocation status, supplier origin, and batch traceability.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new ListSuppliesTool,
+            new SearchSuppliesTool,
+            new ViewSupplyTool,
         ];
     }
 

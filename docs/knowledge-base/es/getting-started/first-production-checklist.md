@@ -1,5 +1,6 @@
 ---
 title: Checklist de primera producción
+id: getting-started/first-production-checklist
 order: 2
 ---
 

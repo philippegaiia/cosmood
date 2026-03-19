@@ -1,5 +1,6 @@
 ---
 title: Simulateur flash
+id: planning/flash-simulator
 order: 3
 ---
 

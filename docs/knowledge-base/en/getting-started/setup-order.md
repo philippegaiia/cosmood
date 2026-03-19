@@ -1,5 +1,6 @@
 ---
 title: Setup Order
+id: getting-started/setup-order
 order: 1
 ---
 

@@ -2,13 +2,15 @@
 
 namespace App\Filament\Pages;
 
+use App\Filament\Pages\CopilotTools\WaveProcurementOverview\GetProcurementOverviewSummaryTool;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotPage;
 use Filament\Pages\Page;
 use Filament\Support\Enums\Width;
 use Filament\Support\Icons\Heroicon;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class WaveProcurementOverview extends Page implements HasKnowledgeBase
+class WaveProcurementOverview extends Page implements CopilotPage, HasKnowledgeBase
 {
     protected static ?string $title = 'Pilotage appro production';
 
@@ -46,6 +48,18 @@ class WaveProcurementOverview extends Page implements HasKnowledgeBase
             'procurement/procurement-overview',
             'procurement/supplier-orders',
             'stock-and-allocations/allocations',
+        ];
+    }
+
+    public static function copilotPageDescription(): ?string
+    {
+        return 'Read-only procurement overview for planners and buyers. Use it to explain stock coverage, wave coverage, and what still needs to be secured.';
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            new GetProcurementOverviewSummaryTool,
         ];
     }
 }

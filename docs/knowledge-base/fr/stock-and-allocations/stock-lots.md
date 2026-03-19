@@ -1,5 +1,6 @@
 ---
 title: Lots et stock
+id: stock-and-allocations/stock-lots
 order: 1
 ---
 

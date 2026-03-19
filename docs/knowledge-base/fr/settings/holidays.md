@@ -1,5 +1,6 @@
 ---
 title: Jours feries
+id: settings/holidays
 order: 3
 ---
 

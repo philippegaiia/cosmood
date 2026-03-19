@@ -1,5 +1,6 @@
 ---
 title: Oleadas de producción
+id: planning/production-waves
 order: 4
 ---
 

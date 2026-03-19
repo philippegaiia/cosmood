@@ -1,5 +1,6 @@
 ---
 title: Modeles QC et modeles de taches
+id: reference-data/qc-and-task-templates
 order: 5
 ---
 

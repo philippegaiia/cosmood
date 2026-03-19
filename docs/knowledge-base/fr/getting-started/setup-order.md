@@ -1,5 +1,6 @@
 ---
 title: Ordre de configuration
+id: getting-started/setup-order
 order: 1
 ---
 

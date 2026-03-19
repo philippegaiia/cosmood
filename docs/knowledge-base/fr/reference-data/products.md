@@ -1,5 +1,6 @@
 ---
 title: Produits
+id: reference-data/products
 order: 3
 ---
 
