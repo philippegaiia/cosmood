@@ -2,17 +2,21 @@
 
 namespace Database\Seeders;
 
+use App\Models\Production\Formula;
+use App\Models\Production\FormulaProduct;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Arr;
 
 class FormulasTableSeeder extends Seeder
 {
     /**
-     * Auto generated seed file
+     * Upsert curated formulas and restore their legacy default product link.
      *
-     * @return void
+     * The seed must remain idempotent and avoid deleting extra product links a
+     * user may have added later, while still restoring the historical default
+     * link that used to live on formulas.product_id.
      */
-    public function run()
+    public function run(): void
     {
         $formulas = [
             0 => [
@@ -45,12 +49,34 @@ class FormulasTableSeeder extends Seeder
             ],
         ];
 
-        foreach ($formulas as $formula) {
-            DB::table('formulas')->updateOrInsert(
-                ['id' => $formula['id']],
-                $formula,
-            );
-        }
+        foreach ($formulas as $formulaData) {
+            $productId = filled($formulaData['product_id'] ?? null)
+                ? (int) $formulaData['product_id']
+                : null;
 
+            $formula = Formula::query()
+                ->withTrashed()
+                ->updateOrCreate(
+                    ['id' => (int) $formulaData['id']],
+                    Arr::except($formulaData, ['product_id'])
+                );
+
+            if ($productId === null) {
+                continue;
+            }
+
+            FormulaProduct::query()
+                ->withTrashed()
+                ->updateOrCreate(
+                    [
+                        'formula_id' => (int) $formula->getKey(),
+                        'product_id' => $productId,
+                    ],
+                    [
+                        'is_default' => true,
+                        'deleted_at' => null,
+                    ],
+                );
+        }
     }
 }

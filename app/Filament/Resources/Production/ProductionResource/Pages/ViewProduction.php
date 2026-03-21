@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Production\ProductionResource\Pages;
 
 use App\Filament\Resources\Production\ProductionResource;
+use App\Filament\Traits\UsesWavePresenceLockAdvisory;
 use Filament\Actions\Action;
 use Filament\Actions\EditAction;
 use Filament\Resources\Pages\ViewRecord;
@@ -11,7 +12,18 @@ use Filament\Support\Icons\Heroicon;
 
 class ViewProduction extends ViewRecord
 {
+    use UsesWavePresenceLockAdvisory;
+
     protected static string $resource = ProductionResource::class;
+
+    protected string $view = 'filament.pages.view-record-with-wave-lock-advisory';
+
+    public function mount(int|string $record): void
+    {
+        parent::mount($record);
+
+        $this->initializeWavePresenceLockAdvisory();
+    }
 
     public function getTitle(): string
     {

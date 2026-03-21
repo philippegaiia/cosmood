@@ -2,6 +2,7 @@
 
 namespace App\Models\Production;
 
+use App\Models\Production\Concerns\BumpsParentProductionWaveVersion;
 use App\Models\Supply\Ingredient;
 use Database\Factories\Production\ProductionWaveStockDecisionFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,6 +11,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductionWaveStockDecision extends Model
 {
+    use BumpsParentProductionWaveVersion;
+
     /** @use HasFactory<ProductionWaveStockDecisionFactory> */
     use HasFactory;
 

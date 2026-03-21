@@ -50,6 +50,14 @@
         "seed:dev": [
             "@php artisan db:seed --class=DevelopmentDatabaseSeeder --no-interaction"
         ],
+        "seed:sync:prod": [
+            "@php artisan migrate --no-interaction",
+            "@php artisan db:seed --class=ProductionDatabaseSeeder --no-interaction"
+        ],
+        "seed:sync:dev": [
+            "@php artisan migrate --no-interaction",
+            "@php artisan db:seed --class=DevelopmentDatabaseSeeder --no-interaction"
+        ],
         "seed:fresh:prod": [
             "@php artisan migrate:fresh --seed --seeder=ProductionDatabaseSeeder --no-interaction"
         ],

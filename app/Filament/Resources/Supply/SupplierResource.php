@@ -9,6 +9,7 @@ use App\Filament\Resources\Supply\SupplierResource\Pages\ViewSupplier;
 use App\Filament\Resources\Supply\SupplierResource\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\Supply\SupplierResource\RelationManagers\SupplierListingsRelationManager;
 use App\Models\Supply\Supplier;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
@@ -33,7 +34,7 @@ use Filament\Tables\Table;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 use Illuminate\Support\Str;
 
-class SupplierResource extends Resource implements HasKnowledgeBase
+class SupplierResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = Supplier::class;
 
@@ -336,6 +337,20 @@ class SupplierResource extends Resource implements HasKnowledgeBase
             'create' => CreateSupplier::route('/create'),
             'view' => ViewSupplier::route('/{record}'),
             'edit' => EditSupplier::route('/{record}/edit'),
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return __('Suppliers are companies that provide ingredients and supplies for production');
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            CopilotTools\ListSuppliersTool::class,
+            CopilotTools\SearchSuppliersTool::class,
+            CopilotTools\ViewSupplierTool::class,
         ];
     }
 }

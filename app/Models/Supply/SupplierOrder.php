@@ -4,6 +4,7 @@ namespace App\Models\Supply;
 
 use App\Enums\OrderStatus;
 use App\Models\Production\ProductionWave;
+use App\Services\OptimisticLocking\AggregateVersionService;
 use App\Services\Production\WaveRequirementStatusService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -30,6 +31,7 @@ class SupplierOrder extends Model
             'order_status' => OrderStatus::class,
             'order_date' => 'date',
             'delivery_date' => 'date',
+            'lock_version' => 'integer',
         ];
     }
 
@@ -75,6 +77,10 @@ class SupplierOrder extends Model
         });
 
         static::updated(function (SupplierOrder $order): void {
+            if (! $order->wasChanged('lock_version')) {
+                app(AggregateVersionService::class)->bumpSupplierOrderVersion($order);
+            }
+
             if (! $order->wasChanged('order_status')) {
                 return;
             }
@@ -101,10 +107,17 @@ class SupplierOrder extends Model
                         'price' => $item->unit_price,
                     ]);
                 });
-
         });
 
         static::saved(function (SupplierOrder $order): void {
+            if ($order->wasRecentlyCreated) {
+                app(AggregateVersionService::class)->bumpProductionWaveVersionIfExists((int) $order->production_wave_id);
+            }
+
+            if ($order->wasChanged('production_wave_id')) {
+                app(AggregateVersionService::class)->bumpProductionWaveVersionIfExists((int) ($order->getRawOriginal('production_wave_id') ?? 0));
+            }
+
             $order->resetCommittedQuantitiesWhenWaveRemoved();
             $order->syncWaveRequirementStatuses();
         });
@@ -116,6 +129,7 @@ class SupplierOrder extends Model
         });
 
         static::deleted(function (SupplierOrder $order): void {
+            app(AggregateVersionService::class)->bumpProductionWaveVersionIfExists((int) ($order->production_wave_id ?? 0));
             $order->syncWaveRequirementStatuses();
         });
     }

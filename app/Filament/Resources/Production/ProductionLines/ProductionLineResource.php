@@ -9,13 +9,14 @@ use App\Filament\Resources\Production\ProductionLines\Schemas\ProductionLineForm
 use App\Filament\Resources\Production\ProductionLines\Tables\ProductionLinesTable;
 use App\Models\Production\ProductionLine;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class ProductionLineResource extends Resource implements HasKnowledgeBase
+class ProductionLineResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = ProductionLine::class;
 
@@ -79,6 +80,20 @@ class ProductionLineResource extends Resource implements HasKnowledgeBase
         return [
             'settings/production-lines',
             'planning/planning-board',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return __('Production lines represent physical manufacturing areas with capacity limits and product type assignments');
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            CopilotTools\ListProductionLinesTool::class,
+            CopilotTools\SearchProductionLinesTool::class,
+            CopilotTools\ViewProductionLineTool::class,
         ];
     }
 }

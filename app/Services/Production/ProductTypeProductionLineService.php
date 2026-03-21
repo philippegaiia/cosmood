@@ -5,10 +5,15 @@ namespace App\Services\Production;
 use App\Enums\ProductionStatus;
 use App\Models\Production\ProductionLine;
 use App\Models\Production\ProductType;
+use App\Services\OptimisticLocking\AggregateVersionService;
 use Illuminate\Support\Facades\DB;
 
 class ProductTypeProductionLineService
 {
+    public function __construct(
+        private readonly AggregateVersionService $versionService,
+    ) {}
+
     /**
      * Normalize an allowed-lines selection and its default without touching the database.
      *
@@ -92,11 +97,17 @@ class ProductTypeProductionLineService
             $migratedPlannedCount = 0;
             $confirmedConflictCount = 0;
             $confirmedConflictLineNames = [];
+            $migratedPlannedProductionIds = [];
 
             if ($removedAllowedIds !== []) {
-                $migratedPlannedCount = $productType->productions()
+                $migratedPlannedProductionIds = $productType->productions()
                     ->whereIn('production_line_id', $removedAllowedIds)
                     ->where('status', ProductionStatus::Planned)
+                    ->pluck('id')
+                    ->all();
+
+                $migratedPlannedCount = $productType->productions()
+                    ->whereIn('id', $migratedPlannedProductionIds)
                     ->update([
                         'production_line_id' => $normalizedDefaultLineId,
                     ]);
@@ -124,6 +135,10 @@ class ProductTypeProductionLineService
 
             $productType->unsetRelation('allowedProductionLines');
             $productType->load('allowedProductionLines', 'defaultProductionLine');
+
+            foreach ($migratedPlannedProductionIds as $productionId) {
+                $this->versionService->bumpProductionVersionIfExists((int) $productionId);
+            }
 
             return [
                 'allowed_production_line_ids' => $normalizedAllowedIds,

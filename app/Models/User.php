@@ -190,6 +190,16 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * Whether the user may override an active edit presence lock.
+     */
+    public function canForceReleaseResourceLocks(): bool
+    {
+        return $this->hasOperationalRole([
+            self::ROLE_MANAGER,
+        ]);
+    }
+
+    /**
      * Super admin role remains outside the operational matrix and bypasses
      * all explicit action checks in the Filament panel.
      *

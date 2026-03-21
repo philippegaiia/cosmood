@@ -22,6 +22,7 @@ use App\Models\Production\ProductionWave;
 use App\Models\Production\ProductionWaveStockDecision;
 use App\Models\Production\ProductType;
 use App\Models\Production\TaskTemplate;
+use App\Models\ResourceLock;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
@@ -258,6 +259,55 @@ describe('ProductionWave - Status Transitions', function () {
         $wave->update(['status' => WaveStatus::Cancelled]);
 
         expect($wave->fresh()->status)->toBe(WaveStatus::Cancelled);
+    });
+});
+
+describe('ProductionWave Presence Locking', function () {
+    it('blocks a second editor while another manager owns the edit page', function () {
+        $firstUser = User::factory()->create();
+        $firstUser->assignRole(Role::findOrCreate('manager'));
+
+        $secondUser = User::factory()->create();
+        $secondUser->assignRole(Role::findOrCreate('manager'));
+
+        $wave = ProductionWave::factory()->create();
+
+        $this->actingAs($firstUser);
+
+        Livewire::test(EditProductionWave::class, ['record' => $wave->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        $this->actingAs($secondUser);
+
+        Livewire::test(EditProductionWave::class, ['record' => $wave->id])
+            ->assertSet('hasForeignPresenceLock', true)
+            ->assertSee(__('presence-locking.blocked_title'))
+            ->assertDontSee('Approvisionnement');
+    });
+
+    it('lets a manager force unlock and take over the wave edit page', function () {
+        $firstUser = User::factory()->create();
+        $firstUser->assignRole(Role::findOrCreate('manager'));
+
+        $secondUser = User::factory()->create();
+        $secondUser->assignRole(Role::findOrCreate('manager'));
+
+        $wave = ProductionWave::factory()->create();
+
+        $this->actingAs($firstUser);
+
+        Livewire::test(EditProductionWave::class, ['record' => $wave->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        $this->actingAs($secondUser);
+
+        Livewire::test(EditProductionWave::class, ['record' => $wave->id])
+            ->assertSet('hasForeignPresenceLock', true)
+            ->call('forceReleasePresenceLock')
+            ->assertSet('hasForeignPresenceLock', false)
+            ->assertSee('Approvisionnement');
+
+        expect(ResourceLock::query()->sole()->user_id)->toBe($secondUser->id);
     });
 });
 

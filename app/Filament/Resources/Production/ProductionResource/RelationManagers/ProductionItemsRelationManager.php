@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Production\ProductionResource\RelationManagers;
 use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
+use App\Filament\Traits\GuardsRelationManagerActionsWithPresenceLock;
 use App\Models\Production\ProductionItem;
 use App\Services\Production\WaveRequirementStatusService;
 use Filament\Actions\Action;
@@ -20,6 +21,8 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 
 class ProductionItemsRelationManager extends RelationManager
 {
+    use GuardsRelationManagerActionsWithPresenceLock;
+
     protected static string $relationship = 'productionItems';
 
     protected static ?string $title = 'Items de production';
@@ -27,6 +30,7 @@ class ProductionItemsRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->poll($this->getRelationManagerPresenceLockPollInterval())
             ->columns([
                 TextColumn::make('sort')
                     ->label(__('#'))
@@ -108,6 +112,10 @@ class ProductionItemsRelationManager extends RelationManager
                     ->requiresConfirmation()
                     ->visible(fn (): bool => $this->canManageItemProcurementState())
                     ->action(function (ProductionItem $record): void {
+                        if ($this->shouldBlockOwnerRecordMutationBecauseLocked()) {
+                            return;
+                        }
+
                         if (! $this->canManageItemProcurementState()) {
                             Notification::make()
                                 ->warning()

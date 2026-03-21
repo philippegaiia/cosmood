@@ -3,6 +3,7 @@
 namespace App\Models\Supply;
 
 use App\Models\Production\Production;
+use App\Models\Supply\Concerns\BumpsParentSupplierOrderVersion;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +13,7 @@ use InvalidArgumentException;
 
 class SupplierOrderItem extends Model
 {
+    use BumpsParentSupplierOrderVersion;
     use HasFactory;
 
     private const LOCKED_AFTER_STOCK_FIELDS = [

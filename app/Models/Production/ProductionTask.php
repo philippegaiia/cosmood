@@ -3,6 +3,7 @@
 namespace App\Models\Production;
 
 use App\Filament\Resources\Production\ProductionResource;
+use App\Models\Production\Concerns\BumpsParentProductionVersion;
 use App\Models\User;
 use Guava\Calendar\Contracts\Eventable;
 use Guava\Calendar\ValueObjects\CalendarEvent;
@@ -12,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductionTask extends Model implements Eventable
 {
+    use BumpsParentProductionVersion;
     use HasFactory;
 
     protected $guarded = [];

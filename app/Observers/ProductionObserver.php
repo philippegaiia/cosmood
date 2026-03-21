@@ -5,6 +5,7 @@ namespace App\Observers;
 use App\Enums\ProductionStatus;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionWave;
+use App\Services\OptimisticLocking\AggregateVersionService;
 use App\Services\Production\ManufacturedIngredientStockService;
 use App\Services\Production\PermanentBatchNumberService;
 use App\Services\Production\ProductionAllocationService;
@@ -38,6 +39,7 @@ class ProductionObserver
         private readonly ManufacturedIngredientStockService $manufacturedIngredientStockService,
         private readonly ProductionAllocationService $allocationService,
         private readonly WaveRequirementStatusService $waveRequirementStatusService,
+        private readonly AggregateVersionService $versionService,
     ) {}
 
     /**
@@ -68,6 +70,7 @@ class ProductionObserver
 
         $this->handleAllocationLifecycle($production);
         $this->syncWaveRequirementStatuses([$production->production_wave_id]);
+        $this->versionService->bumpProductionWaveVersionIfExists((int) $production->production_wave_id);
     }
 
     /**
@@ -121,6 +124,12 @@ class ProductionObserver
         if ($production->wasChanged('status') || $production->wasChanged('production_wave_id') || $production->wasChanged('production_date') || $production->wasChanged('masterbatch_lot_id')) {
             $this->syncWaveRequirementStatuses($waveIdsToSync);
         }
+
+        $this->bumpVersionIfNotFormEdit($production);
+
+        if ($production->wasChanged('production_wave_id')) {
+            $this->versionService->bumpProductionWaveVersionIfExists((int) $production->getRawOriginal('production_wave_id'));
+        }
     }
 
     public function deleting(Production $production): void
@@ -131,6 +140,7 @@ class ProductionObserver
     public function deleted(Production $production): void
     {
         $this->syncWaveRequirementStatuses([$production->production_wave_id]);
+        $this->versionService->bumpProductionWaveVersionIfExists((int) $production->production_wave_id);
     }
 
     /**
@@ -176,5 +186,23 @@ class ProductionObserver
 
                 $this->waveRequirementStatusService->syncForWave($wave);
             });
+    }
+
+    /**
+     * Bump the production's lock_version when the change did NOT come from the edit form.
+     *
+     * The edit form increments lock_version before saving (via UsesOptimisticLocking trait).
+     * When services, background tasks, or other non-form sources update the production,
+     * we need to bump the version here so that open edit pages will detect the conflict.
+     *
+     * This ensures proper optimistic locking for all update sources.
+     */
+    private function bumpVersionIfNotFormEdit(Production $production): void
+    {
+        if ($production->wasChanged('lock_version')) {
+            return;
+        }
+
+        $this->versionService->bumpProductionVersion($production);
     }
 }

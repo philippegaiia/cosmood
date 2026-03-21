@@ -13,6 +13,7 @@ use App\Models\Settings;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supply;
 use App\Services\InventoryMovementService;
+use App\Services\OptimisticLocking\AggregateVersionService;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -34,6 +35,7 @@ class ProductionAllocationService
         private readonly InventoryMovementService $movementService,
         private readonly WaveRequirementStatusService $waveRequirementStatusService,
         private readonly WaveProcurementService $waveProcurementService,
+        private readonly AggregateVersionService $versionService,
     ) {}
 
     /**
@@ -220,6 +222,10 @@ class ProductionAllocationService
 
         if ($syncWaveRequirements) {
             $this->syncWaveRequirementStatusesForItem($item);
+        }
+
+        if ($item->production) {
+            $this->versionService->bumpProductionVersion($item->production);
         }
     }
 

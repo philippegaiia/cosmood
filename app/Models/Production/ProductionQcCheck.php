@@ -4,14 +4,18 @@ namespace App\Models\Production;
 
 use App\Enums\QcInputType;
 use App\Enums\QcResult;
+use App\Models\Production\Concerns\BumpsParentProductionVersion;
 use App\Models\User;
+use Database\Factories\Production\ProductionQcCheckFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProductionQcCheck extends Model
 {
-    /** @use HasFactory<\Database\Factories\Production\ProductionQcCheckFactory> */
+    use BumpsParentProductionVersion;
+
+    /** @use HasFactory<ProductionQcCheckFactory> */
     use HasFactory;
 
     protected $guarded = [];

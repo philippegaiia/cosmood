@@ -4,17 +4,28 @@ namespace App\Filament\Resources\Supply\SupplierOrderResource\Pages;
 
 use App\Enums\OrderStatus;
 use App\Filament\Resources\Supply\SupplierOrderResource;
+use App\Filament\Traits\UsesOptimisticLocking;
+use App\Filament\Traits\UsesPresenceLock;
+use App\Filament\Traits\UsesWavePresenceLockAdvisory;
 use App\Models\User;
+use App\Services\OptimisticLocking\OptimisticLockingContext;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
 
 class EditSupplierOrder extends EditRecord
 {
+    use UsesOptimisticLocking;
+    use UsesPresenceLock;
+    use UsesWavePresenceLockAdvisory;
+
     protected static string $resource = SupplierOrderResource::class;
+
+    protected string $view = 'filament.pages.edit-record-with-optimistic-locking';
 
     public function getTitle(): string
     {
@@ -25,6 +36,32 @@ class EditSupplierOrder extends EditRecord
             'reference' => $reference,
             'status' => $statusLabel,
         ]);
+    }
+
+    protected function afterFill(): void
+    {
+        $this->initializeOptimisticLocking();
+        $this->initializePresenceLocking();
+        $this->initializeWavePresenceLockAdvisory();
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $this->ensurePresenceLockOwnership();
+        $this->assertNoConcurrentModification();
+
+        $data['production_wave_id'] = filled($this->data['production_wave_id'] ?? null)
+            ? (int) $this->data['production_wave_id']
+            : null;
+
+        $this->incrementLockVersion($data);
+
+        return $data;
+    }
+
+    protected function handleRecordUpdate(Model $record, array $data): Model
+    {
+        return $this->handleRecordUpdateWithOptimisticLock($record, $data);
     }
 
     public function save(bool $shouldRedirect = true, bool $shouldSendSavedNotification = true): void
@@ -50,7 +87,12 @@ class EditSupplierOrder extends EditRecord
         }
 
         try {
-            parent::save($shouldRedirect, $shouldSendSavedNotification);
+            app(OptimisticLockingContext::class)->runWithoutSupplierOrderBumps(
+                (int) $this->record->getKey(),
+                function () use ($shouldRedirect, $shouldSendSavedNotification): void {
+                    parent::save($shouldRedirect, $shouldSendSavedNotification);
+                },
+            );
         } catch (\InvalidArgumentException $exception) {
             Notification::make()
                 ->title(__('Impossible d\'enregistrer la commande'))
@@ -60,8 +102,17 @@ class EditSupplierOrder extends EditRecord
         }
     }
 
+    protected function afterSave(): void
+    {
+        $this->refreshLockVersionAfterSave();
+    }
+
     protected function getHeaderActions(): array
     {
+        if ($this->shouldBlockEditContentForPresenceLock()) {
+            return [];
+        }
+
         return [
             Action::make('exportPdf')
                 ->label(__('Exporter PO PDF'))

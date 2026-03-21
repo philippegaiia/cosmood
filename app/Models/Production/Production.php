@@ -133,6 +133,7 @@ class Production extends Model implements Eventable
             'production_date' => 'date',
             'ready_date' => 'date',
             'permanent_batch_number' => 'string',
+            'lock_version' => 'integer',
         ];
     }
 

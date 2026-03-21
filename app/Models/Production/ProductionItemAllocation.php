@@ -2,6 +2,8 @@
 
 namespace App\Models\Production;
 
+use App\Models\Production\Concerns\BumpsParentProductionVersion;
+use App\Models\Supply\Supply;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -14,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class ProductionItemAllocation extends Model
 {
+    use BumpsParentProductionVersion;
     use HasFactory;
 
     protected $guarded = [];
@@ -34,7 +37,7 @@ class ProductionItemAllocation extends Model
 
     public function supply(): BelongsTo
     {
-        return $this->belongsTo(\App\Models\Supply\Supply::class);
+        return $this->belongsTo(Supply::class);
     }
 
     public function isReserved(): bool
@@ -55,5 +58,10 @@ class ProductionItemAllocation extends Model
     public function isActive(): bool
     {
         return in_array($this->status, ['reserved', 'consumed'], true);
+    }
+
+    protected function getProductionForVersionBump(): ?Production
+    {
+        return $this->productionItem?->production;
     }
 }

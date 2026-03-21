@@ -50,6 +50,9 @@ describe('ProductTypeProductionLineService', function () {
             'production_line_id' => $removedLine->id,
         ]);
 
+        $plannedProduction->refresh();
+        $initialPlannedVersion = $plannedProduction->lock_version;
+
         $summary = app(ProductTypeProductionLineService::class)->sync($productType, [$defaultLine->id], null);
 
         expect($summary['migrated_planned_count'])->toBe(1)
@@ -57,6 +60,7 @@ describe('ProductTypeProductionLineService', function () {
             ->and($summary['confirmed_conflict_line_names'])->toEqual(['Soap Line 2'])
             ->and($productType->fresh()->default_production_line_id)->toBe($defaultLine->id)
             ->and($plannedProduction->fresh()->production_line_id)->toBe($defaultLine->id)
+            ->and($plannedProduction->fresh()->lock_version)->toBe($initialPlannedVersion + 1)
             ->and($confirmedProduction->fresh()->production_line_id)->toBe($removedLine->id)
             ->and($ongoingProduction->fresh()->production_line_id)->toBe($removedLine->id);
     });

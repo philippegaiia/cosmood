@@ -57,6 +57,9 @@ class ProductionForm
     {
         return $schema
             ->components([
+                Hidden::make('lock_version')
+                    ->default(0)
+                    ->dehydrated(),
                 Tabs::make('production_flow')
                     ->columnSpanFull()
                     ->tabs([

@@ -9,13 +9,14 @@ use App\Filament\Resources\TaskTemplates\Schemas\TaskTemplateForm;
 use App\Filament\Resources\TaskTemplates\Tables\TaskTemplatesTable;
 use App\Models\Production\TaskTemplate;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class TaskTemplateResource extends Resource implements HasKnowledgeBase
+class TaskTemplateResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = TaskTemplate::class;
 
@@ -62,6 +63,20 @@ class TaskTemplateResource extends Resource implements HasKnowledgeBase
         return [
             'reference-data/qc-and-task-templates',
             'execution/tasks-qc-and-outputs',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return __('Task templates define the sequence of production tasks for different product types');
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            CopilotTools\ListTaskTemplatesTool::class,
+            CopilotTools\SearchTaskTemplatesTool::class,
+            CopilotTools\ViewTaskTemplateTool::class,
         ];
     }
 }

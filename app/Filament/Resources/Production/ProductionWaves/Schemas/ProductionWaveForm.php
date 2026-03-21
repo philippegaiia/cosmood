@@ -6,6 +6,7 @@ use App\Enums\WaveStatus;
 use App\Models\Production\ProductionWave;
 use App\Services\Production\WaveProcurementService;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -28,6 +29,9 @@ class ProductionWaveForm
     {
         return $schema
             ->components([
+                Hidden::make('lock_version')
+                    ->default(0)
+                    ->dehydrated(),
                 Tabs::make('wave_tabs')
                     ->columnSpanFull()
                     ->tabs([

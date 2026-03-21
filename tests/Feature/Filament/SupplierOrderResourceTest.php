@@ -1,10 +1,12 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave;
 use App\Filament\Resources\Supply\SupplierOrderResource\Pages\CreateSupplierOrder;
 use App\Filament\Resources\Supply\SupplierOrderResource\Pages\EditSupplierOrder;
 use App\Filament\Resources\Supply\SupplierOrderResource\Pages\ListSupplierOrders;
 use App\Models\Production\ProductionWave;
+use App\Models\ResourceLock;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
@@ -32,6 +34,72 @@ function createSupplierOrderRoleUser(string $role): User
 
     return $user;
 }
+
+describe('SupplierOrder Presence Locking', function () {
+    it('blocks a second editor while another manager owns the edit page', function () {
+        $firstUser = createSupplierOrderRoleUser('manager');
+        $secondUser = createSupplierOrderRoleUser('manager');
+
+        $order = SupplierOrder::factory()->create();
+
+        actingAs($firstUser);
+
+        Livewire::test(EditSupplierOrder::class, ['record' => $order->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        actingAs($secondUser);
+
+        Livewire::test(EditSupplierOrder::class, ['record' => $order->id])
+            ->assertSet('hasForeignPresenceLock', true)
+            ->assertSee(__('presence-locking.blocked_title'))
+            ->assertDontSee('Exporter PO PDF');
+    });
+
+    it('lets a manager force unlock and take over the supplier order edit page', function () {
+        $firstUser = createSupplierOrderRoleUser('manager');
+        $secondUser = createSupplierOrderRoleUser('manager');
+
+        $order = SupplierOrder::factory()->create();
+
+        actingAs($firstUser);
+
+        Livewire::test(EditSupplierOrder::class, ['record' => $order->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        actingAs($secondUser);
+
+        Livewire::test(EditSupplierOrder::class, ['record' => $order->id])
+            ->assertSet('hasForeignPresenceLock', true)
+            ->call('forceReleasePresenceLock')
+            ->assertSet('hasForeignPresenceLock', false)
+            ->assertSee('Détails Commande');
+
+        expect(ResourceLock::query()->sole()->user_id)->toBe($secondUser->id);
+    });
+
+    it('shows an advisory banner on the supplier order edit page when the linked wave is locked by another manager', function () {
+        $planner = createSupplierOrderRoleUser('manager');
+        $buyer = createSupplierOrderRoleUser('manager');
+
+        $wave = ProductionWave::factory()->create();
+        $order = SupplierOrder::factory()->create([
+            'production_wave_id' => $wave->id,
+        ]);
+
+        actingAs($planner);
+
+        Livewire::test(EditProductionWave::class, ['record' => $wave->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        actingAs($buyer);
+
+        Livewire::test(EditSupplierOrder::class, ['record' => $order->id])
+            ->assertSet('hasForeignPresenceLock', false)
+            ->assertSet('hasForeignWavePresenceLockAdvisory', true)
+            ->assertSee(__('presence-locking.parent_wave_advisory_title'))
+            ->assertSee($planner->name);
+    });
+});
 
 it('lists supplier orders in table', function () {
     $orders = SupplierOrder::factory()->count(3)->create();
@@ -426,6 +494,40 @@ it('shows unit-based supplier listing labels with parenthesized uom and dynamic 
         ->assertSee('Boite tres doux (1 u)')
         ->assertSee('UOM (unités)')
         ->assertSee('Total (u)');
+});
+
+it('reloads the latest supplier order form state including repeater items after an external update', function () {
+    actingAs(createSupplierOrderRoleUser('manager'));
+
+    $listing = SupplierListing::factory()->create();
+    $order = SupplierOrder::factory()->create([
+        'supplier_id' => $listing->supplier_id,
+        'description' => 'Initial description',
+    ]);
+
+    $item = SupplierOrderItem::factory()->create([
+        'supplier_order_id' => $order->id,
+        'supplier_listing_id' => $listing->id,
+        'batch_number' => 'LOT-INITIAL',
+    ]);
+
+    $page = Livewire::test(EditSupplierOrder::class, ['record' => $order->id])
+        ->assertSet('data.description', 'Initial description')
+        ->assertSet('data.supplier_order_items', fn (?array $items): bool => collect($items ?? [])
+            ->contains(fn (array $itemState): bool => ($itemState['batch_number'] ?? null) === 'LOT-INITIAL'));
+
+    $order->update([
+        'description' => 'Updated by service',
+    ]);
+
+    $item->update([
+        'batch_number' => 'LOT-UPDATED',
+    ]);
+
+    $page->call('reloadRecordFromDatabase')
+        ->assertSet('data.description', 'Updated by service')
+        ->assertSet('data.supplier_order_items', fn (?array $items): bool => collect($items ?? [])
+            ->contains(fn (array $itemState): bool => ($itemState['batch_number'] ?? null) === 'LOT-UPDATED'));
 });
 
 it('blocks editing stocked lines from the supplier order edit page', function () {

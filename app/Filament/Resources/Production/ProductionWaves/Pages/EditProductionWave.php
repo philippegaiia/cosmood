@@ -3,6 +3,8 @@
 namespace App\Filament\Resources\Production\ProductionWaves\Pages;
 
 use App\Filament\Resources\Production\ProductionWaves\ProductionWaveResource;
+use App\Filament\Traits\UsesOptimisticLocking;
+use App\Filament\Traits\UsesPresenceLock;
 use App\Models\Production\ProductionWaveStockDecision;
 use App\Models\Supply\Ingredient;
 use App\Services\Production\ProductionAllocationService;
@@ -17,10 +19,16 @@ use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Schemas\Components\Utilities\Get;
+use Illuminate\Database\Eloquent\Model;
 
 class EditProductionWave extends EditRecord
 {
+    use UsesOptimisticLocking;
+    use UsesPresenceLock;
+
     protected static string $resource = ProductionWaveResource::class;
+
+    protected string $view = 'filament.pages.edit-record-with-optimistic-locking';
 
     public function mount(int|string $record): void
     {
@@ -39,9 +47,33 @@ class EditProductionWave extends EditRecord
             ->send();
     }
 
+    protected function afterFill(): void
+    {
+        $this->initializeOptimisticLocking();
+        $this->initializePresenceLocking();
+    }
+
+    protected function mutateFormDataBeforeSave(array $data): array
+    {
+        $this->ensurePresenceLockOwnership();
+        $this->assertNoConcurrentModification();
+        $this->incrementLockVersion($data);
+
+        return $data;
+    }
+
+    protected function handleRecordUpdate(Model $record, array $data): Model
+    {
+        return $this->handleRecordUpdateWithOptimisticLock($record, $data);
+    }
+
     protected function afterSave(): void
     {
-        if (! $this->record->wasChanged('planned_start_date')) {
+        $plannedStartDateChanged = $this->record->wasChanged('planned_start_date');
+
+        $this->refreshLockVersionAfterSave();
+
+        if (! $plannedStartDateChanged) {
             return;
         }
 
@@ -89,6 +121,10 @@ class EditProductionWave extends EditRecord
 
     protected function getHeaderActions(): array
     {
+        if ($this->shouldBlockEditContentForPresenceLock()) {
+            return [];
+        }
+
         return [
             Action::make('decideWaveStockReserve')
                 ->label(__('Décider la réserve stock'))
@@ -165,6 +201,8 @@ class EditProductionWave extends EditRecord
                         ProductionWaveStockDecision::query()
                             ->where('production_wave_id', $this->record->id)
                             ->where('ingredient_id', $ingredientId)
+                            ->get()
+                            ->each
                             ->delete();
                     } else {
                         ProductionWaveStockDecision::query()->updateOrCreate(

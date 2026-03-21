@@ -15,6 +15,7 @@ use App\Filament\Resources\Production\ProductionResource\RelationManagers\Produc
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionOutputsRelationManager;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionQcChecksRelationManager;
 use App\Filament\Resources\Production\ProductionResource\RelationManagers\ProductionTasksRelationManager;
+use App\Filament\Resources\Production\ProductionWaves\Pages\EditProductionWave;
 use App\Models\Production\BatchSizePreset;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
@@ -148,6 +149,145 @@ describe('Production - Masterbatch', function () {
                 'product_id' => $product->id,
             ])
             ->assertSet('data.produced_ingredient_id', $ingredient->id);
+    });
+});
+
+describe('Production Presence Locking', function () {
+    it('blocks a second editor while another manager owns the edit page', function () {
+        $firstUser = User::factory()->create();
+        $firstUser->assignRole(Role::findOrCreate('manager'));
+
+        $secondUser = User::factory()->create();
+        $secondUser->assignRole(Role::findOrCreate('manager'));
+
+        $production = Production::factory()->create();
+
+        $this->actingAs($firstUser);
+
+        Livewire::test(EditProduction::class, ['record' => $production->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        $this->actingAs($secondUser);
+
+        Livewire::test(EditProduction::class, ['record' => $production->id])
+            ->assertSet('hasForeignPresenceLock', true)
+            ->assertSee(__('presence-locking.blocked_title'))
+            ->assertDontSee('PDF production');
+    });
+
+    it('blocks marking a production item as ordered from the view page while another manager edits the production', function () {
+        $firstUser = User::factory()->create();
+        $firstUser->assignRole(Role::findOrCreate('manager'));
+
+        $secondUser = User::factory()->create();
+        $secondUser->assignRole(Role::findOrCreate('manager'));
+
+        $production = Production::factory()->planned()->create();
+        $item = ProductionItem::factory()->create([
+            'production_id' => $production->id,
+            'is_order_marked' => false,
+            'procurement_status' => ProcurementStatus::NotOrdered,
+        ]);
+
+        $this->actingAs($firstUser);
+
+        Livewire::test(EditProduction::class, ['record' => $production->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        $this->actingAs($secondUser);
+
+        Livewire::test(ProductionItemsRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])
+            ->callAction(TestAction::make('toggleOrderMark')->table($item))
+            ->assertNotified(__('presence-locking.action_blocked_title'));
+
+        expect($item->fresh()->is_order_marked)->toBeFalse()
+            ->and($item->fresh()->procurement_status)->toBe(ProcurementStatus::NotOrdered);
+    });
+
+    it('blocks task replanning from the view page while another manager edits the production', function () {
+        $firstUser = User::factory()->create();
+        $firstUser->assignRole(Role::findOrCreate('manager'));
+
+        $secondUser = User::factory()->create();
+        $secondUser->assignRole(Role::findOrCreate('manager'));
+
+        $production = Production::factory()->planned()->create();
+        $task = ProductionTask::factory()->create([
+            'production_id' => $production->id,
+            'is_finished' => false,
+            'scheduled_date' => now()->toDateString(),
+            'is_manual_schedule' => false,
+        ]);
+
+        $originalScheduledDate = optional($task->scheduled_date)->toDateString();
+
+        $this->actingAs($firstUser);
+
+        Livewire::test(EditProduction::class, ['record' => $production->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        $this->actingAs($secondUser);
+
+        Livewire::test(ProductionTasksRelationManager::class, [
+            'ownerRecord' => $production,
+            'pageClass' => ViewProduction::class,
+        ])
+            ->callAction(TestAction::make('reschedule')->table($task), [
+                'scheduled_date' => now()->addDay()->toDateString(),
+            ])
+            ->assertNotified(__('presence-locking.action_blocked_title'));
+
+        expect(optional($task->fresh()->scheduled_date)->toDateString())->toBe($originalScheduledDate);
+    });
+
+    it('shows an advisory banner on the production edit page when the linked wave is locked by another manager', function () {
+        $planner = User::factory()->create();
+        $planner->assignRole(Role::findOrCreate('manager'));
+
+        $operator = User::factory()->create();
+        $operator->assignRole(Role::findOrCreate('manager'));
+
+        $wave = ProductionWave::factory()->create();
+        $production = Production::factory()->forWave($wave)->create();
+
+        $this->actingAs($planner);
+
+        Livewire::test(EditProductionWave::class, ['record' => $wave->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        $this->actingAs($operator);
+
+        Livewire::test(EditProduction::class, ['record' => $production->id])
+            ->assertSet('hasForeignPresenceLock', false)
+            ->assertSet('hasForeignWavePresenceLockAdvisory', true)
+            ->assertSee(__('presence-locking.parent_wave_advisory_title'))
+            ->assertSee($planner->name);
+    });
+
+    it('shows an advisory banner on the production view page when the linked wave is locked by another manager', function () {
+        $planner = User::factory()->create();
+        $planner->assignRole(Role::findOrCreate('manager'));
+
+        $viewer = User::factory()->create();
+        $viewer->assignRole(Role::findOrCreate('manager'));
+
+        $wave = ProductionWave::factory()->create();
+        $production = Production::factory()->forWave($wave)->create();
+
+        $this->actingAs($planner);
+
+        Livewire::test(EditProductionWave::class, ['record' => $wave->id])
+            ->assertSet('hasForeignPresenceLock', false);
+
+        $this->actingAs($viewer);
+
+        Livewire::test(ViewProduction::class, ['record' => $production->id])
+            ->assertSet('hasForeignWavePresenceLockAdvisory', true)
+            ->assertSee(__('presence-locking.parent_wave_advisory_title'))
+            ->assertSee($planner->name);
     });
 });
 

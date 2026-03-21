@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Production\ProductionResource\RelationManagers;
 
 use App\Enums\ProductionStatus;
+use App\Filament\Traits\GuardsRelationManagerActionsWithPresenceLock;
 use App\Models\Production\ProductionTask;
 use App\Services\Production\TaskGenerationService;
 use Filament\Actions\Action;
@@ -20,6 +21,8 @@ use InvalidArgumentException;
 
 class ProductionTasksRelationManager extends RelationManager
 {
+    use GuardsRelationManagerActionsWithPresenceLock;
+
     protected static string $relationship = 'productionTasks';
 
     protected static ?string $title = 'Tâches';
@@ -27,6 +30,7 @@ class ProductionTasksRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            ->poll($this->getRelationManagerPresenceLockPollInterval())
             ->columns([
                 TextColumn::make('name')
                     ->label(__('Tâche'))
@@ -126,6 +130,10 @@ class ProductionTasksRelationManager extends RelationManager
                     ->icon(Heroicon::OutlinedCheckCircle)
                     ->visible(fn (ProductionTask $record): bool => $this->canFinishTask($record))
                     ->action(function (ProductionTask $record): void {
+                        if ($this->shouldBlockOwnerRecordMutationBecauseLocked()) {
+                            return;
+                        }
+
                         if (! $this->canExecuteTaskOnCurrentProduction($record)) {
                             Notification::make()
                                 ->warning()
@@ -167,6 +175,10 @@ class ProductionTasksRelationManager extends RelationManager
                             ->rows(3),
                     ])
                     ->action(function (ProductionTask $record, array $data): void {
+                        if ($this->shouldBlockOwnerRecordMutationBecauseLocked()) {
+                            return;
+                        }
+
                         if (! $this->canExecuteTaskOnCurrentProduction($record)) {
                             Notification::make()
                                 ->warning()
@@ -223,6 +235,10 @@ class ProductionTasksRelationManager extends RelationManager
                             ->required(),
                     ])
                     ->action(function (ProductionTask $record, array $data): void {
+                        if ($this->shouldBlockOwnerRecordMutationBecauseLocked()) {
+                            return;
+                        }
+
                         if (! $this->canManageTaskPlanning($record)) {
                             Notification::make()
                                 ->warning()
@@ -240,6 +256,10 @@ class ProductionTasksRelationManager extends RelationManager
                     ->icon(Heroicon::OutlinedArrowPath)
                     ->visible(fn (ProductionTask $record): bool => $record->is_manual_schedule && $this->canManageTaskPlanning($record))
                     ->action(function (ProductionTask $record): void {
+                        if ($this->shouldBlockOwnerRecordMutationBecauseLocked()) {
+                            return;
+                        }
+
                         if (! $this->canManageTaskPlanning($record)) {
                             Notification::make()
                                 ->warning()
@@ -263,6 +283,10 @@ class ProductionTasksRelationManager extends RelationManager
                             ->required(),
                     ])
                     ->action(function (ProductionTask $record, array $data): void {
+                        if ($this->shouldBlockOwnerRecordMutationBecauseLocked()) {
+                            return;
+                        }
+
                         if (! $this->canManageTaskPlanning($record)) {
                             Notification::make()
                                 ->warning()

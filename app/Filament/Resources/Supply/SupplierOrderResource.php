@@ -91,6 +91,9 @@ class SupplierOrderResource extends Resource implements CopilotResource, HasKnow
     {
         return $schema
             ->components([
+                Hidden::make('lock_version')
+                    ->default(0)
+                    ->dehydrated(),
                 Section::make(__('Suivi commande'))
                     ->visibleOn('edit')
                     ->schema([

@@ -7,6 +7,7 @@ use App\Enums\FormulaItemCalculationMode;
 use App\Enums\Phases;
 use App\Enums\ProcurementStatus;
 use App\Enums\ProductionStatus;
+use App\Models\Production\Concerns\BumpsParentProductionVersion;
 use App\Models\Supply\Ingredient;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\Supply;
@@ -20,6 +21,7 @@ use InvalidArgumentException;
 
 class ProductionItem extends Model
 {
+    use BumpsParentProductionVersion;
     use HasFactory;
 
     protected $guarded = [];

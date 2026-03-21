@@ -9,13 +9,14 @@ use App\Filament\Resources\QcTemplates\Schemas\QcTemplatesForm;
 use App\Filament\Resources\QcTemplates\Tables\QcTemplatesTable;
 use App\Models\Production\QcTemplate;
 use BackedEnum;
+use EslamRedaDiv\FilamentCopilot\Contracts\CopilotResource;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Table;
 use Guava\FilamentKnowledgeBase\Contracts\HasKnowledgeBase;
 
-class QcTemplatesResource extends Resource implements HasKnowledgeBase
+class QcTemplatesResource extends Resource implements CopilotResource, HasKnowledgeBase
 {
     protected static ?string $model = QcTemplate::class;
 
@@ -67,6 +68,20 @@ class QcTemplatesResource extends Resource implements HasKnowledgeBase
         return [
             'reference-data/qc-and-task-templates',
             'execution/tasks-qc-and-outputs',
+        ];
+    }
+
+    public static function copilotResourceDescription(): ?string
+    {
+        return __('QC templates define quality control checklists with target values and tolerances for production verification');
+    }
+
+    public static function copilotTools(): array
+    {
+        return [
+            CopilotTools\ListQcTemplatesTool::class,
+            CopilotTools\SearchQcTemplatesTool::class,
+            CopilotTools\ViewQcTemplateTool::class,
         ];
     }
 }

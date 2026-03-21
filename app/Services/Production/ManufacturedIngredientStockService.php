@@ -10,6 +10,7 @@ use App\Models\Supply\Supplier;
 use App\Models\Supply\SupplierListing;
 use App\Models\Supply\Supply;
 use App\Services\InventoryMovementService;
+use App\Services\OptimisticLocking\AggregateVersionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -24,6 +25,7 @@ class ManufacturedIngredientStockService
 
     public function __construct(
         private readonly InventoryMovementService $inventoryMovementService,
+        private readonly AggregateVersionService $versionService,
     ) {}
 
     /**
@@ -131,6 +133,8 @@ class ManufacturedIngredientStockService
         $production->updateQuietly([
             'produced_ingredient_id' => $ingredient->id,
         ]);
+
+        $this->versionService->bumpProductionVersion($production);
 
         return $ingredient;
     }

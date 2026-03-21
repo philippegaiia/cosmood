@@ -17,13 +17,22 @@ Avoid factory-generated fake formulas/products in production-like environments.
 - Seed production-safe data:
   - `composer run seed:prod`
   - or `php artisan db:seed --class=ProductionDatabaseSeeder --no-interaction`
+- Apply new migrations and then re-seed curated production-safe data without dropping tables:
+  - `composer run seed:sync:prod`
+  - or run `php artisan migrate --no-interaction` followed by `composer run seed:prod`
 - Seed development extras:
   - `composer run seed:dev`
   - or `php artisan db:seed --class=DevelopmentDatabaseSeeder --no-interaction`
+- Apply new migrations and then re-seed the development entry point without dropping tables:
+  - `composer run seed:sync:dev`
 - Fresh DB + production-safe seed:
   - `composer run seed:fresh:prod`
 - Fresh DB + development seed:
   - `composer run seed:fresh:dev`
+
+Use the `seed:sync:*` commands when you need newly added migration columns but want
+to keep existing records. Reserve the `seed:fresh:*` commands for disposable local
+databases only, because they wipe all data before reseeding.
 
 ## Data Ownership
 
@@ -55,14 +64,14 @@ Avoid factory-generated fake formulas/products in production-like environments.
 
 ### Development-only/demo extensions
 
-- Waves, production tasks/items/requirements, supplier orders, supplies movement, contacts.
-- Included in `DevelopmentDatabaseSeeder` only.
+- `DevelopmentDatabaseSeeder` currently mirrors `ProductionDatabaseSeeder`.
+- Add demo-only records there if we intentionally reintroduce disposable local fixtures later.
 - Demo production flows should respect lifecycle contract (`planned -> confirmed -> ongoing -> finished`) and use production outputs for end-of-run reconciliation instead of `cancelled`.
 
 ## Current Guardrails
 
 - Legacy overlapping seeders removed to avoid duplicate/conflicting sources.
-- Formula seeders use `updateOrInsert` (idempotent, non-destructive).
+- Formula seeders upsert formulas and restore their default product pivot link without deleting extra user-added links.
 - Several demo seeders early-return when data already exists, reducing accidental re-seeding conflicts.
 - `ProductionDatabaseSeeder` now bootstraps Shield roles before domain data and reassigns `admin@admin.com` to `super_admin`.
 - `ShieldRolesSeeder` refuses to auto-generate permissions in production, so production deployments must keep Shield generation explicit.

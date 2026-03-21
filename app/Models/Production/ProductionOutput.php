@@ -3,7 +3,9 @@
 namespace App\Models\Production;
 
 use App\Enums\ProductionOutputKind;
+use App\Models\Production\Concerns\BumpsParentProductionVersion;
 use App\Models\Supply\Ingredient;
+use Database\Factories\Production\ProductionOutputFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,7 +13,9 @@ use InvalidArgumentException;
 
 class ProductionOutput extends Model
 {
-    /** @use HasFactory<\Database\Factories\Production\ProductionOutputFactory> */
+    use BumpsParentProductionVersion;
+
+    /** @use HasFactory<ProductionOutputFactory> */
     use HasFactory;
 
     protected $guarded = [];

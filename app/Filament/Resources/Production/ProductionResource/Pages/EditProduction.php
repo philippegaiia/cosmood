@@ -5,6 +5,9 @@ namespace App\Filament\Resources\Production\ProductionResource\Pages;
 use App\Enums\Phases;
 use App\Enums\ProductionStatus;
 use App\Filament\Resources\Production\ProductionResource;
+use App\Filament\Traits\UsesOptimisticLocking;
+use App\Filament\Traits\UsesPresenceLock;
+use App\Filament\Traits\UsesWavePresenceLockAdvisory;
 use App\Models\Production\Formula;
 use App\Models\User;
 use App\Services\Production\MasterbatchService;
@@ -16,11 +19,18 @@ use Filament\Resources\Pages\EditRecord;
 use Filament\Support\Enums\Width;
 use Filament\Support\Exceptions\Halt;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Session;
 
 class EditProduction extends EditRecord
 {
+    use UsesOptimisticLocking;
+    use UsesPresenceLock;
+    use UsesWavePresenceLockAdvisory;
+
     protected static string $resource = ProductionResource::class;
+
+    protected string $view = 'filament.pages.edit-record-with-optimistic-locking';
 
     public static bool $formActionsAreSticky = true;
 
@@ -52,15 +62,34 @@ class EditProduction extends EditRecord
         return true;
     }
 
+    protected function afterFill(): void
+    {
+        $this->initializeOptimisticLocking();
+        $this->initializePresenceLocking();
+        $this->initializeWavePresenceLockAdvisory();
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $this->ensurePresenceLockOwnership();
+        $this->assertNoConcurrentModification();
+
         $data['product_id'] = $this->record->product_id;
+
+        $this->incrementLockVersion($data);
 
         return $data;
     }
 
+    protected function handleRecordUpdate(Model $record, array $data): Model
+    {
+        return $this->handleRecordUpdateWithOptimisticLock($record, $data);
+    }
+
     protected function afterSave(): void
     {
+        $this->refreshLockVersionAfterSave();
+
         $this->record->refresh();
 
         $this->refreshFormData([
@@ -345,6 +374,10 @@ class EditProduction extends EditRecord
 
     protected function getHeaderActions(): array
     {
+        if ($this->shouldBlockEditContentForPresenceLock()) {
+            return [];
+        }
+
         return [
             Action::make('exportPdf')
                 ->label(__('PDF production'))

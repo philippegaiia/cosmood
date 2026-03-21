@@ -5,6 +5,7 @@ namespace App\Models\Production;
 use App\Enums\ProductionStatus;
 use App\Enums\WaveStatus;
 use App\Models\User;
+use App\Services\OptimisticLocking\AggregateVersionService;
 use App\Services\Production\WaveProcurementService;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,6 +24,14 @@ class ProductionWave extends Model
 
     protected static function booted(): void
     {
+        static::updated(function (ProductionWave $wave): void {
+            if ($wave->wasChanged('lock_version')) {
+                return;
+            }
+
+            app(AggregateVersionService::class)->bumpProductionWaveVersion($wave);
+        });
+
         static::deleting(function (ProductionWave $wave): void {
             if (self::$allowsManagedDeletion) {
                 return;
@@ -41,6 +50,7 @@ class ProductionWave extends Model
             'approved_at' => 'datetime',
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
+            'lock_version' => 'integer',
         ];
     }
 
