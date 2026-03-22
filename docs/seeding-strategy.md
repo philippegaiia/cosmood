@@ -48,6 +48,9 @@ databases only, because they wipe all data before reseeding.
 
 ### Real-data seeders (source of truth)
 
+- `database/seeders/BrandSeeder.php`
+- `database/seeders/CollectionSeeder.php`
+- `database/seeders/DestinationSeeder.php`
 - `database/seeders/ProductSeeder.php`
 - `database/seeders/Supply/IngredientCategorySeeder.php`
 - `database/seeders/Supply/IngredientSeeder.php`
@@ -80,6 +83,7 @@ databases only, because they wipe all data before reseeding.
 
 - Do not seed formulas via factories for production-like data.
 - Prefer business keys and deterministic records over random generation.
+- Keep brands, collections, and destinations in curated production-safe seeders when they are used as operational reporting dimensions.
 - Keep seeded stock examples compatible with reservation semantics (`allocated_quantity` reduces available stock).
 - When changing production-safe seed structure, update this document and matching seeders in same branch.
 

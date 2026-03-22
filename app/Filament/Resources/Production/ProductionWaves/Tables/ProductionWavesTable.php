@@ -36,6 +36,10 @@ class ProductionWavesTable
                     ->label(__('Nom'))
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('defaultDestination.name')
+                    ->label(__('Destination par défaut'))
+                    ->placeholder(__('-'))
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('status')
                     ->label(__('Statut'))
                     ->badge()

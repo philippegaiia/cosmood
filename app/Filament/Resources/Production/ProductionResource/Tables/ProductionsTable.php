@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Production\ProductionResource\Tables;
 
 use App\Enums\ProductionStatus;
+use App\Models\Production\Destination;
 use App\Models\Production\Production;
 use App\Models\Supply\Ingredient;
 use App\Services\Production\PermanentBatchNumberService;
@@ -82,6 +83,10 @@ class ProductionsTable
                     ->badge()
                     ->placeholder(__('Autonome'))
                     ->sortable(),
+                TextColumn::make('destination_label')
+                    ->label(__('Destination'))
+                    ->state(fn (Production $record): string => $record->getDestinationLabel())
+                    ->placeholder(__('-')),
                 TextColumn::make('productionLine.name')
                     ->label(__('Ligne'))
                     ->badge()
@@ -133,6 +138,25 @@ class ProductionsTable
                 SelectFilter::make('status')
                     ->label(__('Statut'))
                     ->options(ProductionStatus::class),
+                SelectFilter::make('destination')
+                    ->label(__('Destination'))
+                    ->options(fn (): array => Destination::query()->orderBy('name')->pluck('name', 'id')->all())
+                    ->query(function (Builder $query, array $data): Builder {
+                        $destinationId = (int) ($data['value'] ?? 0);
+
+                        if ($destinationId <= 0) {
+                            return $query;
+                        }
+
+                        return $query->where(function (Builder $destinationQuery) use ($destinationId): void {
+                            $destinationQuery
+                                ->where('destination_id', $destinationId)
+                                ->orWhere(function (Builder $fallbackQuery) use ($destinationId): void {
+                                    $fallbackQuery->whereNull('destination_id')
+                                        ->whereHas('wave', fn (Builder $waveQuery): Builder => $waveQuery->where('default_destination_id', $destinationId));
+                                });
+                        });
+                    }),
                 SelectFilter::make('production_line_id')
                     ->label(__('Ligne'))
                     ->relationship('productionLine', 'name'),

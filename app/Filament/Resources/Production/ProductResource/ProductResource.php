@@ -81,7 +81,7 @@ class ProductResource extends Resource implements CopilotResource, HasKnowledgeB
     public static function getEloquentQuery(): Builder
     {
         return parent::getEloquentQuery()
-            ->with(['formulas']);
+            ->with(['brand', 'collection', 'formulas']);
     }
 
     public static function canDelete(Model $record): bool

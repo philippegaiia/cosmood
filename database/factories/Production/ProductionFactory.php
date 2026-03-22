@@ -4,6 +4,7 @@ namespace Database\Factories\Production;
 
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
+use App\Models\Production\Destination;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
@@ -21,6 +22,7 @@ class ProductionFactory extends Factory
     {
         return [
             'production_wave_id' => null,
+            'destination_id' => null,
             'production_line_id' => null,
             'product_id' => Product::factory(),
             'formula_id' => Formula::factory(),
@@ -127,6 +129,13 @@ class ProductionFactory extends Factory
     {
         return $this->state(fn (): array => [
             'production_line_id' => $line?->id ?? ProductionLine::factory(),
+        ]);
+    }
+
+    public function forDestination(?Destination $destination = null): static
+    {
+        return $this->state(fn (): array => [
+            'destination_id' => $destination?->id ?? Destination::factory(),
         ]);
     }
 }

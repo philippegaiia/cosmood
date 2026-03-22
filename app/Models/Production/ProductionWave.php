@@ -59,6 +59,11 @@ class ProductionWave extends Model
         return $this->hasMany(Production::class, 'production_wave_id');
     }
 
+    public function defaultDestination(): BelongsTo
+    {
+        return $this->belongsTo(Destination::class, 'default_destination_id');
+    }
+
     public function stockDecisions(): HasMany
     {
         return $this->hasMany(ProductionWaveStockDecision::class);

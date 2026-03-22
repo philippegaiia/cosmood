@@ -58,6 +58,20 @@ class ProductionWaveForm
                             ->required()
                             ->maxLength(255)
                             ->unique(),
+                        Select::make('default_destination_id')
+                            ->label(__('Destination par défaut'))
+                            ->relationship(
+                                name: 'defaultDestination',
+                                titleAttribute: 'name',
+                                modifyQueryUsing: fn ($query) => $query
+                                    ->where('is_active', true)
+                                    ->orderBy('name'),
+                            )
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
+                            ->nullable()
+                            ->helperText(__('Utilisée par défaut pour les productions liées tant qu\'aucune destination spécifique n\'est définie au niveau du lot.')),
                         Select::make('status')
                             ->label(__('Statut'))
                             ->options(WaveStatus::class)

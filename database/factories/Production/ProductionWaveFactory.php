@@ -3,6 +3,7 @@
 namespace Database\Factories\Production;
 
 use App\Enums\WaveStatus;
+use App\Models\Production\Destination;
 use App\Models\Production\ProductionWave;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -19,6 +20,7 @@ class ProductionWaveFactory extends Factory
         return [
             'name' => $name,
             'slug' => Str::slug($name),
+            'default_destination_id' => null,
             'status' => WaveStatus::Draft,
             'planned_start_date' => null,
             'planned_end_date' => null,
@@ -70,6 +72,13 @@ class ProductionWaveFactory extends Factory
             'approved_at' => now()->subDays(16),
             'started_at' => now()->subDays(14),
             'completed_at' => now()->subDays(7),
+        ]);
+    }
+
+    public function forDefaultDestination(?Destination $destination = null): static
+    {
+        return $this->state(fn (): array => [
+            'default_destination_id' => $destination?->id ?? Destination::factory(),
         ]);
     }
 }

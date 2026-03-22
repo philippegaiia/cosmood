@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\WaveStatus;
+use App\Models\Production\Destination;
 use App\Models\Production\Production;
 use App\Models\Production\ProductionWave;
 use App\Models\User;
@@ -55,6 +56,14 @@ describe('ProductionWave Model', function () {
         expect($wave->productions)->toHaveCount(3);
     });
 
+    it('can have a default destination', function () {
+        $destination = Destination::factory()->create();
+        $wave = ProductionWave::factory()->forDefaultDestination($destination)->create();
+
+        expect($wave->defaultDestination)->not->toBeNull()
+            ->and($wave->defaultDestination->id)->toBe($destination->id);
+    });
+
     it('can check status', function () {
         $draftWave = ProductionWave::factory()->draft()->create();
         $approvedWave = ProductionWave::factory()->approved()->create();
@@ -99,7 +108,7 @@ describe('ProductionWave Status Transitions', function () {
         $wave->update(['status' => WaveStatus::InProgress]);
 
         expect(fn () => $wave->complete())
-            ->toThrow(\InvalidArgumentException::class, 'Impossible de terminer la vague');
+            ->toThrow(InvalidArgumentException::class, 'Impossible de terminer la vague');
     });
 
     it('can complete when all linked productions are terminal', function () {

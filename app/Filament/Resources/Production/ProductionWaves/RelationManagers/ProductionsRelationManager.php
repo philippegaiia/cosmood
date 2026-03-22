@@ -34,6 +34,10 @@ class ProductionsRelationManager extends RelationManager
                     ->label(__('Produit'))
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('destination_label')
+                    ->label(__('Destination'))
+                    ->state(fn (Production $record): string => $record->getDestinationLabel())
+                    ->placeholder(__('-')),
                 TextColumn::make('status')
                     ->label(__('Statut'))
                     ->badge()
@@ -101,7 +105,7 @@ class ProductionsRelationManager extends RelationManager
             ])
             ->recordUrl(fn (Production $record): string => ProductionResource::getUrl('edit', ['record' => $record]))
             ->openRecordUrlInNewTab()
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['product', 'productionLine', 'productionItems.allocations']))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(['product', 'destination', 'wave.defaultDestination', 'productionLine', 'productionItems.allocations']))
             ->defaultSort('production_date', 'asc');
     }
 

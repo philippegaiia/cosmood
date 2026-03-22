@@ -8,6 +8,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ReplicateAction;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Columns\ToggleColumn;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Model;
 
@@ -21,6 +22,15 @@ class ProductsTable
                     ->label(__('resources.products.table.name'))
                     ->searchable()
                     ->sortable(),
+                TextColumn::make('brand.name')
+                    ->label(__('resources.products.table.brand'))
+                    ->sortable()
+                    ->placeholder(__('-')),
+                TextColumn::make('collection.name')
+                    ->label(__('resources.products.table.collection'))
+                    ->sortable()
+                    ->placeholder(__('-'))
+                    ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('productCategory.name')
                     ->label(__('resources.products.table.category'))
                     ->sortable(),
@@ -71,7 +81,12 @@ class ProductsTable
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                //
+                SelectFilter::make('brand_id')
+                    ->label(__('resources.products.table.brand'))
+                    ->relationship('brand', 'name'),
+                SelectFilter::make('collection_id')
+                    ->label(__('resources.products.table.collection'))
+                    ->relationship('collection', 'name'),
             ])
             ->recordActions([
                 EditAction::make(),

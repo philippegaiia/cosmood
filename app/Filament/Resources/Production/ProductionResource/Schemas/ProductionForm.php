@@ -130,6 +130,21 @@ class ProductionForm
                     ->placeholder(__('Aucune (production autonome)'))
                     ->helperText(__('Disponible uniquement pour les vagues en brouillon ou approuvées.'))
                     ->nullable(),
+                Select::make('destination_id')
+                    ->label(__('Destination'))
+                    ->relationship(
+                        name: 'destination',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn (Builder $query): Builder => $query
+                            ->where('is_active', true)
+                            ->orderBy('name'),
+                    )
+                    ->searchable()
+                    ->preload()
+                    ->native(false)
+                    ->placeholder(__('Utiliser la destination de la vague'))
+                    ->helperText(fn (Get $get): ?string => self::getDestinationHelperText($get))
+                    ->nullable(),
                 Select::make('production_line_id')
                     ->label(__('Ligne de production'))
                     ->options(fn (Get $get, ?Production $record): array => self::getProductionLineOptions($get, $record))
@@ -725,6 +740,27 @@ class ProductionForm
         }
 
         return __('La date de production doit être >= au début de vague (:date).', ['date' => $wave->planned_start_date->format('d/m/Y')]);
+    }
+
+    private static function getDestinationHelperText(Get $get): ?string
+    {
+        $waveId = (int) ($get('production_wave_id') ?? 0);
+
+        if ($waveId <= 0) {
+            return __('Destination spécifique à ce lot. Laisser vide si aucune destination n\'est nécessaire.');
+        }
+
+        $wave = ProductionWave::query()
+            ->with('defaultDestination')
+            ->find($waveId);
+
+        if (! $wave?->defaultDestination) {
+            return __('Aucune destination par défaut sur cette vague. Renseignez-en une ici si besoin.');
+        }
+
+        return __('Laisser vide pour utiliser la destination de la vague : :destination.', [
+            'destination' => $wave->defaultDestination->name,
+        ]);
     }
 
     private static function getReadyDateHelperText(Get $get): string

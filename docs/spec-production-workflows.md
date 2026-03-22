@@ -15,12 +15,29 @@ This document describes the current production-side business rules implemented i
 
 - Product structure:
   - `ProductCategory` groups product families.
+  - `Brand` identifies the commercial brand/customer universe.
+  - `Collection` is optional and belongs to one brand.
   - `ProductType` defines operational sizing behavior and selected QC template.
   - `Product` is the concrete sellable SKU and belongs to one type.
+  - `Product.brand_id` is optional.
+  - `Product.collection_id` is optional but, when filled, must belong to the selected brand.
 - QC mapping:
   - `QcTemplate` is shared by many product types (1 -> N).
   - `ProductType` stores `qc_template_id`.
   - Production QC checks are generated from the production type template, with global default fallback.
+
+## Destination Model
+
+- `Destination` represents where a batch is intended to go.
+- It intentionally covers both:
+  - internal destinations (`e-commerce`, `boutique`, `retail`),
+  - external destinations (specific customer / private-label client).
+- `ProductionWave.default_destination_id` stores the wave default.
+- `Production.destination_id` stores an optional lot-level override.
+- Effective destination semantics:
+  - when `Production.destination_id` is filled, it wins,
+  - otherwise the production inherits the wave default destination,
+  - a wave may therefore group several destinations while still exposing one default for most linked batches.
 
 ## Soap Control Logic
 

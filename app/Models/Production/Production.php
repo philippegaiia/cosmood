@@ -142,6 +142,11 @@ class Production extends Model implements Eventable
         return $this->belongsTo(ProductionWave::class, 'production_wave_id');
     }
 
+    public function destination(): BelongsTo
+    {
+        return $this->belongsTo(Destination::class);
+    }
+
     public function productionLine(): BelongsTo
     {
         return $this->belongsTo(ProductionLine::class);
@@ -215,6 +220,36 @@ class Production extends Model implements Eventable
     public function isOrphan(): bool
     {
         return $this->production_wave_id === null;
+    }
+
+    public function getEffectiveDestination(): ?Destination
+    {
+        if ($this->destination_id !== null) {
+            return $this->relationLoaded('destination')
+                ? $this->destination
+                : Destination::query()->find($this->destination_id);
+        }
+
+        if ($this->production_wave_id === null) {
+            return null;
+        }
+
+        $wave = $this->relationLoaded('wave')
+            ? $this->wave
+            : ProductionWave::query()
+                ->with('defaultDestination')
+                ->find($this->production_wave_id);
+
+        if ($wave && ! $wave->relationLoaded('defaultDestination')) {
+            $wave->load('defaultDestination');
+        }
+
+        return $wave?->defaultDestination;
+    }
+
+    public function getDestinationLabel(): string
+    {
+        return $this->getEffectiveDestination()?->name ?? __('Non définie');
     }
 
     public function isMasterbatch(): bool

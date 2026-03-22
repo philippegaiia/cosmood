@@ -5,6 +5,7 @@ use App\Enums\ProcurementStatus;
 use App\Enums\ProductionOutputKind;
 use App\Enums\ProductionStatus;
 use App\Enums\SizingMode;
+use App\Models\Production\Destination;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\Production;
@@ -50,6 +51,29 @@ describe('Production Model', function () {
         expect($production->isOrphan())->toBeFalse()
             ->and($production->production_wave_id)->toBe($wave->id)
             ->and($production->wave->id)->toBe($wave->id);
+    });
+
+    it('falls back to the wave default destination when no override is set', function () {
+        $destination = Destination::factory()->create();
+        $wave = ProductionWave::factory()->forDefaultDestination($destination)->create();
+        $production = Production::factory()->forWave($wave)->create([
+            'destination_id' => null,
+        ]);
+
+        expect($production->getEffectiveDestination())->not->toBeNull()
+            ->and($production->getEffectiveDestination()?->id)->toBe($destination->id)
+            ->and($production->getDestinationLabel())->toBe($destination->name);
+    });
+
+    it('prefers the production destination over the wave default destination', function () {
+        $waveDestination = Destination::factory()->create(['name' => 'E-commerce']);
+        $productionDestination = Destination::factory()->create(['name' => 'Boutique']);
+        $wave = ProductionWave::factory()->forDefaultDestination($waveDestination)->create();
+        $production = Production::factory()->forWave($wave)->forDestination($productionDestination)->create();
+
+        expect($production->getEffectiveDestination())->not->toBeNull()
+            ->and($production->getEffectiveDestination()?->id)->toBe($productionDestination->id)
+            ->and($production->getDestinationLabel())->toBe('Boutique');
     });
 
     it('blocks planning save when daily line capacity is exceeded', function () {

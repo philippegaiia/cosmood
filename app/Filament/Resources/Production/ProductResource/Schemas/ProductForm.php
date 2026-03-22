@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Production\ProductResource\Schemas;
 
+use App\Models\Production\Collection;
 use App\Models\Production\Product;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
@@ -28,6 +29,38 @@ class ProductForm
                     ->schema([
                         Grid::make(4)
                             ->schema([
+                                Select::make('brand_id')
+                                    ->label(__('resources.products.form.fields.brand'))
+                                    ->relationship(
+                                        name: 'brand',
+                                        titleAttribute: 'name',
+                                        modifyQueryUsing: fn (Builder $query): Builder => $query
+                                            ->where('is_active', true)
+                                            ->orderBy('name'),
+                                    )
+                                    ->searchable()
+                                    ->preload()
+                                    ->native(false)
+                                    ->live()
+                                    ->nullable()
+                                    ->afterStateUpdated(function (Set $set): void {
+                                        $set('collection_id', null);
+                                    }),
+                                Select::make('collection_id')
+                                    ->label(__('resources.products.form.fields.collection'))
+                                    ->options(fn (Get $get): array => self::getCollectionOptionsForBrand((int) ($get('brand_id') ?? 0)))
+                                    ->searchable()
+                                    ->preload()
+                                    ->native(false)
+                                    ->placeholder(function (Get $get): string {
+                                        if (blank($get('brand_id'))) {
+                                            return __('resources.products.form.placeholders.choose_brand_first');
+                                        }
+
+                                        return __('resources.products.form.placeholders.select_collection');
+                                    })
+                                    ->disabled(fn (Get $get): bool => blank($get('brand_id')))
+                                    ->nullable(),
                                 Select::make('product_category_id')
                                     ->label(__('resources.products.form.fields.category'))
                                     ->relationship('productCategory', 'name')
@@ -166,6 +199,20 @@ class ProductForm
 
         return ProductType::query()
             ->where('product_category_id', $categoryId)
+            ->orderBy('name')
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
+    private static function getCollectionOptionsForBrand(int $brandId): array
+    {
+        if ($brandId <= 0) {
+            return [];
+        }
+
+        return Collection::query()
+            ->where('brand_id', $brandId)
+            ->where('is_active', true)
             ->orderBy('name')
             ->pluck('name', 'id')
             ->toArray();

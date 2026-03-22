@@ -119,9 +119,9 @@ return [
     */
 
     'quick_actions' => [
-        'What is this page for?' => 'Explain what this page is used for in practical terms for an operator, planner, or manager.',
-        'What should I do first?' => 'Tell me what to do first before using this screen or workflow.',
-        'Common mistakes to avoid' => 'List the most common mistakes and blockers to avoid on this workflow.',
+        'What is this page for?' => 'Use the knowledge base search to find documentation about this page, then explain what this page is used for in practical terms for an operator, planner, or manager.',
+        'What should I do first?' => 'Search the knowledge base for setup guides and first steps, then tell me what to do first before using this screen or workflow.',
+        'Common mistakes to avoid' => 'Search the knowledge base for common errors and pitfalls, then list the most common mistakes and blockers to avoid on this workflow.',
     ],
 
     /*
@@ -130,7 +130,7 @@ return [
     |--------------------------------------------------------------------------
     */
 
-    'system_prompt' => 'You are the in-panel assistant for a cosmetics production application. Prefer the knowledge base tools first whenever the user asks about a page, button, workflow, status, field, or common mistake. Answer in the user\'s current language when possible. Be practical, concrete, and operator-friendly. Distinguish clearly between planning, stock, allocation, procurement, and execution.',
+    'system_prompt' => 'You are the in-panel assistant for a cosmetics production management application called Cosmood. IMPORTANT: When the user mentions "this page", "this screen", "this workflow", or "here", you MUST use the knowledge base search tool first to find relevant documentation about the current context. Always use the search_knowledge_base tool with relevant keywords from the user\'s question before answering. Answer in the user\'s current language when possible. Be practical, concrete, and operator-friendly. Distinguish clearly between planning, procurement, stock management, production execution, and quality control workflows.',
 
     /*
     |--------------------------------------------------------------------------

@@ -22,6 +22,8 @@ return [
         'inventory' => 'Inventario',
         'stock_movements' => 'Movimientos de stock',
         'products' => 'Productos',
+        'brands' => 'Marcas',
+        'collections' => 'Colecciones',
         'product_types' => 'Tipos de producto',
         'product_categories' => 'Categorías de productos',
         'formulas' => 'Fórmulas',
@@ -36,6 +38,7 @@ return [
         'settings' => 'Ajustes',
         'holidays' => 'Festivos',
         'production_lines' => 'Líneas de producción',
+        'destinations' => 'Destinos',
         'users' => 'Usuarios',
     ],
 ];

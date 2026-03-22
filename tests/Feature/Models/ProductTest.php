@@ -1,11 +1,15 @@
 <?php
 
+use App\Models\Production\Brand;
+use App\Models\Production\Collection;
 use App\Models\Production\Formula;
 use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
+use App\Models\Production\Production;
 use App\Models\Production\ProductType;
 use App\Models\Supply\Ingredient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 
 uses(RefreshDatabase::class);
 
@@ -32,6 +36,40 @@ describe('Product Model', function () {
         expect($product->productType->id)->toBe($productType->id);
     });
 
+    it('can belong to a brand and collection', function () {
+        $collection = Collection::factory()->create();
+        $product = Product::factory()->create([
+            'brand_id' => $collection->brand_id,
+            'collection_id' => $collection->id,
+        ]);
+
+        expect($product->brand)->not->toBeNull()
+            ->and($product->collection)->not->toBeNull()
+            ->and($product->brand->id)->toBe($collection->brand_id)
+            ->and($product->collection->id)->toBe($collection->id);
+    });
+
+    it('syncs the brand from the selected collection when missing', function () {
+        $collection = Collection::factory()->create();
+
+        $product = Product::factory()->create([
+            'brand_id' => null,
+            'collection_id' => $collection->id,
+        ]);
+
+        expect($product->brand_id)->toBe($collection->brand_id);
+    });
+
+    it('rejects a collection that belongs to another brand', function () {
+        $brand = Brand::factory()->create();
+        $otherCollection = Collection::factory()->create();
+
+        expect(fn () => Product::factory()->create([
+            'brand_id' => $brand->id,
+            'collection_id' => $otherCollection->id,
+        ]))->toThrow(InvalidArgumentException::class, 'La collection sélectionnée doit appartenir à la marque choisie.');
+    });
+
     it('can belong to a manufactured ingredient output', function () {
         $ingredient = Ingredient::factory()->manufactured()->create();
         $product = Product::factory()->create(['produced_ingredient_id' => $ingredient->id]);
@@ -56,7 +94,7 @@ describe('Product Model', function () {
 
     it('has many productions', function () {
         $product = Product::factory()->create();
-        \App\Models\Production\Production::factory()->count(2)->create(['product_id' => $product->id]);
+        Production::factory()->count(2)->create(['product_id' => $product->id]);
 
         expect($product->productions)->toHaveCount(2);
     });
@@ -64,7 +102,7 @@ describe('Product Model', function () {
     it('casts launch_date as date', function () {
         $product = Product::factory()->create();
 
-        expect($product->launch_date)->toBeInstanceOf(\Illuminate\Support\Carbon::class);
+        expect($product->launch_date)->toBeInstanceOf(Carbon::class);
     });
 
     it('casts net_weight as decimal', function () {

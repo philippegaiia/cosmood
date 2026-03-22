@@ -2,6 +2,8 @@
 
 namespace Database\Factories\Production;
 
+use App\Models\Production\Brand;
+use App\Models\Production\Collection;
 use App\Models\Production\Product;
 use App\Models\Production\ProductCategory;
 use App\Models\Production\ProductType;
@@ -17,6 +19,8 @@ class ProductFactory extends Factory
         return [
             'product_category_id' => ProductCategory::factory(),
             'product_type_id' => null,
+            'brand_id' => null,
+            'collection_id' => null,
             'produced_ingredient_id' => null,
             'code' => strtoupper($this->faker->bothify('PRD-###')),
             'wp_code' => null,
@@ -50,6 +54,25 @@ class ProductFactory extends Factory
         return $this->state(fn (array $attributes) => [
             'product_type_id' => $productType->id,
         ]);
+    }
+
+    public function withBrand(?Brand $brand = null): static
+    {
+        return $this->state(fn (): array => [
+            'brand_id' => $brand?->id ?? Brand::factory(),
+        ]);
+    }
+
+    public function withCollection(?Collection $collection = null): static
+    {
+        return $this->state(function () use ($collection): array {
+            $resolvedCollection = $collection ?? Collection::factory()->create();
+
+            return [
+                'brand_id' => $resolvedCollection->brand_id,
+                'collection_id' => $resolvedCollection->id,
+            ];
+        });
     }
 
     public function withProducedIngredient(?Ingredient $ingredient = null): static

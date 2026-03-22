@@ -34,6 +34,10 @@ class ProductionDatabaseSeeder extends Seeder
         $this->call(IngredientSeeder::class);
         $this->call(SupplierListingSeeder::class);
 
+        $this->call(BrandSeeder::class);
+        $this->call(CollectionSeeder::class);
+        $this->call(DestinationSeeder::class);
+
         $this->call(ProductSeeder::class);
         $this->call(ProductTypeSeeder::class);
         $this->call(QcTemplateSeeder::class);

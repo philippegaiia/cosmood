@@ -29,6 +29,10 @@ class Product extends Model
 
     protected static function booted(): void
     {
+        static::saving(function (Product $product): void {
+            $product->normalizeBrandAndCollection();
+        });
+
         static::deleting(function (Product $product): void {
             if ($product->hasProductionHistory()) {
                 throw new InvalidArgumentException(__('Impossible de supprimer ce produit car il est lié à des productions.'));
@@ -44,6 +48,16 @@ class Product extends Model
     public function productType(): BelongsTo
     {
         return $this->belongsTo(ProductType::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
+    }
+
+    public function collection(): BelongsTo
+    {
+        return $this->belongsTo(Collection::class);
     }
 
     public function producedIngredient(): BelongsTo
@@ -117,6 +131,33 @@ class Product extends Model
 
         foreach ($packagingIds as $ingredientId) {
             $this->packaging()->attach($ingredientId, ['quantity_per_unit' => 1]);
+        }
+    }
+
+    private function normalizeBrandAndCollection(): void
+    {
+        if (! $this->collection_id) {
+            return;
+        }
+
+        $collection = $this->relationLoaded('collection')
+            ? $this->collection
+            : Collection::query()
+                ->select(['id', 'brand_id'])
+                ->find($this->collection_id);
+
+        if (! $collection) {
+            throw new InvalidArgumentException(__('La collection sélectionnée est introuvable.'));
+        }
+
+        if (! $this->brand_id) {
+            $this->brand_id = $collection->brand_id;
+
+            return;
+        }
+
+        if ((int) $this->brand_id !== (int) $collection->brand_id) {
+            throw new InvalidArgumentException(__('La collection sélectionnée doit appartenir à la marque choisie.'));
         }
     }
 }

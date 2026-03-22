@@ -61,6 +61,8 @@ return [
                 'description' => 'Descripción',
             ],
             'fields' => [
+                'brand' => 'Marca',
+                'collection' => 'Colección',
                 'category' => 'Categoría',
                 'product_type' => 'Tipo de producto',
                 'manufactured_ingredient' => 'Ingrediente fabricado',
@@ -79,12 +81,16 @@ return [
                 'default_formula' => 'Entre las fórmulas asociadas',
             ],
             'placeholders' => [
+                'choose_brand_first' => 'Elige primero una marca',
                 'choose_category_first' => 'Primero elija una categoría',
+                'select_collection' => 'Seleccione una colección',
                 'select_type' => 'Seleccione un tipo',
             ],
         ],
         'table' => [
             'name' => 'Nombre',
+            'brand' => 'Marca',
+            'collection' => 'Colección',
             'category' => 'Categoría',
             'type' => 'Tipo',
             'default_formula' => 'Fórmula predeterminada',
@@ -102,6 +108,18 @@ return [
         'actions' => [
             'duplicate' => 'Duplicar',
         ],
+    ],
+    'brands' => [
+        'singular' => 'marca',
+        'plural' => 'marcas',
+    ],
+    'collections' => [
+        'singular' => 'colección',
+        'plural' => 'colecciones',
+    ],
+    'destinations' => [
+        'singular' => 'destino',
+        'plural' => 'destinos',
     ],
     'ingredients' => [
         'singular' => 'ingrediente',
